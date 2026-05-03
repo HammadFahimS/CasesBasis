@@ -73,8 +73,11 @@ class StudentAgent(OpenAIJsonAgent):
             "{visible_context_json}",
             json.dumps(visible_context, indent=2, sort_keys=True),
         )
-        return self.parse_response(
-            system_prompt=STUDENT_AGENT_SYSTEM_PROMPT,
-            user_prompt=prompt,
-            response_model=StudentAction,
-        )
+        try:
+            return self.parse_response(
+                system_prompt=STUDENT_AGENT_SYSTEM_PROMPT,
+                user_prompt=prompt,
+                response_model=StudentAction,
+            )
+        except ValueError:
+            return StudentAction(action="finish")

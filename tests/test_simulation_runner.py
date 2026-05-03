@@ -13,6 +13,7 @@ from backend.simulation_runner import (
     build_student_visible_context,
     summarize_simulation_results,
 )
+from agents.student import StudentAgent
 from agents.simulation_auditor import SimulationAuditorAgent
 from schemas.clinical_case import ClinicalCase
 from schemas.doctor_consult import DoctorConsultResponse
@@ -146,6 +147,14 @@ class StubSimulationAuditorAgent(SimulationAuditorAgent):
         )
 
 
+class InvalidStudentAgent(StudentAgent):
+    def __init__(self) -> None:
+        pass
+
+    def parse_response(self, **kwargs: object) -> StudentAction:
+        raise ValueError("invalid student action")
+
+
 def test_student_action_requires_payload_for_action() -> None:
     with pytest.raises(ValueError):
         StudentAction(action="ask_patient_question")
@@ -154,6 +163,16 @@ def test_student_action_requires_payload_for_action() -> None:
         action="order_investigation",
         investigation="ECG",
     ).investigation == "ECG"
+
+
+def test_student_agent_finishes_on_invalid_model_action() -> None:
+    action = InvalidStudentAgent().next_action(
+        {},
+        difficulty="medium",
+        step_number=1,
+    )
+
+    assert action.action == "finish"
 
 
 def test_default_max_steps_is_eight() -> None:
