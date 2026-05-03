@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClinicalCase",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "diagnosis",
+    "patient",
+    "symptoms",
+    "vitals",
+    "progression",
+    "risk_factors",
+    "exam_findings",
+    "outcome"
+  ],
+  "properties": {
+    "diagnosis": {
+      "type": "string",
+      "minLength": 1
+    },
+    "patient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["age", "gender", "history"],
+      "properties": {
+        "age": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 130
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["male", "female"]
+        },
+        "history": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "symptoms": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "vitals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "heart_rate",
+        "blood_pressure",
+        "respiratory_rate",
+        "oxygen_saturation"
+      ],
+      "properties": {
+        "heart_rate": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 260
+        },
+        "blood_pressure": {
+          "type": "string",
+          "pattern": "^\\d{2,3}/\\d{2,3}$"
+        },
+        "respiratory_rate": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 80
+        },
+        "oxygen_saturation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "progression": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["time_min", "description"],
+        "properties": {
+          "time_min": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "risk_factors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "exam_findings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["if_treated", "if_untreated"],
+      "properties": {
+        "if_treated": {
+          "type": "string",
+          "minLength": 1
+        },
+        "if_untreated": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

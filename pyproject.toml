@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clinical-case-simulator"
+version = "0.1.0"
+description = "Generate and validate realistic clinical case JSON from a diagnosis."
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "openai>=1.0.0",
+    "pydantic>=2.7.0",
+    "python-dotenv>=1.0.0",
+    "uvicorn>=0.30.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+clinical-case = "backend.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["agents*", "backend*", "schemas*", "utils*"]
