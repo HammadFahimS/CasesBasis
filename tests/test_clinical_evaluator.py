@@ -106,6 +106,23 @@ def test_evaluator_treats_symptom_guess_as_no_diagnosis() -> None:
         assert "diagnosis guess was not supported" not in evaluation.brief_feedback.lower()
 
 
+def test_evaluator_does_not_extract_diagnosis_from_symptom_history_question() -> None:
+    evaluator = ClinicalEvaluator()
+
+    evaluation = evaluator.evaluate(
+        mi_case(),
+        [
+            "Have you experienced this type of chest pain before, and does it radiate to any other parts of your body?",
+        ],
+        ["It feels like pressure in my chest and goes toward my left arm."],
+    )
+
+    assert evaluation.correct_diagnosis_guess.provided is False
+    assert evaluation.correct_diagnosis_guess.guess is None
+    assert evaluation.correct_diagnosis_guess.is_correct is None
+    assert evaluation.correct_diagnosis_guess.diagnosis_match_level is None
+
+
 def test_evaluator_accepts_real_diagnosis_guess_as_valid() -> None:
     evaluator = ClinicalEvaluator()
 

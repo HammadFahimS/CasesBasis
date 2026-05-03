@@ -309,7 +309,9 @@ def evaluate_diagnosis_guess(
                 is_correct=True,
                 diagnosis_match_level="correct",
             )
-    guessed_condition = extract_condition_guess(questions)
+    guessed_condition = extract_condition_guess(
+        [question for question in questions if is_diagnosis_guess_question(question)]
+    )
     if guessed_condition:
         if is_invalid_diagnosis_guess(guessed_condition):
             return DiagnosisGuessEvaluation(
