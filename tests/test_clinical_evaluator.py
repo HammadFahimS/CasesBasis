@@ -547,8 +547,19 @@ def test_evaluator_penalizes_ecg_called_normal() -> None:
         investigations_ordered=[ecg],
         student_interpretations=["The ECG is normal and not concerning."],
     )
+    negated_abnormal = evaluator.evaluate(
+        case,
+        ["Can you describe the chest pressure?", "When did it start?"],
+        ["Heavy pressure.", "About 30 minutes ago."],
+        investigations_ordered=[ecg],
+        student_interpretations=[
+            "The ECG shows normal sinus rhythm with no abnormalities noted. There are no signs of ischemia or infarction.",
+        ],
+    )
 
     assert incorrect.investigation_interpretation_feedback.incorrect_interpretations
+    assert negated_abnormal.investigation_interpretation_feedback.incorrect_interpretations
+    assert not negated_abnormal.investigation_interpretation_feedback.correctly_interpreted_findings
     assert incorrect.overall_score < correct.overall_score
 
 

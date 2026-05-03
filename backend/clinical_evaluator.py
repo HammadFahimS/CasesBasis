@@ -593,7 +593,7 @@ def interpretation_calls_abnormal_result_normal(
 ) -> bool:
     if not interpretation_text:
         return False
-    if any(phrase in interpretation_text for phrase in ("not normal", "abnormal", "elevated", "high", "low")):
+    if interpretation_contains_positive_abnormal_language(interpretation_text):
         return False
     normal_phrases = (
         "normal",
@@ -602,14 +602,40 @@ def interpretation_calls_abnormal_result_normal(
         "non-contributory",
         "nothing concerning",
         "no acute findings",
+        "no abnormality",
+        "no abnormalities",
+        "no ischemia",
+        "no signs of ischemia",
+        "no infarction",
+        "no signs of infarction",
     )
-    if not any(phrase in interpretation_text for phrase in normal_phrases):
+    if not any(text_has_phrase(interpretation_text, phrase) for phrase in normal_phrases):
         return False
     test_tokens = tokens_for_test_name(result.investigation).union(
         tokens_for_test_name(str(result.structured_result.get("test", "")))
     )
     interpretation_tokens = tokenize(interpretation_text)
     return not test_tokens or bool(test_tokens.intersection(interpretation_tokens))
+
+
+def interpretation_contains_positive_abnormal_language(interpretation_text: str) -> bool:
+    positive_phrases = (
+        "not normal",
+        "is abnormal",
+        "looks abnormal",
+        "appears abnormal",
+        "st elevation",
+        "st depression",
+        "t wave changes",
+        "t-wave changes",
+        "ischemic changes",
+    )
+    return any(text_has_phrase(interpretation_text, phrase) for phrase in positive_phrases)
+
+
+def text_has_phrase(text: str, phrase: str) -> bool:
+    pattern = r"\b" + r"\s+".join(re.escape(part) for part in phrase.split()) + r"\b"
+    return re.search(pattern, text, flags=re.IGNORECASE) is not None
 
 
 def keywords_for_abnormal_value(name: str, flag: object) -> set[str]:
