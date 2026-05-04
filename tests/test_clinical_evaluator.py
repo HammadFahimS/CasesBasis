@@ -556,10 +556,21 @@ def test_evaluator_penalizes_ecg_called_normal() -> None:
             "The ECG shows normal sinus rhythm with no abnormalities noted. There are no signs of ischemia or infarction.",
         ],
     )
+    negated_st_changes = evaluator.evaluate(
+        case,
+        ["Can you describe the chest pressure?", "When did it start?"],
+        ["Heavy pressure.", "About 30 minutes ago."],
+        investigations_ordered=[ecg],
+        student_interpretations=[
+            "The ECG shows left ventricular hypertrophy. There are no significant ST-T wave changes.",
+        ],
+    )
 
     assert incorrect.investigation_interpretation_feedback.incorrect_interpretations
     assert negated_abnormal.investigation_interpretation_feedback.incorrect_interpretations
     assert not negated_abnormal.investigation_interpretation_feedback.correctly_interpreted_findings
+    assert negated_st_changes.investigation_interpretation_feedback.incorrect_interpretations
+    assert not negated_st_changes.investigation_interpretation_feedback.correctly_interpreted_findings
     assert incorrect.overall_score < correct.overall_score
 
 

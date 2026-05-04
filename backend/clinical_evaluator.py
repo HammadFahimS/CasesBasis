@@ -593,8 +593,6 @@ def interpretation_calls_abnormal_result_normal(
 ) -> bool:
     if not interpretation_text:
         return False
-    if interpretation_contains_positive_abnormal_language(interpretation_text):
-        return False
     normal_phrases = (
         "normal",
         "looks fine",
@@ -608,8 +606,16 @@ def interpretation_calls_abnormal_result_normal(
         "no signs of ischemia",
         "no infarction",
         "no signs of infarction",
+        "no significant st-t wave changes",
+        "no st-t wave changes",
+        "no significant st changes",
+        "no st changes",
     )
     if not any(text_has_phrase(interpretation_text, phrase) for phrase in normal_phrases):
+        return False
+    if interpretation_contains_positive_abnormal_language(
+        interpretation_text
+    ) and not interpretation_contains_negated_abnormal_language(interpretation_text):
         return False
     test_tokens = tokens_for_test_name(result.investigation).union(
         tokens_for_test_name(str(result.structured_result.get("test", "")))
@@ -631,6 +637,22 @@ def interpretation_contains_positive_abnormal_language(interpretation_text: str)
         "ischemic changes",
     )
     return any(text_has_phrase(interpretation_text, phrase) for phrase in positive_phrases)
+
+
+def interpretation_contains_negated_abnormal_language(interpretation_text: str) -> bool:
+    negated_phrases = (
+        "no abnormality",
+        "no abnormalities",
+        "no ischemia",
+        "no signs of ischemia",
+        "no infarction",
+        "no signs of infarction",
+        "no significant st-t wave changes",
+        "no st-t wave changes",
+        "no significant st changes",
+        "no st changes",
+    )
+    return any(text_has_phrase(interpretation_text, phrase) for phrase in negated_phrases)
 
 
 def text_has_phrase(text: str, phrase: str) -> bool:
