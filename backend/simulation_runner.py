@@ -72,12 +72,17 @@ class SimulationRunner:
             session_history=session_history or [],
         )
         check_timeout(started_at, timeout_seconds)
-        state = SimulationState(case=case, difficulty=difficulty, fast_mode=fast_mode)
+        state = SimulationState(
+            case=case,
+            difficulty=difficulty,
+            fast_mode=fast_mode,
+            max_steps=max_steps,
+        )
 
         for step_number in range(1, max_steps + 1):
             check_timeout(started_at, timeout_seconds)
             action = self.student_agent.next_action(
-                build_student_visible_context(state),
+                build_student_visible_context(state, step_number=step_number),
                 difficulty=difficulty,
                 step_number=step_number,
             )
@@ -279,10 +284,18 @@ class SimulationRunner:
 class SimulationState:
     """Mutable state used while executing one simulated encounter."""
 
-    def __init__(self, *, case: ClinicalCase, difficulty: str, fast_mode: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        case: ClinicalCase,
+        difficulty: str,
+        fast_mode: bool = False,
+        max_steps: int = DEFAULT_MAX_STEPS,
+    ) -> None:
         self.case = case
         self.difficulty = difficulty
         self.fast_mode = fast_mode
+        self.max_steps = max_steps
         self.student_questions: list[str] = []
         self.patient_responses: list[str] = []
         self.investigations_ordered: list[InvestigationResult] = []
@@ -293,10 +306,22 @@ class SimulationState:
         self.steps: list[SimulationStep] = []
 
 
-def build_student_visible_context(state: SimulationState) -> dict[str, Any]:
+def build_student_visible_context(
+    state: SimulationState,
+    *,
+    step_number: int | None = None,
+) -> dict[str, Any]:
+    steps_remaining = state.max_steps - step_number + 1 if step_number is not None else None
     return {
         "case_intro": case_preview(state.case),
         "difficulty": state.difficulty,
+        "simulation_control": {
+            "fast_mode": state.fast_mode,
+            "max_steps": state.max_steps,
+            "current_step": step_number,
+            "steps_remaining": steps_remaining,
+            "near_end": steps_remaining is not None and steps_remaining <= 2,
+        },
         "patient_conversation": [
             {"question": question, "answer": answer}
             for question, answer in zip(

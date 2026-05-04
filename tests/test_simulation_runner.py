@@ -179,6 +179,20 @@ class InvalidStudentAgent(StudentAgent):
         raise ValueError("invalid student action")
 
 
+class PromptCapturingStudentAgent(StudentAgent):
+    def __init__(self) -> None:
+        self.system_prompt: str | None = None
+        self.user_prompt: str | None = None
+
+    def parse_response(self, **kwargs: object) -> StudentAction:
+        self.system_prompt = str(kwargs["system_prompt"])
+        self.user_prompt = str(kwargs["user_prompt"])
+        return StudentAction(
+            action="submit_diagnosis",
+            diagnosis_guess="acute coronary syndrome",
+        )
+
+
 def test_student_action_requires_payload_for_action() -> None:
     with pytest.raises(ValueError):
         StudentAction(action="ask_patient_question")
@@ -197,6 +211,62 @@ def test_student_agent_finishes_on_invalid_model_action() -> None:
     )
 
     assert action.action == "finish"
+
+
+def test_student_agent_prompt_encourages_diagnosis_submission_near_end() -> None:
+    student = PromptCapturingStudentAgent()
+
+    action = student.next_action(
+        {
+            "case_intro": {
+                "age": 58,
+                "gender": "male",
+                "chief_complaint": "chest pressure",
+                "vitals": {
+                    "heart_rate": 104,
+                    "blood_pressure": "148/92",
+                    "respiratory_rate": 22,
+                    "oxygen_saturation": 95,
+                },
+            },
+            "simulation_control": {
+                "fast_mode": True,
+                "max_steps": 4,
+                "current_step": 4,
+                "steps_remaining": 1,
+                "near_end": True,
+            },
+            "patient_conversation": [
+                {
+                    "question": "Can you describe the chest pressure?",
+                    "answer": "It is heavy and goes to my left arm.",
+                }
+            ],
+            "raw_investigation_results": [
+                {
+                    "investigation": "ECG",
+                    "status": "available",
+                    "summary": "ECG completed",
+                    "report": [],
+                    "visual_payload": None,
+                }
+            ],
+            "student_interpretations": [],
+            "doctor_consults": [],
+            "diagnosis_guess": None,
+        },
+        difficulty="medium",
+        step_number=4,
+    )
+
+    assert action.action == "submit_diagnosis"
+    assert student.system_prompt is not None
+    assert student.user_prompt is not None
+    assert "Near the final steps" in student.system_prompt
+    assert "submit a diagnosis guess" in student.system_prompt
+    assert "If steps_remaining is 1, submit_diagnosis" in student.user_prompt
+    assert '"near_end": true' in student.user_prompt
+    assert "myocardial infarction" not in student.user_prompt.lower()
 
 
 def test_default_max_steps_is_eight() -> None:
@@ -594,12 +664,20 @@ def test_student_visible_context_uses_raw_investigation_results() -> None:
     state.investigations_ordered.append(ecg)
     state.raw_investigation_results.append(student_facing_investigation_result(ecg, case))
 
-    context = build_student_visible_context(state)
+    state.max_steps = 4
+    context = build_student_visible_context(state, step_number=3)
     serialized = json.dumps(context).lower()
 
     assert "ecg completed" in serialized
     assert "st elevation" not in serialized
     assert "myocardial infarction" not in serialized
+    assert context["simulation_control"] == {
+        "fast_mode": False,
+        "max_steps": 4,
+        "current_step": 3,
+        "steps_remaining": 2,
+        "near_end": True,
+    }
 
 
 def simulation_result(
