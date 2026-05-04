@@ -425,6 +425,26 @@ def test_confirmed_bug_audit_sets_should_fix_true_and_summary_counts_it() -> Non
     assert summary.audit_summary["finding_category_counts"]["confirmed_bug"] == 1
 
 
+def test_non_bug_audit_cannot_request_fix() -> None:
+    audit = SimulationAudit.model_validate(
+        {
+            "overall_quality": "warning",
+            "findings": [
+                {
+                    "category": "possible_model_quality_issue",
+                    "severity": "medium",
+                    "issue": "Student answer quality varied.",
+                    "evidence": "The run completed without deterministic inconsistencies.",
+                    "suggested_fix": "Review manually before changing behavior.",
+                }
+            ],
+            "should_fix": True,
+        }
+    )
+
+    assert audit.should_fix is False
+
+
 def test_skip_audit_prevents_audit_even_when_requested() -> None:
     auditor = FakeSimulationAuditor(confirmed_bug_audit())
     runner = SimulationRunner(

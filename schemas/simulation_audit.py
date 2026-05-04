@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -36,15 +36,8 @@ class SimulationAudit(StrictModel):
     findings: list[SimulationAuditFinding]
     should_fix: bool
 
-    @field_validator("should_fix")
-    @classmethod
-    def require_fix_for_confirmed_bugs(cls, value: bool, info: object) -> bool:
-        data = getattr(info, "data", {})
-        findings = data.get("findings", []) if isinstance(data, dict) else []
-        has_confirmed_bug = any(
-            getattr(finding, "category", None) == "confirmed_bug"
-            for finding in findings
-        )
-        if has_confirmed_bug and not value:
-            raise ValueError("should_fix must be true when confirmed bugs are present")
-        return value
+    @model_validator(mode="after")
+    def normalize_should_fix(self) -> "SimulationAudit":
+        has_confirmed_bug = any(finding.category == "confirmed_bug" for finding in self.findings)
+        self.should_fix = has_confirmed_bug
+        return self

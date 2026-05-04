@@ -34,6 +34,7 @@ Check:
 
 For each finding, include reasoning and concrete evidence from the run.
 Suggest minimal fixes only for confirmed bugs.
+Set should_fix true only when at least one finding is classified as confirmed_bug.
 Do not modify code.
 """.strip()
 
@@ -53,7 +54,7 @@ Return this JSON structure:
       "suggested_fix": "string"
     }
   ],
-  "should_fix": true
+  "should_fix": true or false
 }
 
 Return JSON only.
