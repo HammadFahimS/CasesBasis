@@ -110,9 +110,17 @@ def ask_question(request: QuestionRequest) -> dict[str, Any]:
 @app.post("/api/investigations")
 def order_investigation(request: InvestigationRequest) -> dict[str, Any]:
     session = get_session(request.session_id)
-    result = get_investigation_service().get_result(session.case, request.investigation)
-    session.investigations.append(result)
-    return student_facing_investigation_result(result, session.case)
+    results = get_investigation_service().get_results(session.case, request.investigation)
+    session.investigations.extend(results)
+    displays = [
+        student_facing_investigation_result(result, session.case)
+        for result in results
+    ]
+    if len(displays) == 1:
+        return displays[0]
+    return {
+        "investigations": displays,
+    }
 
 
 @app.post("/api/interpretations")
@@ -470,6 +478,10 @@ HTML_PAGE = """
       }
 
       function appendInvestigationDisplay(result) {
+        if (result.investigations && Array.isArray(result.investigations)) {
+          result.investigations.forEach(item => appendInvestigationDisplay(item));
+          return;
+        }
         const wrapper = document.createElement("div");
         const heading = document.createElement("strong");
         heading.textContent = result.investigation;

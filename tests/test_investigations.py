@@ -11,6 +11,7 @@ from backend.investigations import (
     is_ecg_request,
     is_nonsensical_investigation_request,
     is_troponin_request,
+    split_investigation_requests,
 )
 from schemas.clinical_case import ClinicalCase
 from schemas.investigation import InvestigationResult
@@ -192,6 +193,45 @@ def test_nonsensical_investigation_detection() -> None:
     assert is_nonsensical_investigation_request("xqzprtlsdfghjkl")
     assert not is_nonsensical_investigation_request("CT abdomen")
     assert not is_nonsensical_investigation_request("complete blood count")
+
+
+def test_split_investigation_requests_handles_and_and_commas() -> None:
+    assert split_investigation_requests("ECG and troponin") == ["ECG", "troponin"]
+    assert split_investigation_requests("CBC, electrolytes, glucose") == [
+        "CBC",
+        "electrolytes",
+        "glucose",
+    ]
+
+
+def test_multiple_investigation_request_runs_each_requested_test() -> None:
+    fake = FakeGenericInvestigationGenerator(
+        generic_result(
+            investigation="generic",
+            findings=["No acute abnormality"],
+            values=[],
+            summary="Result completed.",
+            interpretation_hint="No actionable abnormality.",
+        )
+    )
+
+    results = InvestigationService(generic_generator=fake).get_results(
+        mi_case(),
+        "CBC, electrolytes, glucose",
+    )
+
+    assert len(results) == 3
+    assert [call[1] for call in fake.calls] == ["CBC", "electrolytes", "glucose"]
+
+
+def test_mixed_unknown_and_known_multiple_investigation_request() -> None:
+    results = InvestigationService().get_results(mi_case(), "crystal ball scan and ECG")
+
+    assert len(results) == 2
+    assert results[0].investigation == "crystal ball scan"
+    assert results[0].status == "unavailable"
+    assert results[1].investigation == "ECG"
+    assert results[1].status == "available"
 
 
 def test_ecg_result_for_mi_case_has_plausible_findings() -> None:

@@ -25,6 +25,7 @@ from schemas.evaluation import (
     QuestionRelevanceEvaluation,
     ReasoningFeedback,
 )
+from schemas.investigation import InvestigationResult
 from schemas.simulation import SimulationResult, StudentAction
 from schemas.simulation_audit import SimulationAudit
 from tests.test_investigations import mi_case
@@ -75,6 +76,29 @@ class FakeDoctorConsultService:
             missing_information=["Symptom onset time"],
             safety_warnings=["Escalate if unstable"],
             should_escalate=True,
+        )
+
+
+class RecordingInvestigationService(InvestigationService):
+    def __init__(self) -> None:
+        self.requests: list[str] = []
+
+    def get_result(
+        self,
+        case: ClinicalCase,
+        requested_investigation: str,
+    ) -> InvestigationResult:
+        self.requests.append(requested_investigation)
+        return InvestigationResult(
+            investigation=requested_investigation,
+            status="available",
+            structured_result={
+                "test": requested_investigation,
+                "findings": ["No acute abnormality"],
+                "values": [],
+            },
+            summary=f"{requested_investigation} completed.",
+            visual_payload=None,
         )
 
 
@@ -244,6 +268,70 @@ def test_simulation_runner_executes_end_to_end_with_mocked_student() -> None:
     assert result.doctor_consults
     assert result.evaluation.correct_diagnosis_guess.is_correct is True
     assert result.steps[-1].action == "submit_diagnosis"
+
+
+def test_simulation_runner_executes_multiple_investigations_from_one_request() -> None:
+    student = ScriptedStudentAgent(
+        [
+            StudentAction(action="order_investigation", investigation="ECG and troponin"),
+            StudentAction(action="finish"),
+        ]
+    )
+    runner = SimulationRunner(
+        simulator=FakeSimulator(),
+        patient_service=FakePatientService(),
+        investigation_service=InvestigationService(),
+        doctor_consult_service=FakeDoctorConsultService(),
+        student_agent=student,
+    )
+
+    result = runner.run_once(
+        diagnosis="myocardial infarction",
+        difficulty="medium",
+        max_steps=2,
+    )
+
+    assert [investigation.investigation for investigation in result.investigations_ordered] == [
+        "ECG",
+        "Troponin",
+    ]
+    assert isinstance(result.steps[0].response, list)
+    assert len(result.steps[0].response) == 2
+    feedback = result.evaluation.investigation_interpretation_feedback
+    serialized_feedback = json.dumps(feedback.model_dump()).lower()
+    assert "st elevation" in serialized_feedback
+    assert "troponin" in serialized_feedback
+
+
+def test_simulation_runner_splits_comma_separated_investigation_request() -> None:
+    student = ScriptedStudentAgent(
+        [
+            StudentAction(
+                action="order_investigation",
+                investigation="CBC, electrolytes, glucose",
+            ),
+            StudentAction(action="finish"),
+        ]
+    )
+    investigation_service = RecordingInvestigationService()
+    runner = SimulationRunner(
+        simulator=FakeSimulator(),
+        patient_service=FakePatientService(),
+        investigation_service=investigation_service,
+        doctor_consult_service=FakeDoctorConsultService(),
+        student_agent=student,
+    )
+
+    result = runner.run_once(
+        diagnosis="myocardial infarction",
+        difficulty="medium",
+        max_steps=2,
+    )
+
+    assert investigation_service.requests == ["CBC", "electrolytes", "glucose"]
+    assert len(result.investigations_ordered) == 3
+    assert isinstance(result.steps[0].response, list)
+    assert len(result.steps[0].response) == 3
 
 
 def test_fast_mode_skips_doctor_consult_and_restores_reasoning_review() -> None:

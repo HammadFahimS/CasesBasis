@@ -158,6 +158,7 @@ def test_web_ui_includes_loading_states_for_async_actions() -> None:
     assert "Investigation order failed." in html
     assert "Doctor consult failed." in html
     assert "Evaluation failed." in html
+    assert "result.investigations.forEach" in html
     assert ".ecg-tracing" in html
     assert "overflow-x: auto" in html
 
@@ -247,6 +248,13 @@ def test_investigation_endpoint_preserves_full_result_in_session(monkeypatch: ob
     from backend import web_app
 
     class FakeInvestigationService:
+        def get_results(
+            self,
+            case: ClinicalCase,
+            requested_investigations: str,
+        ) -> list[InvestigationResult]:
+            return [self.get_result(case, requested_investigations)]
+
         def get_result(
             self,
             case: ClinicalCase,
@@ -268,3 +276,35 @@ def test_investigation_endpoint_preserves_full_result_in_session(monkeypatch: ob
     assert web_app.SESSIONS[session_id].investigations
     full_result = web_app.SESSIONS[session_id].investigations[0]
     assert "st_segments" in full_result.structured_result
+
+
+def test_investigation_endpoint_returns_multiple_sanitized_displays(monkeypatch: object) -> None:
+    from backend import web_app
+
+    class FakeInvestigationService:
+        def get_results(
+            self,
+            case: ClinicalCase,
+            requested_investigations: str,
+        ) -> list[InvestigationResult]:
+            return InvestigationService().get_results(case, requested_investigations)
+
+    session_id = "multi-investigation-session"
+    case = sample_case()
+    web_app.SESSIONS.clear()
+    web_app.SESSIONS[session_id] = web_app.WebSession(case=case)
+    monkeypatch.setattr(web_app, "INVESTIGATION_SERVICE", FakeInvestigationService())
+
+    display = web_app.order_investigation(
+        web_app.InvestigationRequest(session_id=session_id, investigation="ECG and troponin")
+    )
+
+    assert "investigations" in display
+    assert len(display["investigations"]) == 2
+    assert [result.investigation for result in web_app.SESSIONS[session_id].investigations] == [
+        "ECG",
+        "Troponin",
+    ]
+    serialized = json.dumps(display).lower()
+    assert "st elevation" not in serialized
+    assert "interpretation_hint" not in serialized

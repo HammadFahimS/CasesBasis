@@ -194,17 +194,21 @@ class SimulationRunner:
 
         if action.action == "order_investigation":
             investigation = str(action.investigation or "").strip()
-            result = self.investigation_service.get_result(state.case, investigation)
-            state.investigations_ordered.append(result)
-            state.raw_investigation_results.append(
+            results = self.investigation_service.get_results(state.case, investigation)
+            student_facing_results = [
                 student_facing_investigation_result(result, state.case)
-            )
+                for result in results
+            ]
+            state.investigations_ordered.extend(results)
+            state.raw_investigation_results.extend(student_facing_results)
             state.steps.append(
                 SimulationStep(
                     step_number=step_number,
                     action=action.action,
                     request=investigation,
-                    response=state.raw_investigation_results[-1],
+                    response=student_facing_results[0]
+                    if len(student_facing_results) == 1
+                    else student_facing_results,
                 )
             )
             return

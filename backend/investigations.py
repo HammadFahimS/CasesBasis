@@ -52,10 +52,40 @@ class InvestigationService:
             return build_troponin_result(clinical_case)
         return self._generic_generator().generate(clinical_case, sanitized_request)
 
+    def get_results(
+        self,
+        case: ClinicalCase | dict[str, Any] | str,
+        requested_investigations: str,
+    ) -> list[InvestigationResult]:
+        return [
+            self.get_result(case, requested_investigation)
+            for requested_investigation in split_investigation_requests(requested_investigations)
+        ]
+
     def _generic_generator(self) -> GenericInvestigationAgent:
         if self.generic_generator is None:
             self.generic_generator = GenericInvestigationAgent()
         return self.generic_generator
+
+
+def split_investigation_requests(requested_investigations: str) -> list[str]:
+    try:
+        sanitized = sanitize_requested_investigation(requested_investigations)
+    except ValueError:
+        return [requested_investigations]
+    parts = [
+        clean_investigation_request_part(part)
+        for part in re.split(r"\s*(?:,|;|\+|&|\band\b|\bplus\b)\s*", sanitized)
+    ]
+    cleaned = [part for part in parts if part]
+    return cleaned or [sanitized]
+
+
+def clean_investigation_request_part(requested_investigation: str) -> str:
+    cleaned = requested_investigation.strip(" .")
+    cleaned = re.sub(r"^(?:order|do|get|check|send|run)\s+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^(?:a|an|the)\s+", "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip(" .")
 
 
 def is_ecg_request(requested_investigation: str) -> bool:
