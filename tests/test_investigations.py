@@ -140,6 +140,46 @@ def pneumonia_case() -> ClinicalCase:
     )
 
 
+def pulmonary_embolism_case() -> ClinicalCase:
+    return ClinicalCase.model_validate(
+        {
+            "diagnosis": "pulmonary embolism",
+            "patient": {
+                "age": 46,
+                "gender": "female",
+                "history": ["recent surgery", "limited mobility"],
+            },
+            "symptoms": [
+                "episodic chest pain",
+                "shortness of breath",
+                "left calf pain",
+            ],
+            "vitals": {
+                "heart_rate": 112,
+                "blood_pressure": "128/78",
+                "respiratory_rate": 24,
+                "oxygen_saturation": 92,
+            },
+            "progression": [
+                {
+                    "time_min": 0,
+                    "description": "Sharp chest discomfort begins with exertion.",
+                },
+                {
+                    "time_min": 30,
+                    "description": "Breathing feels more difficult while walking.",
+                },
+            ],
+            "risk_factors": ["recent surgery", "immobility"],
+            "exam_findings": ["tachypnea", "left calf tenderness"],
+            "outcome": {
+                "if_treated": "Anticoagulation and supportive care reduce risk.",
+                "if_untreated": "Clot burden may worsen and cause instability.",
+            },
+        }
+    )
+
+
 class FakeGenericInvestigationGenerator:
     def __init__(self, result: InvestigationResult) -> None:
         self.result = result
@@ -244,6 +284,17 @@ def test_ecg_result_for_mi_case_has_plausible_findings() -> None:
     assert "reciprocal ST depression" in findings
     assert result.structured_result["st_segments"]["II"] == "elevated"
     assert result.structured_result["st_segments"]["aVL"] == "depressed"
+
+
+def test_ecg_result_for_pe_chest_pain_does_not_show_mi_pattern() -> None:
+    result = InvestigationService().get_result(pulmonary_embolism_case(), "ECG")
+
+    assert result.investigation == "ECG"
+    assert result.status == "available"
+    findings = " ".join(result.structured_result["findings"]).lower()
+    assert "st elevation in contiguous" not in findings
+    assert "reciprocal st depression in leads" not in findings
+    assert result.structured_result["st_segments"] == {}
 
 
 def test_ecg_uses_deterministic_visual_path_without_generic_generator() -> None:

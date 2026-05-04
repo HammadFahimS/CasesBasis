@@ -191,16 +191,15 @@ def has_ischemic_features(case: ClinicalCase) -> bool:
         "ischemia",
         "coronary",
     )
-    symptom_patterns = (
-        "chest pressure",
-        "chest pain",
-        "left arm",
+    ischemic_context_terms = (
         "st elevation",
         "reciprocal",
+        "ischemic",
+        "ischemia",
     )
     diagnosis = case.diagnosis.lower()
     return any(contains_medical_term(diagnosis, term) for term in diagnosis_terms) or any(
-        contains_medical_term(case_text, term) for term in symptom_patterns
+        contains_medical_term(case_text, term) for term in ischemic_context_terms
     )
 
 
