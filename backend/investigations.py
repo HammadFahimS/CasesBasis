@@ -81,7 +81,7 @@ def split_investigation_requests(requested_investigations: str) -> list[str]:
         clean_investigation_request_part(part)
         for part in re.split(r"\s*(?:,|;|\+|&|\band\b|\bplus\b)\s*", sanitized)
     ]
-    cleaned = [part for part in parts if part]
+    cleaned = [part for part in parts if part and not is_explanatory_investigation_fragment(part)]
     return cleaned or [sanitized]
 
 
@@ -90,6 +90,11 @@ def clean_investigation_request_part(requested_investigation: str) -> str:
     cleaned = re.sub(r"^(?:order|do|get|check|send|run)\s+", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"^(?:a|an|the)\s+", "", cleaned, flags=re.IGNORECASE)
     return cleaned.strip(" .")
+
+
+def is_explanatory_investigation_fragment(requested_investigation: str) -> bool:
+    normalized = requested_investigation.lower().strip()
+    return normalized.startswith(("such as ", "including ", "for example "))
 
 
 def is_ecg_request(requested_investigation: str) -> bool:

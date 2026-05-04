@@ -253,6 +253,12 @@ def test_split_investigation_requests_handles_and_and_commas() -> None:
     ]
 
 
+def test_split_investigation_requests_ignores_explanatory_comma_fragments() -> None:
+    assert split_investigation_requests(
+        "CT scan of the head to look for structural abnormalities, such as a stroke."
+    ) == ["CT scan of the head to look for structural abnormalities"]
+
+
 def test_multiple_investigation_request_runs_each_requested_test() -> None:
     fake = FakeGenericInvestigationGenerator(
         generic_result(
