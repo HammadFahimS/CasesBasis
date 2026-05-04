@@ -716,6 +716,48 @@ def test_evaluator_does_not_penalize_unrelated_normal_test() -> None:
     assert "no interpretation penalty" in feedback.summary
 
 
+def test_evaluator_ignores_contradictory_abnormal_flag_when_value_is_in_reference_range() -> None:
+    evaluator = ClinicalEvaluator()
+    contradictory_cbc = InvestigationResult(
+        investigation="complete blood count",
+        status="available",
+        structured_result={
+            "test": "Complete Blood Count",
+            "findings": [],
+            "values": [
+                {
+                    "name": "Hemoglobin",
+                    "value": "13.5",
+                    "unit": "g/dL",
+                    "reference_range": "14.0-17.5 g/dL",
+                    "flag": "mildly low",
+                },
+                {
+                    "name": "Hematocrit",
+                    "value": "39.8",
+                    "unit": "%",
+                    "reference_range": "36.0-46.0%",
+                    "flag": "low",
+                },
+            ],
+        },
+        summary="CBC completed.",
+        visual_payload=None,
+    )
+
+    evaluation = evaluator.evaluate(
+        mi_case(),
+        ["Can you describe the chest pressure?", "When did it start?"],
+        ["Heavy pressure.", "About 30 minutes ago."],
+        investigations_ordered=[contradictory_cbc],
+        student_interpretations=[],
+    )
+
+    feedback = evaluation.investigation_interpretation_feedback
+    assert any("Hemoglobin" in finding for finding in feedback.missed_findings)
+    assert not any("Hematocrit" in finding for finding in feedback.missed_findings)
+
+
 def test_investigation_interpretation_feedback_does_not_leak_hidden_diagnosis() -> None:
     evaluator = ClinicalEvaluator()
     revealing_result = InvestigationResult(

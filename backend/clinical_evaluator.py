@@ -482,7 +482,7 @@ def important_abnormal_findings(result: InvestigationResult) -> list[Interpretab
             )
 
     value_flag = structured.get("flag")
-    if is_abnormal_flag(value_flag):
+    if value_result_is_abnormal(structured):
         name = str(structured.get("test") or investigation_name)
         value = structured.get("value")
         unit = structured.get("unit")
@@ -498,7 +498,7 @@ def important_abnormal_findings(result: InvestigationResult) -> list[Interpretab
     values = structured.get("values")
     if isinstance(values, list):
         for value_result in values:
-            if not isinstance(value_result, dict) or not is_abnormal_flag(value_result.get("flag")):
+            if not isinstance(value_result, dict) or not value_result_is_abnormal(value_result):
                 continue
             name = str(value_result.get("name") or value_result.get("test") or investigation_name)
             value_text = format_value_text(
@@ -530,6 +530,59 @@ def important_abnormal_findings(result: InvestigationResult) -> list[Interpretab
 def is_abnormal_flag(flag: object) -> bool:
     normalized = normalize_text(str(flag or ""))
     return normalized not in {"", "normal", "non-contributory", "noncontributory", "within range"}
+
+
+def value_result_is_abnormal(value_result: dict[str, object]) -> bool:
+    if not is_abnormal_flag(value_result.get("flag")):
+        return False
+    in_reference_range = numeric_value_in_reference_range(
+        value=value_result.get("value"),
+        reference_range=value_result.get("reference_range"),
+    )
+    return in_reference_range is not True
+
+
+def numeric_value_in_reference_range(
+    *,
+    value: object,
+    reference_range: object,
+) -> bool | None:
+    numeric_value = first_number(value)
+    reference_text = normalize_text(str(reference_range or ""))
+    if numeric_value is None or not reference_text:
+        return None
+
+    range_match = re.search(
+        r"(-?\d+(?:\.\d+)?)\s*(?:-|to|–|—)\s*(-?\d+(?:\.\d+)?)",
+        reference_text,
+    )
+    if range_match:
+        low = float(range_match.group(1))
+        high = float(range_match.group(2))
+        return min(low, high) <= numeric_value <= max(low, high)
+
+    upper_match = re.search(
+        r"(?:<|<=|less than|under|below)\s*(-?\d+(?:\.\d+)?)",
+        reference_text,
+    )
+    if upper_match:
+        return numeric_value <= float(upper_match.group(1))
+
+    lower_match = re.search(
+        r"(?:>|>=|greater than|above)\s*(-?\d+(?:\.\d+)?)",
+        reference_text,
+    )
+    if lower_match:
+        return numeric_value >= float(lower_match.group(1))
+
+    return None
+
+
+def first_number(value: object) -> float | None:
+    match = re.search(r"-?\d+(?:\.\d+)?", str(value or ""))
+    if not match:
+        return None
+    return float(match.group(0))
 
 
 def finding_sounds_abnormal(finding: str) -> bool:
