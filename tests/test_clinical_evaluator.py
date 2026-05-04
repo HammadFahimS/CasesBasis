@@ -89,6 +89,53 @@ def test_evaluator_accepts_common_diagnosis_alias() -> None:
     assert evaluation.overall_score > 0
 
 
+def test_evaluator_preserves_exact_parenthetical_diagnosis_guess() -> None:
+    evaluator = ClinicalEvaluator()
+
+    evaluation = evaluator.evaluate(
+        ClinicalCase.model_validate(
+            {
+                "diagnosis": "diabetic ketoacidosis",
+                "patient": {
+                    "age": 19,
+                    "gender": "female",
+                    "history": ["type 1 diabetes"],
+                },
+                "symptoms": [
+                    "fatigue",
+                    "polyuria",
+                    "fruity-smelling breath",
+                ],
+                "vitals": {
+                    "heart_rate": 112,
+                    "blood_pressure": "104/68",
+                    "respiratory_rate": 24,
+                    "oxygen_saturation": 98,
+                },
+                "progression": [
+                    {
+                        "time_min": 0,
+                        "description": "Fatigue and thirst worsen over two days.",
+                    }
+                ],
+                "risk_factors": ["missed insulin"],
+                "exam_findings": ["dry mucous membranes"],
+                "outcome": {
+                    "if_treated": "Improves with fluids and insulin.",
+                    "if_untreated": "Acidosis and dehydration worsen.",
+                },
+            }
+        ),
+        ["Diagnosis guess: Diabetic Ketoacidosis (DKA)"],
+        ["I'm not sure."],
+    )
+
+    assert evaluation.correct_diagnosis_guess.provided is True
+    assert evaluation.correct_diagnosis_guess.guess == "Diabetic Ketoacidosis (DKA)"
+    assert evaluation.correct_diagnosis_guess.is_correct is True
+    assert evaluation.correct_diagnosis_guess.diagnosis_match_level == "correct"
+
+
 def test_evaluator_treats_symptom_guess_as_no_diagnosis() -> None:
     evaluator = ClinicalEvaluator()
 

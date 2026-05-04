@@ -300,15 +300,6 @@ def evaluate_diagnosis_guess(
     case: ClinicalCase,
     questions: list[str],
 ) -> DiagnosisGuessEvaluation:
-    for question in questions:
-        matched_guess = diagnosis_alias_in_text(case.diagnosis, question)
-        if matched_guess:
-            return DiagnosisGuessEvaluation(
-                provided=True,
-                guess=matched_guess,
-                is_correct=True,
-                diagnosis_match_level="correct",
-            )
     guessed_condition = extract_condition_guess(
         [question for question in questions if is_diagnosis_guess_question(question)]
     )
@@ -331,6 +322,15 @@ def evaluate_diagnosis_guess(
             is_correct=match_level == "correct",
             diagnosis_match_level=match_level,
         )
+    for question in questions:
+        matched_guess = diagnosis_alias_in_text(case.diagnosis, question)
+        if matched_guess:
+            return DiagnosisGuessEvaluation(
+                provided=True,
+                guess=matched_guess,
+                is_correct=True,
+                diagnosis_match_level="correct",
+            )
     return DiagnosisGuessEvaluation(
         provided=False,
         guess=None,
@@ -357,9 +357,9 @@ def diagnosis_context(case: ClinicalCase) -> str:
 
 def extract_condition_guess(questions: list[str]) -> str | None:
     patterns = (
-        r"diagnosis\s+guess\s*:?\s*([a-z][a-z0-9 \-]{1,60})",
-        r"(?:is|could this be|do they have|does the patient have|diagnosis is|diagnosed with)\s+([a-z][a-z0-9 \-]{2,60})",
-        r"(?:i think|suspect|guess)\s+(?:it is|it's|this is|the diagnosis is)?\s*([a-z][a-z0-9 \-]{2,60})",
+        r"diagnosis\s+guess\s*:?\s*([a-z][a-z0-9 ()/\-]{1,60})",
+        r"(?:is|could this be|do they have|does the patient have|diagnosis is|diagnosed with)\s+([a-z][a-z0-9 ()/\-]{2,60})",
+        r"(?:i think|suspect|guess)\s+(?:it is|it's|this is|the diagnosis is)?\s*([a-z][a-z0-9 ()/\-]{2,60})",
     )
     for question in questions:
         for pattern in patterns:
