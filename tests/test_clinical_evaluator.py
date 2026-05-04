@@ -574,6 +574,27 @@ def test_evaluator_penalizes_ecg_called_normal() -> None:
     assert incorrect.overall_score < correct.overall_score
 
 
+def test_evaluator_penalizes_unrelated_ecg_interpretation() -> None:
+    evaluator = ClinicalEvaluator()
+    case = mi_case()
+    ecg = InvestigationService().get_result(case, "ECG")
+
+    evaluation = evaluator.evaluate(
+        case,
+        ["Can you describe the chest pressure?", "When did it start?"],
+        ["Heavy pressure.", "About 30 minutes ago."],
+        investigations_ordered=[ecg],
+        student_interpretations=[
+            "The ECG shows a regular rhythm. The U waves are prominent, suggesting hypokalemia, and the QT interval is prolonged.",
+        ],
+    )
+
+    feedback = evaluation.investigation_interpretation_feedback
+    assert feedback.incorrect_interpretations
+    assert not feedback.correctly_interpreted_findings
+    assert feedback.missed_findings
+
+
 def test_evaluator_scores_correct_troponin_interpretation() -> None:
     evaluator = ClinicalEvaluator()
     case = mi_case()

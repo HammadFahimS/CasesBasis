@@ -398,11 +398,20 @@ def evaluate_investigation_interpretations(
                 f"Called abnormal {safe_investigation_name(result)} findings normal."
             )
             continue
+        matched_any_finding = False
         for finding in abnormal_findings:
             if interpretation_matches_finding(finding, result, interpretation_text):
                 correctly_interpreted.append(finding.feedback_text)
+                matched_any_finding = True
             else:
                 missed_findings.append(finding.feedback_text)
+        if (
+            not matched_any_finding
+            and interpretation_attempts_to_interpret_result(result, interpretation_text)
+        ):
+            incorrect_interpretations.append(
+                f"Misinterpreted abnormal {safe_investigation_name(result)} findings."
+            )
 
     feedback = InvestigationInterpretationFeedback(
         correctly_interpreted_findings=dedupe_preserve_order(correctly_interpreted),
@@ -585,6 +594,38 @@ def interpretation_matches_ecg(interpretation_text: str) -> bool:
         "reciprocal depression",
     )
     return any(phrase in interpretation_text for phrase in ecg_phrases)
+
+
+def interpretation_attempts_to_interpret_result(
+    result: InvestigationResult,
+    interpretation_text: str,
+) -> bool:
+    if not interpretation_text:
+        return False
+    result_tokens = tokens_for_test_name(result.investigation).union(
+        tokens_for_test_name(str(result.structured_result.get("test", "")))
+    )
+    interpretation_tokens = tokenize(interpretation_text)
+    if not result_tokens.intersection(interpretation_tokens):
+        return False
+    interpretation_markers = {
+        "shows",
+        "suggest",
+        "suggests",
+        "consistent",
+        "rhythm",
+        "wave",
+        "waves",
+        "interval",
+        "qt",
+        "arrhythmia",
+        "arrhythmias",
+        "hypokalemia",
+        "hypertrophy",
+        "normal",
+        "abnormal",
+    }
+    return bool(interpretation_tokens.intersection(interpretation_markers))
 
 
 def interpretation_calls_abnormal_result_normal(
