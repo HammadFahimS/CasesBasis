@@ -5,6 +5,7 @@ from typing import Any
 
 from agents.investigation_generator import (
     GenericInvestigationAgent,
+    InvestigationGenerationError,
     sanitize_requested_investigation,
 )
 from backend.patient_response import normalize_case
@@ -50,7 +51,10 @@ class InvestigationService:
             return build_ecg_result(clinical_case)
         if is_troponin_request(sanitized_request):
             return build_troponin_result(clinical_case)
-        return self._generic_generator().generate(clinical_case, sanitized_request)
+        try:
+            return self._generic_generator().generate(clinical_case, sanitized_request)
+        except InvestigationGenerationError:
+            return unavailable_result(sanitized_request)
 
     def get_results(
         self,

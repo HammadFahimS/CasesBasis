@@ -190,6 +190,15 @@ class FakeGenericInvestigationGenerator:
         return self.result
 
 
+class FailingGenericInvestigationGenerator:
+    def __init__(self) -> None:
+        self.calls: list[tuple[ClinicalCase, str]] = []
+
+    def generate(self, case: ClinicalCase, requested_investigation: str) -> InvestigationResult:
+        self.calls.append((case, requested_investigation))
+        raise InvestigationGenerationError("failed after retries")
+
+
 def generic_result(
     *,
     investigation: str,
@@ -380,6 +389,21 @@ def test_unrelated_reasonable_test_returns_normal_non_contributory_result() -> N
     assert result.status == "available"
     assert "non-contributory" in result.summary
     assert result.visual_payload is None
+
+
+def test_generic_investigation_generation_failure_returns_safe_unavailable_result() -> None:
+    fake = FailingGenericInvestigationGenerator()
+
+    result = InvestigationService(generic_generator=fake).get_result(
+        pneumonia_case(),
+        "chest x-ray",
+    )
+
+    assert fake.calls
+    assert result.investigation == "chest x-ray"
+    assert result.status == "unavailable"
+    assert result.summary == "That test is not available yet"
+    assert "pneumonia" not in result.model_dump_json().lower()
 
 
 def test_troponin_result_is_elevated_for_mi_like_case() -> None:
