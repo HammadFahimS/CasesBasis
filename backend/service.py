@@ -54,8 +54,18 @@ class ClinicalCaseSimulator:
             return first_case
         except MedicalValidationError as exc:
             corrected_case = self.validator.correct(first_case, failure_reason=str(exc))
-            validate_medical_realism(corrected_case)
-            return corrected_case
+            try:
+                validate_medical_realism(corrected_case)
+                return corrected_case
+            except MedicalValidationError as correction_exc:
+                strict_case = self.validator.regenerate_strict(
+                    diagnosis,
+                    failure_reason=str(correction_exc),
+                    difficulty=difficulty,
+                    session_history=session_history,
+                )
+                validate_medical_realism(strict_case)
+                return strict_case
 
     def _generate_case_once(
         self,

@@ -12,6 +12,12 @@ The primary generator failed repeatedly.
 Return valid JSON only and follow the schema exactly.
 """.strip()
 
+STRICT_REGENERATION_SYSTEM_PROMPT = """
+You are a strict clinical case regeneration agent.
+Return valid JSON only and follow the schema exactly.
+Generate a fresh medically consistent case for the same diagnosis and difficulty.
+""".strip()
+
 MAX_VALIDATOR_ATTEMPTS = 2
 
 CORRECTION_SYSTEM_PROMPT = """
@@ -74,6 +80,42 @@ Return the corrected case JSON only.
         generated_case = self.parse_clinical_case_with_retries(
             system_prompt=VALIDATOR_FALLBACK_SYSTEM_PROMPT,
             user_prompt=prompt,
+        )
+        if generated_case.diagnosis.strip().lower() != sanitized_diagnosis.lower():
+            generated_case.diagnosis = sanitized_diagnosis
+        return generated_case
+
+    def regenerate_strict(
+        self,
+        diagnosis: str,
+        failure_reason: str,
+        difficulty: str = "medium",
+        session_history: list[ClinicalEvaluation | dict[str, object] | str] | None = None,
+    ) -> ClinicalCase:
+        sanitized_diagnosis = sanitize_diagnosis(diagnosis)
+        prompt = build_generation_prompt(
+            sanitized_diagnosis,
+            difficulty,
+            session_context=build_session_context(session_history),
+        )
+        prompt = f"""
+{prompt}
+
+STRICT REGENERATION AFTER MEDICAL VALIDATION FAILURE:
+- The previous generated or corrected case failed deterministic validation.
+- Validation failure reason: {failure_reason}
+- Generate a fresh case for the same diagnosis and difficulty.
+- Avoid the specific validation failure.
+- Do not include unrelated symptom systems unless they are clearly justified by history, risk factors, exam findings, or progression.
+- Keep all symptoms, vitals, risk factors, exam findings, and progression medically coherent for the diagnosis.
+- Preserve the exact JSON structure and do not add fields.
+
+Return JSON only.
+""".strip()
+        generated_case = self.parse_response(
+            system_prompt=STRICT_REGENERATION_SYSTEM_PROMPT,
+            user_prompt=prompt,
+            response_model=ClinicalCase,
         )
         if generated_case.diagnosis.strip().lower() != sanitized_diagnosis.lower():
             generated_case.diagnosis = sanitized_diagnosis
