@@ -16,6 +16,8 @@ class Patient(StrictModel):
 
     age: int
     gender: str
+    occupation: str | None = None
+    persona_description: str = ""
     history: list[str]
 
     @field_validator("age")

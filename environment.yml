@@ -1,0 +1,57 @@
+name: casesbasis
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      # ── Existing project ──────────────────────────────────────────────────
+      - fastapi>=0.115.0
+      - uvicorn>=0.30.0
+      - pydantic>=2.7.0
+      - python-dotenv>=1.0.0
+      - pytest>=8.0.0
+      - httpx
+
+      # ── Inference APIs ────────────────────────────────────────────────────
+      - openai>=1.0.0          # OpenAI + vLLM OpenAI-compatible endpoint
+      - anthropic               # Claude
+      - groq                    # Groq (fastest free-tier inference)
+      - together                # Together.ai
+
+      # ── HuggingFace / Transformers ────────────────────────────────────────
+      - transformers
+      - accelerate
+      - datasets
+      - tokenizers
+      - huggingface-hub
+      - sentencepiece
+      - einops
+
+      # ── PyTorch (CPU + MPS on Mac; GPU via Vast.ai Docker image) ─────────
+      - torch
+      - torchvision
+      - torchaudio
+
+      # ── Knowledge Graph (FalkorDB + Graphiti) ─────────────────────────────
+      - falkordb                # Python client for FalkorDB graph DB
+      - graphiti-core           # Temporal knowledge graph on top of FalkorDB
+
+      # ── Docker SDK ────────────────────────────────────────────────────────
+      - docker                  # Python Docker SDK (manage containers from code)
+
+      # ── Agent frameworks ──────────────────────────────────────────────────
+      - langchain
+      - langchain-community
+      - langgraph
+      - langchain-openai
+      - langchain-anthropic
+
+      # ── Utilities ─────────────────────────────────────────────────────────
+      - aiohttp
+      - rich
+      - tqdm
+      - loguru
+      - tenacity                # Retry logic for API calls

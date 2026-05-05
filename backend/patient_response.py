@@ -28,9 +28,19 @@ class PatientResponseService:
             provider=provider,
         )
 
-    def answer_question(self, case: ClinicalCase | dict[str, Any] | str, question: str) -> str:
+    def answer_question(
+        self,
+        case: ClinicalCase | dict[str, Any] | str,
+        question: str,
+        *,
+        conversation_history: list[tuple[str, str]] | None = None,
+    ) -> str:
         clinical_case = normalize_case(case)
-        return self.agent.answer(clinical_case, question)
+        return self.agent.answer(
+            clinical_case,
+            question,
+            conversation_history=conversation_history or [],
+        )
 
 
 def normalize_case(case: ClinicalCase | dict[str, Any] | str) -> ClinicalCase:

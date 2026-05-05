@@ -5,6 +5,7 @@ import os
 from typing import Any, TypeVar
 from urllib import error, request
 
+from langsmith import traceable
 from pydantic import BaseModel
 from schemas.clinical_case import ClinicalCase, normalize_case_data
 
@@ -13,7 +14,14 @@ ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
 DEFAULT_OPENAI_MODEL = "gpt-4o-2024-08-06"
 DEFAULT_OLLAMA_MODEL = "qwen2.5:7b"
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
-SUPPORTED_LLM_PROVIDERS = {"openai", "ollama"}
+DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_TOGETHER_MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+DEFAULT_CEREBRAS_MODEL = "qwen-3-235b-a22b-instruct-2507"
+TOGETHER_BASE_URL = "https://api.together.xyz/v1"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
+SUPPORTED_LLM_PROVIDERS = {"openai", "ollama", "groq", "together", "openrouter", "cerebras"}
 
 
 def build_openai_client() -> Any:
@@ -27,10 +35,64 @@ def build_openai_client() -> Any:
     return OpenAI()
 
 
+def build_groq_client() -> Any:
+    try:
+        from groq import Groq
+    except ImportError as exc:
+        raise RuntimeError(
+            "The groq package is not installed. Run: pip install groq"
+        ) from exc
+    return GroqClient(Groq(api_key=os.environ["GROQ_API_KEY"]))
+
+
+def build_together_client() -> Any:
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise RuntimeError(
+            "The openai package is not installed. Run: pip install openai"
+        ) from exc
+    client = OpenAI(
+        api_key=os.environ["TOGETHER_API_KEY"],
+        base_url=TOGETHER_BASE_URL,
+    )
+    return GroqClient(client)  # same json_object interface as Groq
+
+
+def build_cerebras_client() -> Any:
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise RuntimeError("The openai package is not installed. Run: pip install openai") from exc
+    client = OpenAI(
+        api_key=os.environ["CEREBRAS_API_KEY"],
+        base_url=CEREBRAS_BASE_URL,
+    )
+    return GroqClient(client)  # same json_object interface
+
+
+def build_openrouter_client() -> Any:
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise RuntimeError(
+            "The openai package is not installed. Run: pip install openai"
+        ) from exc
+    client = OpenAI(
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        base_url=OPENROUTER_BASE_URL,
+        default_headers={
+            "HTTP-Referer": "https://github.com/CasesBasis",
+            "X-Title": "CasesBasis",
+        },
+    )
+    return GroqClient(client)  # same json_object interface
+
+
 def get_llm_provider() -> str:
     provider = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
     if provider not in SUPPORTED_LLM_PROVIDERS:
-        raise ValueError("LLM_PROVIDER must be one of: openai, ollama")
+        raise ValueError("LLM_PROVIDER must be one of: openai, ollama, groq, together, openrouter, cerebras")
     return provider
 
 
@@ -39,6 +101,14 @@ def resolve_model(provider: str, model: str | None) -> str:
         return model
     if provider == "ollama":
         return os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
+    if provider == "groq":
+        return os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL)
+    if provider == "together":
+        return os.getenv("TOGETHER_MODEL", DEFAULT_TOGETHER_MODEL)
+    if provider == "openrouter":
+        return os.getenv("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL)
+    if provider == "cerebras":
+        return os.getenv("CEREBRAS_MODEL", DEFAULT_CEREBRAS_MODEL)
     return os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
 
 
@@ -46,6 +116,14 @@ def build_llm_client(provider: str | None = None) -> Any:
     resolved_provider = provider or get_llm_provider()
     if resolved_provider == "ollama":
         return OllamaClient()
+    if resolved_provider == "groq":
+        return build_groq_client()
+    if resolved_provider == "together":
+        return build_together_client()
+    if resolved_provider == "openrouter":
+        return build_openrouter_client()
+    if resolved_provider == "cerebras":
+        return build_cerebras_client()
     return build_openai_client()
 
 
@@ -146,6 +224,49 @@ class OllamaClient:
         return content
 
 
+class GroqClient:
+    """Wrapper around the Groq SDK using chat completions with JSON schema output."""
+
+    def __init__(self, client: Any) -> None:
+        self._client = client
+
+    def parse_response(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: type[ResponseModel],
+    ) -> ResponseModel:
+        schema_hint = json.dumps(response_model.model_json_schema(), indent=2)
+        augmented_system = (
+            f"{system_prompt}\n\nRespond with valid JSON matching this schema:\n{schema_hint}"
+        )
+        response = self._client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": augmented_system},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+        )
+        content = response.choices[0].message.content
+        return safe_parse(response_model, content)
+
+    def text_response(self, *, model: str, system_prompt: str, user_prompt: str) -> str:
+        response = self._client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        content = response.choices[0].message.content
+        if not content:
+            raise ValueError("Groq response did not include text output")
+        return content.strip()
+
+
 def safe_parse(response_model: type[ResponseModel], raw_value: Any) -> ResponseModel:
     try:
         return parse_model_value(response_model, raw_value)
@@ -193,6 +314,7 @@ class OpenAIJsonAgent:
         self.client = client or build_llm_client(self.provider)
         self.model = resolve_model(self.provider, model)
 
+    @traceable(run_type="llm")
     def parse_response(
         self,
         *,
@@ -200,7 +322,7 @@ class OpenAIJsonAgent:
         user_prompt: str,
         response_model: type[ResponseModel],
     ) -> ResponseModel:
-        if self.provider == "ollama":
+        if self.provider in ("ollama", "groq", "together", "openrouter", "cerebras"):
             return self.client.parse_response(
                 model=self.model,
                 system_prompt=system_prompt,
@@ -220,8 +342,9 @@ class OpenAIJsonAgent:
             raise ValueError("OpenAI response did not include parsed structured output")
         return safe_parse(response_model, parsed)
 
+    @traceable(run_type="llm")
     def text_response(self, *, system_prompt: str, user_prompt: str) -> str:
-        if self.provider == "ollama":
+        if self.provider in ("ollama", "groq", "together", "openrouter", "cerebras"):
             return self.client.text_response(
                 model=self.model,
                 system_prompt=system_prompt,
