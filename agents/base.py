@@ -23,9 +23,9 @@ DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 DEFAULT_CEREBRAS_MODEL = "qwen-3-235b-a22b-instruct-2507"
 CEREBRAS_FALLBACK_MODELS = [
     "qwen-3-235b-a22b-instruct-2507",
-    "llama-3.3-70b",
-    "qwen-3-32b",
-    "llama-3.1-8b",
+    "gpt-oss-120b",
+    "zai-glm-4.7",
+    "llama3.1-8b",
 ]
 TOGETHER_BASE_URL = "https://api.together.xyz/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
