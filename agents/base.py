@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any, TypeVar
 from urllib import error, request
+
+logger = logging.getLogger(__name__)
 
 from langsmith import traceable
 from pydantic import BaseModel
@@ -18,6 +21,12 @@ DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_TOGETHER_MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
 DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 DEFAULT_CEREBRAS_MODEL = "qwen-3-235b-a22b-instruct-2507"
+CEREBRAS_FALLBACK_MODELS = [
+    "qwen-3-235b-a22b-instruct-2507",
+    "llama-3.3-70b",
+    "qwen-3-32b",
+    "llama-3.1-8b",
+]
 TOGETHER_BASE_URL = "https://api.together.xyz/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
@@ -68,7 +77,7 @@ def build_cerebras_client() -> Any:
         api_key=os.environ["CEREBRAS_API_KEY"],
         base_url=CEREBRAS_BASE_URL,
     )
-    return GroqClient(client)  # same json_object interface
+    return CerebrasClient(client)
 
 
 def build_openrouter_client() -> Any:
@@ -265,6 +274,74 @@ class GroqClient:
         if not content:
             raise ValueError("Groq response did not include text output")
         return content.strip()
+
+
+class CerebrasClient:
+    """Cerebras client with automatic model fallback on 503 / server errors."""
+
+    def __init__(self, client: Any) -> None:
+        self._client = client
+
+    def _model_chain(self, preferred: str) -> list[str]:
+        chain = [preferred] + [m for m in CEREBRAS_FALLBACK_MODELS if m != preferred]
+        return chain
+
+    def _is_retryable(self, exc: Exception) -> bool:
+        msg = str(exc).lower()
+        return "503" in msg or "502" in msg or "no server" in msg or "unavailable" in msg or "overloaded" in msg
+
+    def parse_response(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: type[ResponseModel],
+    ) -> ResponseModel:
+        schema_hint = json.dumps(response_model.model_json_schema(), indent=2)
+        augmented_system = (
+            f"{system_prompt}\n\nRespond with valid JSON matching this schema:\n{schema_hint}"
+        )
+        last_exc: Exception | None = None
+        for m in self._model_chain(model):
+            try:
+                response = self._client.chat.completions.create(
+                    model=m,
+                    messages=[
+                        {"role": "system", "content": augmented_system},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                )
+                return safe_parse(response_model, response.choices[0].message.content)
+            except Exception as exc:
+                last_exc = exc
+                if not self._is_retryable(exc):
+                    raise
+                logger.warning("Cerebras model %s unavailable (%s), trying next fallback", m, exc)
+        raise last_exc  # type: ignore[misc]
+
+    def text_response(self, *, model: str, system_prompt: str, user_prompt: str) -> str:
+        last_exc: Exception | None = None
+        for m in self._model_chain(model):
+            try:
+                response = self._client.chat.completions.create(
+                    model=m,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                )
+                content = response.choices[0].message.content
+                if not content:
+                    raise ValueError("Cerebras response did not include text output")
+                return content.strip()
+            except Exception as exc:
+                last_exc = exc
+                if not self._is_retryable(exc):
+                    raise
+                logger.warning("Cerebras model %s unavailable (%s), trying next fallback", m, exc)
+        raise last_exc  # type: ignore[misc]
 
 
 def safe_parse(response_model: type[ResponseModel], raw_value: Any) -> ResponseModel:
