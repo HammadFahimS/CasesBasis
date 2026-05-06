@@ -5,51 +5,91 @@ import re
 from agents.base import OpenAIJsonAgent
 from schemas.clinical_case import ClinicalCase
 
-PATIENT_RESPONSE_SYSTEM_PROMPT = """
-You are role-playing as the patient in a medical simulation.
+_PATIENT_RULES = """
+THE MOST IMPORTANT RULE:
+Answer only and exactly what was asked. Never volunteer symptoms, history, or details that were not directly requested. If the student asks about chest pain, describe chest pain only. Do not mention that you also feel breathless, sweaty, or anything else. Wait to be asked.
 
 Rules:
-- Answer based only on the patient data provided.
-- If the question is unrelated to the diagnosis, still answer if a normal patient could reasonably answer it.
-- Do NOT expose or name the diagnosis directly.
-- Use natural spoken language, not JSON.
-- If the information is unknown, say "I'm not sure".
-- Keep responses realistic and consistent with the case.
-- Sound like a real patient, not a clinician.
-- Occasionally be uncertain with phrases like "I think" or "maybe" when appropriate.
-- Use approximate answers for non-critical details instead of exact clinical precision.
-- Do not explain symptoms with perfect medical clarity.
-- Vary tone and detail level across answers.
-- For broad questions like "what symptoms do you have?", mention the main complaint and at most one or two associated details; do not list every symptom unless asked specifically.
-- Do not mention that you are using a case file or simulation data.
+- 1 to 3 sentences maximum. Be brief.
+- If asked something vague like "how are you feeling?", give only your single most prominent complaint. Nothing else.
+- Never list multiple symptoms in one answer unless the question explicitly asks for a list.
+- Do not name or imply the diagnosis under any circumstances.
+- Sound like a real, worried patient — imprecise, sometimes uncertain, not a clinician.
+- Use lay language only. No medical terms.
+- Say "I'm not sure" or "I don't know" if you genuinely don't know something.
+- Be consistent with everything you have said before.
+- Do not explain, educate, or provide clinical context. Just describe your experience.
+- Do not mention that this is a simulation.
 """.strip()
+
+
+def build_patient_system_prompt(case: "ClinicalCase") -> str:
+    persona = case.patient.persona_description.strip()
+    occupation = case.patient.occupation
+    age = case.patient.age
+    gender = case.patient.gender
+
+    occupation_str = f", {occupation}" if occupation else ""
+    character_line = f"You are a {age}-year-old {gender}{occupation_str}."
+    if persona:
+        character_block = f"CHARACTER:\n{character_line}\n{persona}\nSpeak and behave exactly as this person would — your tone, vocabulary, and emotional register must match. The rules below still govern what information you share."
+    else:
+        character_block = f"CHARACTER:\n{character_line}\nSpeak as a real patient would."
+
+    return f"You are a patient in a medical simulation for trainee doctors. Your role is to make the student work for every piece of information — not to help them.\n\n{character_block}\n\n{_PATIENT_RULES}"
 
 
 class PatientResponseAgent(OpenAIJsonAgent):
     """Produces natural-language patient answers from case data."""
 
-    def answer(self, case: ClinicalCase, question: str) -> str:
+    def answer(
+        self,
+        case: ClinicalCase,
+        question: str,
+        conversation_history: list[tuple[str, str]] | None = None,
+        revealed_symptoms: list[str] | None = None,
+    ) -> str:
         sanitized_question = sanitize_question(question)
         if asks_for_diagnosis(sanitized_question, case.diagnosis):
             return "I'm not sure"
-        prompt = f"""
-Patient data:
-{case_to_patient_context(case)}
-
-User question:
-{sanitized_question}
-
-Answer as the patient.
-""".strip()
+        prompt = build_patient_prompt(
+            case, sanitized_question, conversation_history or [], revealed_symptoms or []
+        )
         answer = self.text_response(
-            system_prompt=PATIENT_RESPONSE_SYSTEM_PROMPT,
+            system_prompt=build_patient_system_prompt(case),
             user_prompt=prompt,
         )
         return redact_diagnosis(answer, case.diagnosis)
 
 
+def build_patient_prompt(
+    case: ClinicalCase,
+    question: str,
+    history: list[tuple[str, str]],
+    revealed_symptoms: list[str],
+) -> str:
+    parts = [f"Patient data:\n{case_to_patient_context(case)}"]
+
+    if history:
+        lines = "\n".join(
+            f"Student: {q}\nYou: {a}" for q, a in history
+        )
+        parts.append(f"Conversation so far:\n{lines}")
+
+    if revealed_symptoms:
+        parts.append(
+            f"Symptoms you have already mentioned: {', '.join(revealed_symptoms)}. "
+            "Stay consistent with what you have said."
+        )
+
+    parts.append(f"Student: {question}\nAnswer as the patient.")
+    return "\n\n".join(parts)
+
+
 def case_to_patient_context(case: ClinicalCase) -> str:
-    return case.model_dump_json(exclude={"diagnosis"}, indent=2)
+    # Exclude diagnosis (hidden) and exam_findings (clinical signs the patient
+    # cannot self-report — tachycardia, crepitations, etc. must be found by examination)
+    return case.model_dump_json(exclude={"diagnosis", "exam_findings"}, indent=2)
 
 
 def sanitize_question(question: str) -> str:

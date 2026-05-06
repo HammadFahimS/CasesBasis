@@ -35,6 +35,8 @@ JSON STRUCTURE:
   "patient": {
     "age": number,
     "gender": "male or female",
+    "occupation": "string or null",
+    "persona_description": "string",
     "history": ["string"]
   },
   "symptoms": ["string"],
@@ -57,6 +59,17 @@ JSON STRUCTURE:
     "if_untreated": "string"
   }
 }
+
+PERSONA GUIDELINES:
+- Choose an age that is clinically realistic for the diagnosis and varies across cases (do not always default to middle-aged adults — use teenagers, young adults, elderly patients too)
+- Set occupation consistent with age: omit (null) for patients under 14; use student, retired, or specific careers otherwise
+- Write persona_description as exactly ONE sentence describing communication style and emotional state only
+  Examples: "A shy 16-year-old who answers reluctantly and avoids detail."
+            "A stoic retired farmer who minimises pain and resists fuss."
+            "An anxious professional who over-explains and seeks reassurance."
+            "A confused elderly man who struggles to recall exact timelines."
+- persona_description must NOT describe information-sharing behaviour (never say 'freely shares', 'withholds', 'volunteers symptoms', etc.)
+- Vary the persona meaningfully — not every patient is cooperative and articulate
 
 MEDICAL GUIDELINES:
 - Symptoms must strongly match the diagnosis

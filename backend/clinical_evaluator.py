@@ -90,13 +90,14 @@ class ClinicalEvaluator:
         session_history: list[ClinicalEvaluation | dict[str, Any] | str] | None = None,
         investigations_ordered: list[InvestigationResult | dict[str, Any] | str] | None = None,
         student_interpretations: list[str] | None = None,
+        graph_entity_names: list[str] | None = None,
     ) -> ClinicalEvaluation:
         clinical_case = normalize_case(case)
         raw_questions = [" ".join(question.split()).strip() for question in student_questions if question.strip()]
         questions = [normalize_text(question) for question in raw_questions]
         responses = [normalize_text(response) for response in patient_responses if response.strip()]
 
-        identified_symptoms = identify_symptoms(clinical_case, questions, responses)
+        identified_symptoms = identify_symptoms(clinical_case, questions, responses, graph_entity_names)
         missed_symptoms = [symptom for symptom in clinical_case.symptoms if symptom not in identified_symptoms]
         relevance = evaluate_question_relevance(clinical_case, questions)
         diagnosis_guess = evaluate_diagnosis_guess(clinical_case, raw_questions)
@@ -206,14 +207,17 @@ def identify_symptoms(
     case: ClinicalCase,
     questions: list[str],
     responses: list[str],
+    graph_entity_names: list[str] | None = None,
 ) -> list[str]:
     identified: list[str] = []
     question_text = normalize_text(" ".join(questions))
     response_text = normalize_text(" ".join(responses))
+    graph_text = normalize_text(" ".join(graph_entity_names)) if graph_entity_names else ""
     for symptom in case.symptoms:
-        if symptom_was_directly_asked(symptom, question_text) or symptom_was_revealed(
-            symptom,
-            response_text,
+        if (
+            symptom_was_directly_asked(symptom, question_text)
+            or symptom_was_revealed(symptom, response_text)
+            or (graph_text and symptom_mentioned_in_text(symptom, graph_text))
         ):
             identified.append(symptom)
     return identified
