@@ -1302,7 +1302,30 @@ HTML_PAGE = """
     const byId = Object.fromEntries(nodes.map(n=>([n.id,n])));
     const links = edges.filter(e=>byId[e.source]&&byId[e.target]);
 
-    nodes.forEach(n=>{ if(n.x==null){n.x=W/2+(Math.random()-.5)*80;n.y=H/2+(Math.random()-.5)*80;} });
+    // Detect connected components via union-find
+    const _uf = {};
+    nodes.forEach(n=>{ _uf[n.id]=n.id; });
+    function _find(x){ return _uf[x]===x?x:(_uf[x]=_find(_uf[x])); }
+    edges.forEach(e=>{
+      const s=typeof e.source==='object'?e.source.id:e.source;
+      const t=typeof e.target==='object'?e.target.id:e.target;
+      if(_uf[s]!==undefined&&_uf[t]!==undefined) _uf[_find(s)]=_find(t);
+    });
+    const _compMap={};
+    nodes.forEach(n=>{ const r=_find(n.id); (_compMap[r]=_compMap[r]||[]).push(n); });
+    const _comps=Object.values(_compMap);
+
+    // Assign a grid center to each component, spread across the canvas
+    const _cols=Math.ceil(Math.sqrt(_comps.length));
+    const _rows=Math.ceil(_comps.length/_cols);
+    _comps.forEach((comp,i)=>{
+      const cx=((i%_cols)+0.5)*(W/_cols);
+      const cy=(Math.floor(i/_cols)+0.5)*(H/_rows);
+      comp.forEach(n=>{ n._cx=cx; n._cy=cy; });
+    });
+
+    // Scatter initial positions near each component's assigned center
+    nodes.forEach(n=>{ if(n.x==null){n.x=n._cx+(Math.random()-.5)*60;n.y=n._cy+(Math.random()-.5)*60;} });
 
     // Zoom/pan
     const root = s.append('g');
@@ -1374,14 +1397,19 @@ HTML_PAGE = """
       .text(d=> d.labels&&d.labels[0] ? d.labels[0].toLowerCase() : '');
 
     // ── Simulation ─────────────────────────────────────────────────────────────
+    // Per-component cluster force: pulls each node toward its subgraph's assigned center
+    function _clusterForce(alpha) {
+      nodes.forEach(n=>{
+        n.vx += (n._cx - n.x) * 0.12 * alpha;
+        n.vy += (n._cy - n.y) * 0.12 * alpha;
+      });
+    }
     _graphSim = d3.forceSimulation(nodes)
-      .force('link',   d3.forceLink(links).id(d=>d.id).distance(72).strength(0.8))
-      .force('charge', d3.forceManyBody().strength(-80))
-      .force('center', d3.forceCenter(W/2, H/2).strength(0.8))
-      .force('x',      d3.forceX(W/2).strength(0.15))
-      .force('y',      d3.forceY(H/2).strength(0.15))
-      .force('collide',d3.forceCollide(30))
-      .alphaDecay(0.04)
+      .force('link',    d3.forceLink(links).id(d=>d.id).distance(80).strength(0.9))
+      .force('charge',  d3.forceManyBody().strength(-160))
+      .force('collide', d3.forceCollide(34))
+      .force('cluster', _clusterForce)
+      .alphaDecay(0.03)
       .on('tick',()=>{
         // Clamp nodes within SVG bounds so they can never drift off screen
         nodes.forEach(d => {
