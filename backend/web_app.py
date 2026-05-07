@@ -28,14 +28,24 @@ load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from backend.cxr_service import _faiss_index
     import asyncio
+    import gc
     import logging
+    import os
+
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+    from backend.cxr_service import _faiss_index
     logger = logging.getLogger(__name__)
     logger.info("Warming up CXR FAISS index ...")
     await asyncio.get_event_loop().run_in_executor(None, _faiss_index._load)
     logger.info("CXR FAISS index ready")
+
     yield
+
+    # clean up torch thread-pool semaphores on shutdown
+    _faiss_index._model = None
+    gc.collect()
 
 
 app = FastAPI(title="Clinical Case Simulator", lifespan=lifespan)
