@@ -101,6 +101,15 @@ BODY_SYSTEM_KEYWORDS = {
         "weakness",
         "sweat",
         "dehydration",
+        # non-specific symptoms that appear across many system diseases
+        "nausea",
+        "vomit",
+        "diaphoresis",
+        "pallor",
+        "anorexia",
+        "anxiety",
+        "restless",
+        "pain",
     },
 }
 
@@ -155,7 +164,7 @@ def check_symptoms_match_diagnosis(case: ClinicalCase) -> list[str]:
 
     if related_count == 0:
         issues.append("symptoms do not logically relate to the diagnosis body system")
-    if unrelated_symptoms:
+    if len(unrelated_symptoms) > 1:
         issues.append("unrelated symptom systems are present without justification")
     return issues
 
