@@ -677,7 +677,7 @@ HTML_PAGE = """
           <div class="flex flex-wrap gap-1.5">
             <button class="chip text-xs bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 px-2.5 py-1 rounded-full" onclick="quickOrder('ECG')">ECG</button>
             <button class="chip text-xs bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 px-2.5 py-1 rounded-full" onclick="quickOrder('Troponin')">Troponin</button>
-            <button class="chip text-xs bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 px-2.5 py-1 rounded-full" onclick="quickOrder('FBC')">FBC</button>
+            <button class="chip text-xs bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 px-2.5 py-1 rounded-full" onclick="quickOrder('CBC')">CBC</button>
             <button class="chip text-xs bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 px-2.5 py-1 rounded-full" onclick="quickOrder('CXR')">CXR</button>
             <button class="chip text-xs bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 px-2.5 py-1 rounded-full" onclick="quickOrder('ABG')">ABG</button>
           </div>
