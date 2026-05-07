@@ -6,6 +6,8 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 
+from contextlib import asynccontextmanager
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
@@ -23,7 +25,20 @@ from schemas.investigation import InvestigationResult
 
 load_dotenv()
 
-app = FastAPI(title="Clinical Case Simulator")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from backend.cxr_service import _faiss_index
+    import asyncio
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Warming up CXR FAISS index ...")
+    await asyncio.get_event_loop().run_in_executor(None, _faiss_index._load)
+    logger.info("CXR FAISS index ready")
+    yield
+
+
+app = FastAPI(title="Clinical Case Simulator", lifespan=lifespan)
 
 
 
