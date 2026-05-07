@@ -171,8 +171,12 @@ def _load_image_bytes_from_parquet(shard: str, row_idx: int) -> bytes | None:
     try:
         import pyarrow.parquet as pq
 
-        table = pq.read_table(shard, columns=["image"], skip_rows=row_idx, num_rows=1)
-        img_dict = table.to_pydict()["image"][0]
+        pf = pq.ParquetFile(shard)
+        rows_per_rg = pf.metadata.row_group(0).num_rows
+        rg_idx = row_idx // rows_per_rg
+        offset = row_idx % rows_per_rg
+        table = pf.read_row_group(rg_idx, columns=["image"])
+        img_dict = table.to_pydict()["image"][offset]
         raw: bytes = img_dict["bytes"]
         return raw
     except Exception as exc:
