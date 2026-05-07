@@ -1,15 +1,17 @@
 """
-Download a representative sample of chest X-ray images from the
-RoentGen-v2 synthetic dataset (stanfordmimi/RoentGen-v2-synthetic-dataset).
+Download the full RoentGen-v2 dataset locally, then extract
+representative chest X-ray images per finding category.
 
-Run once to populate data/cxr/<finding>/*.jpg before starting the server.
+Steps:
+  1. Downloads all 33 parquet files (~15.7 GB) via huggingface_hub
+  2. Iterates locally (fast, no streaming) and saves IMAGES_PER_FINDING
+     images per finding category to data/cxr/<Finding>/
 
 Usage:
     python scripts/download_cxr_samples.py
 
 Requires:
-    - HUGGINGFACE_TOKEN in .env (must have accepted the dataset access agreement)
-    - pip install datasets pillow python-dotenv
+    HUGGINGFACE_TOKEN in .env with access to stanfordmimi/RoentGen-v2-synthetic-dataset
 """
 
 from __future__ import annotations
@@ -22,13 +24,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ── Config ────────────────────────────────────────────────────────────────────
-
 DATASET_ID = "stanfordmimi/RoentGen-v2-synthetic-dataset"
 IMAGES_PER_FINDING = 20
 OUTPUT_DIR = Path(__file__).parent.parent / "data" / "cxr"
 
-# All finding columns in the dataset that we care about
 FINDING_COLUMNS = [
     "Atelectasis",
     "Cardiomegaly",
@@ -45,32 +44,45 @@ FINDING_COLUMNS = [
     "Pneumothorax",
 ]
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+
+def folder_name(finding: str) -> str:
+    return finding.replace(" ", "_")
 
 
 def main() -> None:
     token = os.environ.get("HUGGINGFACE_TOKEN")
     if not token:
-        print("ERROR: HUGGINGFACE_TOKEN not set in .env", file=sys.stderr)
+        print("ERROR: HUGGINGFACE_TOKEN not set in .env")
         sys.exit(1)
 
     try:
         from datasets import load_dataset
+        from huggingface_hub import snapshot_download
     except ImportError:
-        print("ERROR: datasets not installed. Run: pip install datasets", file=sys.stderr)
+        print("ERROR: Run: pip install datasets huggingface_hub")
         sys.exit(1)
 
-    print(f"Streaming dataset: {DATASET_ID}")
-    print(f"Target: {IMAGES_PER_FINDING} images per finding → {OUTPUT_DIR}\n")
+    # ── Step 1: Download all parquet files locally ─────────────────────────────
+    print(f"Step 1: Downloading full dataset ({DATASET_ID}) ...")
+    cache_dir = snapshot_download(
+        repo_id=DATASET_ID,
+        repo_type="dataset",
+        token=token,
+        ignore_patterns=["*.md", "*.txt", "*.json"],
+    )
+    print(f"  Cached at: {cache_dir}\n")
 
+    # ── Step 2: Load from local cache and extract images ──────────────────────
+    print("Step 2: Loading from local cache ...")
     ds = load_dataset(
         DATASET_ID,
         split="train",
-        streaming=True,
+        cache_dir=str(Path(cache_dir).parent.parent),
         token=token,
     )
+    print(f"  Total rows: {len(ds):,}\n")
 
-    # Track how many we've saved per finding
+    print(f"Step 3: Extracting {IMAGES_PER_FINDING} images per finding ...\n")
     counts: dict[str, int] = {f: 0 for f in FINDING_COLUMNS}
     done: set[str] = set()
 
@@ -83,13 +95,10 @@ def main() -> None:
                 continue
             if row.get(finding) != 1:
                 continue
-            if counts[finding] >= IMAGES_PER_FINDING:
-                done.add(finding)
-                continue
 
-            finding_dir = OUTPUT_DIR / finding.replace(" ", "_")
-            finding_dir.mkdir(parents=True, exist_ok=True)
-            img_path = finding_dir / f"{row['image_id']}.jpg"
+            out_dir = OUTPUT_DIR / folder_name(finding)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            img_path = out_dir / f"{row['image_id']}.jpg"
 
             image = row["image"]
             if image.mode != "RGB":
@@ -97,14 +106,16 @@ def main() -> None:
             image.save(img_path, format="JPEG", quality=85)
             counts[finding] += 1
 
-            if counts[finding] == IMAGES_PER_FINDING:
+            if counts[finding] >= IMAGES_PER_FINDING:
                 print(f"  ✓ {finding:35s} {counts[finding]} images")
                 done.add(finding)
 
     print(f"\nDone. Images saved to {OUTPUT_DIR}")
+    total = sum(counts.values())
+    print(f"Total: {total} images across {len(counts)} categories")
     for finding, count in counts.items():
         if count < IMAGES_PER_FINDING:
-            print(f"  ! {finding}: only {count}/{IMAGES_PER_FINDING} found in stream")
+            print(f"  ! {finding}: only {count}/{IMAGES_PER_FINDING} (finding is rare in dataset)")
 
 
 if __name__ == "__main__":

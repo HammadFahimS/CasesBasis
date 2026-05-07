@@ -16,6 +16,7 @@ class Patient(StrictModel):
 
     age: int
     gender: str
+    race: str | None = None
     occupation: str | None = None
     persona_description: str = ""
     history: list[str]

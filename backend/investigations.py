@@ -203,7 +203,12 @@ def has_ischemic_features(case: ClinicalCase) -> bool:
 
 
 def build_cxr_result(case: ClinicalCase, service: CXRService) -> InvestigationResult:
-    visual_payload = service.build_visual_payload(case.diagnosis)
+    visual_payload = service.build_visual_payload(
+        case.diagnosis,
+        age=case.patient.age,
+        gender=case.patient.gender,
+        race=case.patient.race,
+    )
     finding = visual_payload.finding if visual_payload else "not available"
     structured_result: dict[str, object] = {
         "test": "Chest X-Ray (PA)",

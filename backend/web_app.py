@@ -307,6 +307,7 @@ def case_preview(case: ClinicalCase) -> dict[str, Any]:
     return {
         "age": case.patient.age,
         "gender": case.patient.gender,
+        "race": case.patient.race,
         "occupation": case.patient.occupation,
         "persona_description": case.patient.persona_description,
         "chief_complaint": case.symptoms[0] if case.symptoms else "",
@@ -580,6 +581,7 @@ HTML_PAGE = """
           </div>
           <div class="bg-slate-50 rounded-xl p-3"><p class="text-xs text-slate-400 mb-0.5">Age</p><p id="pvAge" class="text-base font-bold text-slate-800"></p></div>
           <div class="bg-slate-50 rounded-xl p-3"><p class="text-xs text-slate-400 mb-0.5">Gender</p><p id="pvGender" class="text-base font-bold text-slate-800 capitalize"></p></div>
+          <div id="pvRaceWrap" hidden class="bg-slate-50 rounded-xl p-3"><p class="text-xs text-slate-400 mb-0.5">Race</p><p id="pvRace" class="text-base font-bold text-slate-800"></p></div>
           <div class="bg-slate-50 rounded-xl p-3"><p class="text-xs text-slate-400 mb-0.5">HR</p><p id="pvHR" class="text-base font-bold text-slate-800"></p></div>
           <div class="bg-slate-50 rounded-xl p-3"><p class="text-xs text-slate-400 mb-0.5">BP</p><p id="pvBP" class="text-base font-bold text-slate-800"></p></div>
           <div class="bg-slate-50 rounded-xl p-3"><p class="text-xs text-slate-400 mb-0.5">SpO2</p><p id="pvSPO2" class="text-base font-bold text-slate-800"></p></div>
@@ -1048,6 +1050,11 @@ HTML_PAGE = """
       document.getElementById('pvBP').textContent    = v.blood_pressure||'—';
       document.getElementById('pvSPO2').textContent  = (v.oxygen_saturation||'—')+'%';
       document.getElementById('vitalsStrip').hidden  = false;
+
+      const race = data.case_preview.race||'';
+      const raceWrap = document.getElementById('pvRaceWrap');
+      document.getElementById('pvRace').textContent = race;
+      raceWrap.hidden = !race;
 
       const occ = data.case_preview.occupation||'';
       const persona = data.case_preview.persona_description||'';
