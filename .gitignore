@@ -10,3 +10,4 @@ dist/
 build/
 *.egg-info/
 data/cxr/
+data/cxr_index/
