@@ -334,6 +334,14 @@ def student_facing_investigation_result(
             "report": [],
             "visual_payload": result.visual_payload.model_dump() if result.visual_payload else None,
         }
+    if is_cxr_display(result):
+        return {
+            "investigation": result.investigation,
+            "status": result.status,
+            "summary": result.summary,
+            "report": [],
+            "visual_payload": result.visual_payload.model_dump() if result.visual_payload else None,
+        }
     return {
         "investigation": result.investigation,
         "status": result.status,
@@ -344,7 +352,15 @@ def student_facing_investigation_result(
 
 
 def is_ecg_display(result: InvestigationResult) -> bool:
-    return result.visual_payload is not None or result.investigation.strip().lower() in {"ecg", "ekg"}
+    return (
+        result.visual_payload is not None and hasattr(result.visual_payload, "svg")
+    ) or result.investigation.strip().lower() in {"ecg", "ekg"}
+
+
+def is_cxr_display(result: InvestigationResult) -> bool:
+    return (
+        result.visual_payload is not None and hasattr(result.visual_payload, "data")
+    ) or result.investigation.strip().lower() in {"cxr", "chest x-ray", "chest xray"}
 
 
 def raw_investigation_report(result: InvestigationResult, case: ClinicalCase) -> list[dict[str, Any]]:
@@ -723,6 +739,22 @@ HTML_PAGE = """
     </div>
   </div>
 
+  <!-- CXR PANEL (full-width, revealed when CXR is ordered) -->
+  <div id="cxrPanel" hidden class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden fade-in">
+    <div class="bg-gradient-to-r from-slate-600 to-slate-700 px-5 py-3.5 flex items-center gap-2.5">
+      <svg class="w-5 h-5 text-white flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+      <div>
+        <p class="text-white font-semibold text-sm">Chest X-Ray (PA)</p>
+        <p id="cxrFindingLabel" class="text-slate-300 text-xs">Synthetic radiograph — RoentGen-v2</p>
+      </div>
+    </div>
+    <div class="p-4 flex justify-center bg-black">
+      <img id="cxrImage" src="" alt="Chest X-Ray" class="max-h-[520px] w-auto object-contain rounded"/>
+    </div>
+  </div>
+
   <!-- DIAGNOSIS + EVALUATE ROW -->
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
 
@@ -1031,6 +1063,8 @@ HTML_PAGE = """
       document.getElementById('invResults').innerHTML = '';
       document.getElementById('ecgContent').innerHTML = '';
       document.getElementById('ecgPanel').hidden = true;
+      document.getElementById('cxrImage').src = '';
+      document.getElementById('cxrPanel').hidden = true;
       document.getElementById('interpList').innerHTML = '';
       document.getElementById('doctorConsults').innerHTML = '';
       document.getElementById('diagnosisResult').hidden = true;
@@ -1102,14 +1136,32 @@ HTML_PAGE = """
       content.innerHTML = result.visual_payload.svg;
       panel.hidden = false;
       panel.scrollIntoView({behavior:'smooth', block:'nearest'});
-
-      // Show a small badge in the sidebar linking down
       const c = document.getElementById('invResults');
       const badge = document.createElement('div');
       badge.className='fade-in border border-red-200 rounded-xl overflow-hidden';
       badge.innerHTML=`<div class="bg-red-50 px-3 py-2.5 flex items-center justify-between cursor-pointer" onclick="document.getElementById('ecgPanel').scrollIntoView({behavior:'smooth',block:'start'})">
         <span class="text-sm font-semibold text-red-800">ECG</span>
         <span class="text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded-full flex items-center gap-1">view below ↓</span>
+      </div>`;
+      c.appendChild(badge);
+      return;
+    }
+
+    // CXR with base64 image → render in the full-width CXR panel
+    if(result.visual_payload&&result.visual_payload.data){
+      const panel = document.getElementById('cxrPanel');
+      const img = document.getElementById('cxrImage');
+      const label = document.getElementById('cxrFindingLabel');
+      img.src = `data:image/jpeg;base64,${result.visual_payload.data}`;
+      label.textContent = `Finding: ${result.visual_payload.finding} — Synthetic radiograph (RoentGen-v2)`;
+      panel.hidden = false;
+      panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+      const c = document.getElementById('invResults');
+      const badge = document.createElement('div');
+      badge.className='fade-in border border-slate-300 rounded-xl overflow-hidden';
+      badge.innerHTML=`<div class="bg-slate-50 px-3 py-2.5 flex items-center justify-between cursor-pointer" onclick="document.getElementById('cxrPanel').scrollIntoView({behavior:'smooth',block:'start'})">
+        <span class="text-sm font-semibold text-slate-700">Chest X-Ray</span>
+        <span class="text-xs text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">view below ↓</span>
       </div>`;
       c.appendChild(badge);
       return;
