@@ -90,14 +90,14 @@ class ClinicalEvaluator:
         session_history: list[ClinicalEvaluation | dict[str, Any] | str] | None = None,
         investigations_ordered: list[InvestigationResult | dict[str, Any] | str] | None = None,
         student_interpretations: list[str] | None = None,
-        graph_entity_names: list[str] | None = None,
+        graph_entity_names: list[str] | None = None,  # retained for API compat, not used in scoring
     ) -> ClinicalEvaluation:
         clinical_case = normalize_case(case)
         raw_questions = [" ".join(question.split()).strip() for question in student_questions if question.strip()]
         questions = [normalize_text(question) for question in raw_questions]
         responses = [normalize_text(response) for response in patient_responses if response.strip()]
 
-        identified_symptoms = identify_symptoms(clinical_case, questions, responses, graph_entity_names)
+        identified_symptoms = identify_symptoms(clinical_case, questions, responses)
         missed_symptoms = [symptom for symptom in clinical_case.symptoms if symptom not in identified_symptoms]
         relevance = evaluate_question_relevance(clinical_case, questions)
         diagnosis_guess = evaluate_diagnosis_guess(clinical_case, raw_questions)
@@ -207,18 +207,12 @@ def identify_symptoms(
     case: ClinicalCase,
     questions: list[str],
     responses: list[str],
-    graph_entity_names: list[str] | None = None,
 ) -> list[str]:
     identified: list[str] = []
     question_text = normalize_text(" ".join(questions))
     response_text = normalize_text(" ".join(responses))
-    graph_text = normalize_text(" ".join(graph_entity_names)) if graph_entity_names else ""
     for symptom in case.symptoms:
-        if (
-            symptom_was_directly_asked(symptom, question_text)
-            or symptom_was_revealed(symptom, response_text)
-            or (graph_text and symptom_mentioned_in_text(symptom, graph_text))
-        ):
+        if symptom_was_directly_asked(symptom, question_text) or symptom_was_revealed(symptom, response_text):
             identified.append(symptom)
     return identified
 
@@ -872,9 +866,16 @@ def score_performance(
     missed_reasoning_steps: list[str] | None = None,
     investigation_feedback: InvestigationInterpretationFeedback | None = None,
 ) -> int:
-    symptom_score = round((len(identified_symptoms) / len(clinical_case.symptoms)) * 45)
     total_questions = relevance.relevant_count + relevance.irrelevant_count
-    relevance_score = 25 if total_questions == 0 else round((relevance.relevant_count / total_questions) * 25)
+    engaged = total_questions > 0 or diagnosis_guess.provided
+
+    # Hard cap: student who never asked a question and never submitted a diagnosis
+    # cannot score above 15 regardless of any other factor
+    if not engaged:
+        return 5
+
+    symptom_score = round((len(identified_symptoms) / len(clinical_case.symptoms)) * 45)
+    relevance_score = round((relevance.relevant_count / total_questions) * 25) if total_questions > 0 else 0
     diagnosis_score = 0
     if diagnosis_guess.provided:
         if diagnosis_guess.diagnosis_match_level == "correct":
@@ -891,7 +892,6 @@ def score_performance(
         symptom_score
         + relevance_score
         + diagnosis_score
-        + 10
         + investigation_adjustment
         - missed_penalty
         - irrelevant_penalty
