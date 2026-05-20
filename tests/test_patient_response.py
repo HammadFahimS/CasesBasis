@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from agents.patient import (
-    PATIENT_RESPONSE_SYSTEM_PROMPT,
     PatientResponseAgent,
     asks_for_diagnosis,
     case_to_patient_context,
     redact_diagnosis,
     sanitize_question,
 )
+from agents.prompt_loader import load
 from backend.patient_response import PatientResponseService, normalize_case
 from schemas.clinical_case import ClinicalCase
 from tests.test_clinical_case_schema import sample_case
@@ -48,12 +48,12 @@ def test_patient_agent_answers_from_case_context() -> None:
 
 
 def test_patient_prompt_requests_realistic_nonclinical_variation() -> None:
-    assert "I think" in PATIENT_RESPONSE_SYSTEM_PROMPT
-    assert "maybe" in PATIENT_RESPONSE_SYSTEM_PROMPT
-    assert "not a clinician" in PATIENT_RESPONSE_SYSTEM_PROMPT
-    assert "approximate answers" in PATIENT_RESPONSE_SYSTEM_PROMPT
-    assert "Vary tone and detail level" in PATIENT_RESPONSE_SYSTEM_PROMPT
-    assert "do not list every symptom" in PATIENT_RESPONSE_SYSTEM_PROMPT
+    prompt = load("patient", "rules")
+    assert "not a clinician" in prompt
+    assert "imprecise" in prompt
+    assert "Vary tone and detail level" in prompt
+    assert "do not list every symptom" in prompt
+    assert "Use lay language" in prompt
 
 
 def test_patient_agent_does_not_answer_direct_diagnosis_question() -> None:

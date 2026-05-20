@@ -41,12 +41,20 @@ def test_evaluator_rewards_relevant_questions_and_correct_guess() -> None:
         "Do you have fever?",
         "Are you confused or dizzy?",
         "Have you been urinating less?",
+        "Are you short of breath?",
+        "When did this start and is it getting worse?",
+        "Do you have any history of diabetes or infections?",
+        "How is your pulse and oxygen level?",
         "Do they have septic shock?",
     ]
     responses = [
         "Yes, I feel feverish.",
         "I think I am confused and dizzy.",
         "I have barely been peeing.",
+        "A little, it feels harder to breathe.",
+        "It started this morning and has been getting worse.",
+        "Yes, I have diabetes and I get urinary infections often.",
+        "I'm not sure.",
         "I'm not sure.",
     ]
 
@@ -59,7 +67,7 @@ def test_evaluator_rewards_relevant_questions_and_correct_guess() -> None:
     assert evaluation.relevance_of_questions.irrelevant_count == 0
     assert evaluation.overall_score >= 60
     assert evaluation.reasoning_feedback.diagnostic_path
-    assert "appropriately with symptoms" in evaluation.reasoning_feedback.question_order
+    assert "symptoms" in evaluation.reasoning_feedback.question_order
     assert evaluation.learning_recommendations.primary_skill_gap
     assert len(evaluation.learning_recommendations.action_items) <= 3
 
@@ -119,7 +127,7 @@ def test_evaluator_preserves_exact_parenthetical_diagnosis_guess() -> None:
                     }
                 ],
                 "risk_factors": ["missed insulin"],
-                "exam_findings": ["dry mucous membranes"],
+                "exam_findings": {"General": ["dry mucous membranes"]},
                 "outcome": {
                     "if_treated": "Improves with fluids and insulin.",
                     "if_untreated": "Acidosis and dehydration worsen.",
@@ -187,16 +195,26 @@ def test_evaluator_accepts_real_diagnosis_guess_as_valid() -> None:
 def test_evaluator_marks_related_diagnosis_as_partial() -> None:
     evaluator = ClinicalEvaluator()
     case = mi_case()
+    shared_questions = [
+        "Do you have chest pressure?",
+        "Are you short of breath?",
+        "Any nausea or sweating?",
+    ]
+    shared_responses = [
+        "Yes, it feels like heavy pressure in my chest.",
+        "A little bit, yes.",
+        "Yes, I feel nauseated and sweaty.",
+    ]
 
     partial = evaluator.evaluate(
         case,
-        ["Diagnosis guess: acute coronary syndrome"],
-        ["I'm not sure."],
+        [*shared_questions, "Diagnosis guess: acute coronary syndrome"],
+        [*shared_responses, "I'm not sure."],
     )
     incorrect = evaluator.evaluate(
         case,
-        ["Diagnosis guess: GERD"],
-        ["I'm not sure."],
+        [*shared_questions, "Diagnosis guess: GERD"],
+        [*shared_responses, "I'm not sure."],
     )
 
     assert partial.correct_diagnosis_guess.guess == "acute coronary syndrome"
@@ -579,25 +597,39 @@ def test_evaluator_penalizes_ecg_called_normal() -> None:
     evaluator = ClinicalEvaluator()
     case = mi_case()
     ecg = InvestigationService().get_result(case, "ECG")
+    shared_questions = [
+        "Can you describe the chest pressure?",
+        "Are you short of breath?",
+        "Any nausea or sweating?",
+        "When did this start and has it been getting worse?",
+        "Do you have any history of hypertension or smoking?",
+    ]
+    shared_responses = [
+        "Yes, it feels like heavy pressure in my chest.",
+        "A little bit, yes.",
+        "Yes, I feel nauseated and sweaty.",
+        "It started about 30 minutes ago and is getting worse.",
+        "Yes, I have high blood pressure and I smoke.",
+    ]
 
     correct = evaluator.evaluate(
         case,
-        ["Can you describe the chest pressure?", "When did it start?"],
-        ["Heavy pressure.", "About 30 minutes ago."],
+        shared_questions,
+        shared_responses,
         investigations_ordered=[ecg],
         student_interpretations=["The ECG has ST elevation and looks abnormal."],
     )
     incorrect = evaluator.evaluate(
         case,
-        ["Can you describe the chest pressure?", "When did it start?"],
-        ["Heavy pressure.", "About 30 minutes ago."],
+        shared_questions,
+        shared_responses,
         investigations_ordered=[ecg],
         student_interpretations=["The ECG is normal and not concerning."],
     )
     negated_abnormal = evaluator.evaluate(
         case,
-        ["Can you describe the chest pressure?", "When did it start?"],
-        ["Heavy pressure.", "About 30 minutes ago."],
+        shared_questions,
+        shared_responses,
         investigations_ordered=[ecg],
         student_interpretations=[
             "The ECG shows normal sinus rhythm with no abnormalities noted. There are no signs of ischemia or infarction.",
@@ -605,8 +637,8 @@ def test_evaluator_penalizes_ecg_called_normal() -> None:
     )
     negated_st_changes = evaluator.evaluate(
         case,
-        ["Can you describe the chest pressure?", "When did it start?"],
-        ["Heavy pressure.", "About 30 minutes ago."],
+        shared_questions,
+        shared_responses,
         investigations_ordered=[ecg],
         student_interpretations=[
             "The ECG shows left ventricular hypertrophy. There are no significant ST-T wave changes.",

@@ -72,7 +72,7 @@ def build_redacted_consult_context(
         "presenting_complaint": case.symptoms[0] if case.symptoms else "",
         "discovered_symptoms": discover_items(case.symptoms, transcript),
         "vitals": case.vitals.model_dump(),
-        "discovered_exam_findings": discover_items(case.exam_findings, transcript),
+        "discovered_exam_findings": discover_items(case.exam_findings_flat, transcript),
         "investigations_available": [
             investigation_context(result) for result in investigations_ordered
         ],

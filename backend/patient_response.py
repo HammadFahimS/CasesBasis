@@ -34,12 +34,14 @@ class PatientResponseService:
         question: str,
         *,
         conversation_history: list[tuple[str, str]] | None = None,
+        revealed_symptoms: list[str] | None = None,
     ) -> str:
         clinical_case = normalize_case(case)
         return self.agent.answer(
             clinical_case,
             question,
             conversation_history=conversation_history or [],
+            revealed_symptoms=revealed_symptoms or [],
         )
 
 

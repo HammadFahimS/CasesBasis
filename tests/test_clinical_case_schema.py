@@ -38,7 +38,10 @@ def sample_case() -> dict[str, object]:
             },
         ],
         "risk_factors": ["diabetes", "recent urinary symptoms"],
-        "exam_findings": ["cool extremities", "delayed capillary refill", "suprapubic tenderness"],
+        "exam_findings": {
+            "Cardiovascular": ["cool extremities", "delayed capillary refill"],
+            "Abdominal": ["suprapubic tenderness"],
+        },
         "outcome": {
             "if_treated": "Improves with early broad-spectrum antibiotics, fluids, and vasopressors if needed.",
             "if_untreated": "Progresses to multiorgan failure and high risk of death.",

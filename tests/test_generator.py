@@ -3,8 +3,6 @@ from __future__ import annotations
 import pytest
 
 from agents.generator import (
-    FACT_EXTRACTION_SYSTEM_PROMPT,
-    GENERATOR_PROMPT_TEMPLATE,
     GenerationError,
     GeneratorAgent,
     MedicalFacts,
@@ -12,6 +10,7 @@ from agents.generator import (
     normalize_difficulty,
     sanitize_diagnosis,
 )
+from agents.prompt_loader import load
 from schemas.clinical_case import ClinicalCase
 from schemas.session_context import SessionContext
 from tests.test_clinical_case_schema import sample_case
@@ -102,11 +101,12 @@ def test_generator_fails_after_two_invalid_json_attempts() -> None:
 
 
 def test_generator_prompt_requests_realistic_presentation_variation() -> None:
-    assert "Do not always use the most classic textbook presentation" in GENERATOR_PROMPT_TEMPLATE
-    assert "atypical symptoms" in GENERATOR_PROMPT_TEMPLATE
-    assert "mild, early-stage, or still evolving" in GENERATOR_PROMPT_TEMPLATE
-    assert "misleading or non-specific complaint" in GENERATOR_PROMPT_TEMPLATE
-    assert "Keep difficulty balanced" in GENERATOR_PROMPT_TEMPLATE
+    prompt = load("generator", "user")
+    assert "Do not always use the most classic textbook presentation" in prompt
+    assert "atypical symptoms" in prompt
+    assert "mild, early-stage, or still evolving" in prompt
+    assert "misleading or non-specific complaint" in prompt
+    assert "Keep difficulty balanced" in prompt
 
 
 def test_build_generation_prompt_applies_easy_difficulty() -> None:
@@ -153,9 +153,10 @@ def test_normalize_difficulty_rejects_invalid_value() -> None:
 
 
 def test_fact_extraction_prompt_is_concise_and_structured() -> None:
-    assert "Return valid JSON only" in FACT_EXTRACTION_SYSTEM_PROMPT
-    assert "Keep facts brief" in FACT_EXTRACTION_SYSTEM_PROMPT
-    assert "Do not include treatment plans" in FACT_EXTRACTION_SYSTEM_PROMPT
+    prompt = load("generator", "fact_system")
+    assert "Return valid JSON only" in prompt
+    assert "Keep facts brief" in prompt
+    assert "Do not include treatment plans" in prompt
 
 
 def test_generator_extracts_facts_before_case_generation() -> None:

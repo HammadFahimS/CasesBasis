@@ -43,7 +43,7 @@ def mi_case() -> ClinicalCase:
                 },
             ],
             "risk_factors": ["smoking", "hypertension", "high cholesterol"],
-            "exam_findings": ["diaphoretic", "anxious"],
+            "exam_findings": {"General": ["diaphoretic", "anxious"]},
             "outcome": {
                 "if_treated": "Rapid emergency treatment improves outcomes.",
                 "if_untreated": "Ongoing ischemia can lead to instability.",
@@ -233,6 +233,8 @@ def test_web_doctor_consult_path_uses_service(monkeypatch: Any) -> None:
             patient_responses: list[str],
             investigations_ordered: list[InvestigationResult],
             consult_question: str,
+            *,
+            session_context: dict[str, Any] | None = None,
         ) -> DoctorConsultResponse:
             assert case.diagnosis == "myocardial infarction"
             assert consult_question == "Should I order an ECG?"

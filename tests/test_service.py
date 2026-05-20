@@ -113,7 +113,7 @@ def respiratory_case_payload(diagnosis: str, symptoms: list[str]) -> dict[str, o
             },
         ],
         "risk_factors": ["recent respiratory infection"],
-        "exam_findings": ["increased work of breathing"],
+        "exam_findings": {"Respiratory": ["increased work of breathing"]},
         "outcome": {
             "if_treated": "Symptoms improve with appropriate care.",
             "if_untreated": "Respiratory distress may worsen.",

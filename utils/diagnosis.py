@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Literal
 
 DiagnosisMatchLevel = Literal["correct", "partial", "incorrect"]
@@ -185,6 +186,7 @@ def extract_original_phrase(text: str, normalized_phrase: str) -> str | None:
     return None
 
 
+@lru_cache(maxsize=1)
 def normalized_alias_groups() -> dict[str, set[str]]:
     return {
         normalize_diagnosis_text(canonical): {
@@ -195,6 +197,7 @@ def normalized_alias_groups() -> dict[str, set[str]]:
     }
 
 
+@lru_cache(maxsize=1)
 def normalized_partial_groups() -> dict[str, set[str]]:
     return {
         normalize_diagnosis_text(canonical): {
@@ -205,6 +208,7 @@ def normalized_partial_groups() -> dict[str, set[str]]:
     }
 
 
+@lru_cache(maxsize=1)
 def normalized_contextual_partials() -> dict[str, set[str]]:
     return {
         normalize_diagnosis_text(canonical): {

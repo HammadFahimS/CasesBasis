@@ -21,15 +21,15 @@ class ECGService:
             self._agent = ECGParameterAgent()
         return self._agent
 
-    def generate(self, diagnosis: str) -> tuple[ECGParameters, str]:
+    def generate(self, diagnosis: str, *, heart_rate: int | None = None) -> tuple[ECGParameters, str]:
         """Return (ECGParameters, svg_string) for the given diagnosis."""
-        params = self._get_agent().generate(diagnosis)
+        params = self._get_agent().generate(diagnosis, heart_rate=heart_rate)
         svg = synthesize_ecg_svg(params)
         return params, svg
 
-    def build_visual_payload(self, diagnosis: str) -> ECGVisualPayload:
+    def build_visual_payload(self, diagnosis: str, *, heart_rate: int | None = None) -> ECGVisualPayload:
         try:
-            _, svg = self.generate(diagnosis)
+            _, svg = self.generate(diagnosis, heart_rate=heart_rate)
         except Exception as exc:
             logger.warning("ECG synthesis failed for %r: %s", diagnosis, exc)
             svg = _fallback_svg()

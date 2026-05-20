@@ -1,25 +1,9 @@
 from __future__ import annotations
 
 from agents.base import OpenAIJsonAgent
+from agents.prompt_loader import load
 from schemas.clinical_case import ClinicalCase
 from schemas.evaluation import ClinicalEvaluation, ReasoningFeedback
-
-REASONING_REVIEW_SYSTEM_PROMPT = """
-You are reviewing reasoning feedback for a medical simulation evaluation.
-
-Task:
-- refine reasoning_feedback
-- improve explanation clarity
-- identify subtle reasoning strengths and weaknesses
-
-Rules:
-- return only the ReasoningFeedback JSON structure
-- do NOT change score
-- do NOT change any evaluation fields except reasoning_feedback text
-- do NOT expose hidden case data directly
-- base feedback only on the observed interaction and provided case context
-- keep feedback concise and structured
-""".strip()
 
 
 class ReasoningReviewAgent(OpenAIJsonAgent):
@@ -49,7 +33,7 @@ Current evaluation:
 Return improved reasoning_feedback only.
 """.strip()
         return self.parse_response(
-            system_prompt=REASONING_REVIEW_SYSTEM_PROMPT,
+            system_prompt=load("reasoning_reviewer", "system"),
             user_prompt=prompt,
             response_model=ReasoningFeedback,
         )

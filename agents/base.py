@@ -351,10 +351,10 @@ def safe_parse(response_model: type[ResponseModel], raw_value: Any) -> ResponseM
         try:
             normalized_value = normalize_llm_output(response_model, raw_value)
             return parse_model_value(response_model, normalized_value)
-        except Exception as normalized_error:
+        except Exception:
             raise ValueError(
                 f"failed to parse {response_model.__name__} after normalization"
-            ) from normalized_error or direct_error
+            ) from direct_error
 
 
 def parse_model_value(response_model: type[ResponseModel], raw_value: Any) -> ResponseModel:

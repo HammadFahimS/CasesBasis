@@ -164,7 +164,7 @@ def check_symptoms_match_diagnosis(case: ClinicalCase) -> list[str]:
 
     if related_count == 0:
         issues.append("symptoms do not logically relate to the diagnosis body system")
-    if len(unrelated_symptoms) > 1:
+    if len(unrelated_symptoms) >= 1:
         issues.append("unrelated symptom systems are present without justification")
     return issues
 
@@ -267,7 +267,7 @@ def non_symptom_case_text(case: ClinicalCase) -> str:
             [
                 *case.patient.history,
                 *case.risk_factors,
-                *case.exam_findings,
+                *case.exam_findings_flat,
                 *(event.description for event in case.progression),
                 case.outcome.if_treated,
                 case.outcome.if_untreated,
@@ -284,7 +284,7 @@ def all_case_text(case: ClinicalCase) -> str:
                 *case.patient.history,
                 *case.symptoms,
                 *case.risk_factors,
-                *case.exam_findings,
+                *case.exam_findings_flat,
                 *(event.description for event in case.progression),
                 case.outcome.if_treated,
                 case.outcome.if_untreated,

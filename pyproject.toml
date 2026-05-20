@@ -17,6 +17,7 @@ dependencies = [
     "sentence-transformers>=2.0.0",
     "pyarrow>=14.0.0",
     "pillow>=10.0.0",
+    "itsdangerous>=2.2.0",
 ]
 
 [project.optional-dependencies]

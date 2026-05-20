@@ -109,7 +109,7 @@ class ClinicalCase(StrictModel):
     vitals: Vitals
     progression: list[ProgressionEvent]
     risk_factors: list[str]
-    exam_findings: list[str]
+    exam_findings: dict[str, list[str]]
     outcome: Outcome
 
     @model_validator(mode="before")
@@ -117,7 +117,7 @@ class ClinicalCase(StrictModel):
     def normalize_case_payload(cls, value: object) -> object:
         return normalize_case_data(value)
 
-    @field_validator("symptoms", "risk_factors", "exam_findings")
+    @field_validator("symptoms", "risk_factors")
     @classmethod
     def require_non_empty_string_lists(cls, value: list[str]) -> list[str]:
         if not value:
@@ -125,6 +125,24 @@ class ClinicalCase(StrictModel):
         if any(not item.strip() for item in value):
             raise ValueError("list fields must not contain empty strings")
         return value
+
+    @field_validator("exam_findings")
+    @classmethod
+    def validate_exam_findings(cls, value: dict[str, list[str]]) -> dict[str, list[str]]:
+        if not value:
+            raise ValueError("exam_findings must not be empty")
+        for system, findings in value.items():
+            if not system.strip():
+                raise ValueError("exam_findings system keys must not be empty")
+            if not findings:
+                raise ValueError(f"exam_findings[{system}] must not be empty")
+            if any(not f.strip() for f in findings):
+                raise ValueError(f"exam_findings[{system}] must not contain empty strings")
+        return value
+
+    @property
+    def exam_findings_flat(self) -> list[str]:
+        return [f for findings in self.exam_findings.values() for f in findings]
 
     @field_validator("progression")
     @classmethod
@@ -182,6 +200,10 @@ def normalize_case_data(value: object) -> object:
             normalized_vitals.get("blood_pressure")
         )
         normalized["vitals"] = normalized_vitals
+
+    exam_findings = normalized.get("exam_findings")
+    if isinstance(exam_findings, list):
+        normalized["exam_findings"] = {"General": exam_findings}
 
     progression = normalized.get("progression")
     if isinstance(progression, list):

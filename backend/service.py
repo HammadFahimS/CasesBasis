@@ -64,10 +64,7 @@ class ClinicalCaseSimulator:
                     difficulty=difficulty,
                     session_history=session_history,
                 )
-                try:
-                    validate_medical_realism(strict_case)
-                except MedicalValidationError:
-                    pass
+                validate_medical_realism(strict_case)
                 return strict_case
 
     def _generate_case_once(

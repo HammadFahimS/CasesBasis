@@ -7,6 +7,11 @@ from schemas.clinical_case import ClinicalCase
 from schemas.investigation import InvestigationResult
 
 
+class FakeRequest:
+    """Minimal stand-in for fastapi.Request in tests that call endpoints directly."""
+    cookies: dict = {}
+
+
 def sample_case() -> ClinicalCase:
     return ClinicalCase.model_validate(
         {
@@ -38,7 +43,7 @@ def sample_case() -> ClinicalCase:
                 },
             ],
             "risk_factors": ["smoking", "hypertension"],
-            "exam_findings": ["diaphoretic", "anxious"],
+            "exam_findings": {"General": ["diaphoretic", "anxious"]},
             "outcome": {
                 "if_treated": "Rapid emergency treatment improves outcomes.",
                 "if_untreated": "Ongoing ischemia can lead to instability.",
@@ -74,13 +79,15 @@ def test_generate_case_reuses_recent_cached_case(monkeypatch: object) -> None:
         web_app.GenerateCaseRequest(
             diagnosis="Myocardial Infarction",
             difficulty="medium",
-        )
+        ),
+        FakeRequest(),
     )
     second = web_app.generate_case(
         web_app.GenerateCaseRequest(
             diagnosis="  myocardial   infarction  ",
             difficulty="Medium",
-        )
+        ),
+        FakeRequest(),
     )
 
     assert simulator.calls == [("Myocardial Infarction", "medium")]
@@ -99,6 +106,9 @@ def test_case_preview_does_not_expose_hidden_symptom_list() -> None:
     assert preview == {
         "age": 58,
         "gender": "male",
+        "race": None,
+        "occupation": None,
+        "persona_description": "",
         "chief_complaint": "chest pressure",
         "vitals": {
             "heart_rate": 104,
@@ -145,22 +155,16 @@ def test_web_ui_includes_loading_states_for_async_actions() -> None:
 
     html = web_app.HTML_PAGE
 
-    assert 'id="askButton"' in html
-    assert 'id="investigationButton"' in html
-    assert 'id="doctorButton"' in html
-    assert 'id="diagnosisButton"' in html
-    assert 'id="evaluateButton"' in html
-    assert "Asking patient..." in html
-    assert "Ordering investigation..." in html
-    assert "Calling doctor..." in html
-    assert "Evaluating performance..." in html
-    assert "Patient question failed." in html
-    assert "Investigation order failed." in html
-    assert "Doctor consult failed." in html
-    assert "Evaluation failed." in html
+    assert 'id="askBtn"' in html
+    assert 'id="invBtn"' in html
+    assert 'id="doctorBtn"' in html
+    assert 'id="diagnosisBtn"' in html
+    assert 'id="evaluateBtn"' in html
+    assert "spin(" in html
+    assert "toast(" in html
     assert "result.investigations.forEach" in html
-    assert ".ecg-tracing" in html
-    assert "overflow-x: auto" in html
+    assert ".ecg-wrap" in html
+    assert "overflow-x:auto" in html
 
 
 def test_ecg_student_display_hides_decoded_findings() -> None:

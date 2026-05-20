@@ -90,7 +90,8 @@ class ClinicalEvaluator:
         session_history: list[ClinicalEvaluation | dict[str, Any] | str] | None = None,
         investigations_ordered: list[InvestigationResult | dict[str, Any] | str] | None = None,
         student_interpretations: list[str] | None = None,
-        graph_entity_names: list[str] | None = None,  # retained for API compat, not used in scoring
+        graph_entity_names: list[str] | None = None,
+        exams_performed: list[str] | None = None,
     ) -> ClinicalEvaluation:
         clinical_case = normalize_case(case)
         raw_questions = [" ".join(question.split()).strip() for question in student_questions if question.strip()]
@@ -281,7 +282,7 @@ def case_relevance_tokens(case: ClinicalCase) -> set[str]:
             *case.patient.history,
             *case.symptoms,
             *case.risk_factors,
-            *case.exam_findings,
+            *case.exam_findings_flat,
             *(event.description for event in case.progression),
             str(case.patient.age),
             case.patient.gender,
@@ -347,7 +348,7 @@ def diagnosis_context(case: ClinicalCase) -> str:
             case.diagnosis,
             *case.symptoms,
             *case.risk_factors,
-            *case.exam_findings,
+            *case.exam_findings_flat,
             *(event.description for event in case.progression),
         ]
     )
