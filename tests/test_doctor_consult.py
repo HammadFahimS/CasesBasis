@@ -246,11 +246,13 @@ def test_web_doctor_consult_path_uses_service(monkeypatch: Any) -> None:
     web_app.SESSIONS[session_id] = web_app.WebSession(case=mi_case())
     monkeypatch.setattr(web_app, "DOCTOR_CONSULT_SERVICE", FakeDoctorConsultService())
 
+    from tests.helpers import make_request
     result = web_app.call_doctor(
         web_app.DoctorConsultRequest(
             session_id=session_id,
             question="Should I order an ECG?",
-        )
+        ),
+        make_request(),
     )
 
     assert result["concise_advice"] == "Yes, get the ECG now and keep him monitored."

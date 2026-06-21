@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CasesBasis — Simulated Dynamic Case</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink-950:#0a0f17; --ink-900:#111824; --ink-800:#1a2332;
+    --ink-700:#273347; --ink-600:#3b4a63; --ink-500:#5b6b85;
+    --ink-400:#8696b0; --ink-300:#b3becf; --ink-200:#d6dde7;
+    --ink-100:#e9edf2; --ink-50:#f4f6f9; --paper:#fbfcfd;
+    --teal-800: oklch(0.40 0.09 195);
+    --teal-700: oklch(0.45 0.10 195);
+    --teal-600: oklch(0.55 0.10 195);
+    --teal-500: oklch(0.65 0.10 195);
+    --teal-100: oklch(0.93 0.04 195);
+    --teal-50:  oklch(0.97 0.02 195);
+    --caution:#b76e00;  --caution-bg:#fdf3e2;
+    --normal:#1f7a55;   --normal-bg:#e6f4ec;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,0.04);
+    --shadow-md: 0 2px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.05);
+    --shadow-lg: 0 12px 32px rgba(15,23,42,0.10), 0 2px 4px rgba(15,23,42,0.04);
+    --shadow-xl: 0 24px 60px rgba(10,15,23,0.18), 0 4px 12px rgba(10,15,23,0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px; line-height: 1.5;
+    color: var(--ink-900); background: var(--ink-50);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv11','ss01';
+  }
+
+  .si-top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; height: 56px;
+    background: var(--paper); border-bottom: 1px solid var(--ink-100);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .si-brand { font-size: 16px; font-weight: 700; letter-spacing: -.01em; color: var(--ink-900); text-decoration: none; }
+  .si-brand span { color: var(--teal-700); }
+  .si-top-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; font-weight: 600; color: var(--ink-500); text-decoration: none;
+    padding: 7px 12px; border-radius: 9px; transition: background .14s, color .14s;
+  }
+  .si-top-back:hover { background: var(--ink-50); color: var(--ink-800); }
+
+  .si-wrap { max-width: 760px; margin: 0 auto; padding: 40px 24px 64px; }
+
+  .si-hero { text-align: center; margin-bottom: 32px; }
+  .si-eyebrow {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--teal-700); background: var(--teal-50);
+    padding: 5px 12px; border-radius: 999px;
+  }
+  .si-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal-600); animation: sipulse 1.8s infinite; }
+  @keyframes sipulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .si-hero h1 {
+    margin: 18px 0 10px; font-size: 30px; font-weight: 700;
+    letter-spacing: -.02em; color: var(--ink-900);
+  }
+  .si-hero p { margin: 0 auto; max-width: 520px; font-size: 15px; color: var(--ink-500); line-height: 1.55; }
+
+  .si-card {
+    background: var(--paper); border: 1px solid var(--ink-100);
+    border-radius: 18px; box-shadow: var(--shadow-md);
+    padding: 28px 28px 26px; margin-bottom: 22px;
+  }
+  .si-card h2 {
+    margin: 0 0 18px; font-size: 13px; font-weight: 700;
+    letter-spacing: .04em; text-transform: uppercase; color: var(--ink-400);
+  }
+
+  .si-steps { display: grid; gap: 18px; }
+  .si-step { display: grid; grid-template-columns: 40px 1fr; gap: 16px; align-items: start; }
+  .si-step-num {
+    width: 36px; height: 36px; border-radius: 11px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+    background: var(--teal-50); color: var(--teal-700);
+  }
+  .si-step-body h3 { margin: 6px 0 4px; font-size: 15px; font-weight: 700; color: var(--ink-900); }
+  .si-step-body p { margin: 0; font-size: 13.5px; color: var(--ink-500); line-height: 1.5; }
+
+  .si-note {
+    display: flex; gap: 12px; align-items: flex-start;
+    background: var(--caution-bg); border: 1px solid #f3e2c2;
+    border-radius: 14px; padding: 14px 16px; margin-bottom: 28px;
+  }
+  .si-note svg { flex: none; color: var(--caution); margin-top: 1px; }
+  .si-note p { margin: 0; font-size: 13px; color: #7a4d00; line-height: 1.5; }
+
+  .si-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .si-btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-size: 14.5px; font-weight: 600; font-family: inherit;
+    padding: 13px 24px; border-radius: 12px; cursor: pointer;
+    border: 1.5px solid transparent; transition: transform .14s, box-shadow .14s, background .14s, border-color .14s;
+  }
+  .si-btn-pri { background: var(--teal-700); color: #fff; box-shadow: var(--shadow-md); }
+  .si-btn-pri:hover { background: var(--teal-800); transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+  .si-btn-ghost { background: #fff; color: var(--ink-700); border-color: var(--ink-200); }
+  .si-btn-ghost:hover { border-color: var(--ink-300); background: var(--ink-50); }
+
+  @media (max-width: 560px) {
+    .si-hero h1 { font-size: 25px; }
+    .si-actions { flex-direction: column-reverse; }
+    .si-btn { justify-content: center; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<header class="si-top">
+  <a href="/home" class="si-brand">Cases<span>Basis</span></a>
+  <a href="/home" class="si-top-back">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+    Home
+  </a>
+</header>
+
+<main class="si-wrap">
+  <div class="si-hero">
+    <span class="si-eyebrow"><span class="dot"></span> Simulated dynamic case</span>
+    <h1>A patient that changes as you treat them</h1>
+    <p>Unlike a manual case, a simulated case unfolds in real time. The patient's vitals and condition respond to your decisions — so timing, prioritisation and reassessment all matter.</p>
+  </div>
+
+  <div class="si-card">
+    <h2>How it works</h2>
+    <div class="si-steps">
+      <div class="si-step">
+        <div class="si-step-num">1</div>
+        <div class="si-step-body">
+          <h3>You meet a live patient</h3>
+          <p>You're handed a presenting complaint and a starting set of vitals — but nothing is fixed. The clock is running from the moment you begin.</p>
+        </div>
+      </div>
+      <div class="si-step">
+        <div class="si-step-num">2</div>
+        <div class="si-step-body">
+          <h3>The condition evolves</h3>
+          <p>As time passes, the patient may deteriorate or stabilise depending on what you do. Order the right investigations and start the right management to change the trajectory.</p>
+        </div>
+      </div>
+      <div class="si-step">
+        <div class="si-step-num">3</div>
+        <div class="si-step-body">
+          <h3>You assess, act, and reassess</h3>
+          <p>Examine, investigate, and treat in any order. Every action has a consequence, and the patient's response tells you whether your reasoning is on track.</p>
+        </div>
+      </div>
+      <div class="si-step">
+        <div class="si-step-num">4</div>
+        <div class="si-step-body">
+          <h3>You get scored on outcomes</h3>
+          <p>At the end you receive feedback on your diagnosis, your management, and how well you kept the patient safe under time pressure.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="si-note">
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 5.5v3.5M8 11h.01"/></svg>
+    <p>Once you start, the simulation runs in real time. Try to work as you would on a real shift — there's no pausing the patient.</p>
+  </div>
+
+  <div class="si-actions">
+    <button class="si-btn si-btn-ghost" id="siBack" type="button">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+      Back
+    </button>
+    <button class="si-btn si-btn-pri" id="siStart" type="button">
+      Start simulated case
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M4 3l9 5-9 5z"/></svg>
+    </button>
+  </div>
+</main>
+
+<script>
+  document.getElementById('siBack').addEventListener('click', () => {
+    if (document.referrer && new URL(document.referrer).origin === location.origin) history.back();
+    else location.href = '/home';
+  });
+  document.getElementById('siStart').addEventListener('click', () => {
+    location.href = '/simulator/voice-room?case=myasthenic_crisis';
+  });
+</script>
+</body>
+</html>

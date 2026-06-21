@@ -5,6 +5,7 @@ from typing import Any
 
 from agents.base import build_llm_client, get_llm_provider
 from agents.consult_doctor import ConsultDoctorAgent, sanitize_consult_question
+from backend.diagnosis_guard import hidden_terms
 from backend.patient_response import normalize_case
 from schemas.clinical_case import ClinicalCase
 from schemas.doctor_consult import DoctorConsultResponse
@@ -150,19 +151,6 @@ def redact_text_values(value: Any, terms: list[str]) -> Any:
             for key, item in value.items()
         }
     return value
-
-
-def hidden_terms(diagnosis: str) -> list[str]:
-    normalized = diagnosis.strip()
-    terms = [normalized] if normalized else []
-    aliases = {
-        "myocardial infarction": ["heart attack", "MI"],
-        "community-acquired pneumonia": ["pneumonia"],
-    }
-    for key, values in aliases.items():
-        if normalized.lower() == key:
-            terms.extend(values)
-    return terms
 
 
 def hidden_term_pattern(term: str) -> str:

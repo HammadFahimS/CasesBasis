@@ -11,3 +11,11 @@ build/
 *.egg-info/
 data/cxr/
 data/cxr_index/
+data/ptb-xl/
+data/ptbxl_index/
+
+# Local / transient
+.claude/
+.DS_Store
+*.db-wal
+*.db-shm

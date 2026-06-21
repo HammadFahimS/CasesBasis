@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CasesBasis — Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink-950:#0a0f17; --ink-900:#111824; --ink-800:#1a2332;
+    --ink-700:#273347; --ink-600:#3b4a63; --ink-500:#5b6b85;
+    --ink-400:#8696b0; --ink-300:#b3becf; --ink-200:#d6dde7;
+    --ink-100:#e9edf2; --ink-50:#f4f6f9; --paper:#fbfcfd;
+    --teal-800: oklch(0.40 0.09 195);
+    --teal-700: oklch(0.45 0.10 195);
+    --teal-600: oklch(0.55 0.10 195);
+    --teal-500: oklch(0.65 0.10 195);
+    --teal-100: oklch(0.93 0.04 195);
+    --teal-50:  oklch(0.97 0.02 195);
+    --critical:#c43a2c; --critical-bg:#fdecea;
+    --caution:#b76e00;  --caution-bg:#fdf3e2;
+    --normal:#1f7a55;   --normal-bg:#e6f4ec;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,0.04);
+    --shadow-md: 0 2px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.05);
+    --shadow-lg: 0 12px 32px rgba(15,23,42,0.10), 0 2px 4px rgba(15,23,42,0.04);
+    --shadow-xl: 0 24px 60px rgba(10,15,23,0.18), 0 4px 12px rgba(10,15,23,0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px; line-height: 1.5;
+    color: var(--ink-900); background: var(--ink-50);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv11','ss01';
+  }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-feature-settings: 'zero','ss02'; }
+  a { color: inherit; text-decoration: none; }
+
+  /* ============ Top bar ============ */
+  header.topbar {
+    background: linear-gradient(180deg, var(--ink-950), var(--ink-900));
+    color: var(--ink-100);
+    padding: 12px 22px;
+    display: flex; align-items: center; gap: 16px;
+    border-bottom: 1px solid #000;
+    position: sticky; top: 0; z-index: 30;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--teal-500), var(--teal-700));
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18);
+    position: relative; flex-shrink: 0;
+  }
+  .brand-mark::before, .brand-mark::after {
+    content: ''; position: absolute; background: white; border-radius: 1px;
+    left: 50%; top: 50%; transform: translate(-50%, -50%);
+  }
+  .brand-mark::before { width: 13px; height: 2px; }
+  .brand-mark::after { width: 2px; height: 13px; }
+  .brand-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: white; }
+  .brand-name .lc { color: var(--teal-500); font-weight: 500; }
+  .crumb {
+    color: var(--ink-400); font-size: 13px; padding-left: 14px;
+    border-left: 1px solid var(--ink-700); margin-left: 4px;
+  }
+  .topbar-spacer { flex: 1; }
+  .resident-chip {
+    display: flex; align-items: center; gap: 9px;
+    padding: 4px 12px 4px 4px;
+    background: var(--ink-800); border: 1px solid var(--ink-700);
+    border-radius: 999px;
+  }
+  .resident-chip .av {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: linear-gradient(135deg, #4a5a78, #2d3a52);
+    color: white; font-size: 11px; font-weight: 600;
+    display: grid; place-items: center;
+  }
+  .resident-chip .meta { line-height: 1.2; }
+  .resident-chip .name { font-size: 12.5px; font-weight: 600; color: white; }
+  .resident-chip .role { font-size: 10px; color: var(--ink-400); font-family: 'JetBrains Mono', monospace; }
+
+  .burger {
+    width: 40px; height: 40px; border-radius: 9px;
+    background: var(--ink-800); border: 1px solid var(--ink-700);
+    cursor: pointer; display: grid; place-items: center;
+    color: var(--ink-200); position: relative;
+    transition: background .14s, border-color .14s;
+  }
+  .burger:hover { background: var(--ink-700); border-color: var(--ink-600); color: white; }
+  .burger .lines { width: 17px; height: 12px; position: relative; }
+  .burger .lines span {
+    position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px;
+    background: currentColor; transition: transform .22s ease, opacity .18s ease;
+  }
+  .burger .lines span:nth-child(1) { top: 0; }
+  .burger .lines span:nth-child(2) { top: 5px; }
+  .burger .lines span:nth-child(3) { top: 10px; }
+  body.drawer-open .burger .lines span:nth-child(1) { transform: translateY(5px) rotate(45deg); }
+  body.drawer-open .burger .lines span:nth-child(2) { opacity: 0; }
+  body.drawer-open .burger .lines span:nth-child(3) { transform: translateY(-5px) rotate(-45deg); }
+  .burger .menu-word {
+    position: absolute; bottom: -15px; left: 50%; transform: translateX(-50%);
+    font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-500); font-weight: 700;
+  }
+
+  /* ============ Drawer ============ */
+  .scrim {
+    position: fixed; inset: 0; background: rgba(10,15,23,0.45);
+    opacity: 0; pointer-events: none; transition: opacity .22s ease;
+    z-index: 40; backdrop-filter: blur(1.5px);
+  }
+  body.drawer-open .scrim { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 360px; max-width: 90vw;
+    background: var(--paper); box-shadow: var(--shadow-xl);
+    z-index: 50; transform: translateX(-100%);
+    transition: transform .26s cubic-bezier(.4,0,.2,1);
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--ink-100);
+  }
+  body.drawer-open .drawer { transform: translateX(0); }
+  .drawer-head {
+    padding: 18px 20px 16px;
+    background: linear-gradient(155deg, var(--ink-900), var(--ink-800));
+    color: white; display: flex; flex-direction: column; gap: 14px;
+  }
+  .drawer-head-top { display: flex; align-items: center; gap: 11px; }
+  .drawer-head-top .av {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: linear-gradient(135deg, #4a5a78, #2d3a52);
+    color: white; font-size: 14px; font-weight: 600;
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .drawer-head-top .who { line-height: 1.25; }
+  .drawer-head-top .who .n { font-size: 14px; font-weight: 600; }
+  .drawer-head-top .who .e { font-size: 11px; color: var(--ink-400); font-family: 'JetBrains Mono', monospace; }
+  .drawer-close {
+    margin-left: auto; width: 30px; height: 30px; border-radius: 7px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    color: var(--ink-300); cursor: pointer; display: grid; place-items: center;
+  }
+  .drawer-close:hover { background: rgba(255,255,255,0.12); color: white; }
+  .drawer-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .dm {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 8px 9px;
+  }
+  .dm .v { font-family: 'JetBrains Mono', monospace; font-size: 17px; font-weight: 600; color: white; line-height: 1; }
+  .dm .v .u { font-size: 10px; color: var(--ink-400); font-weight: 500; }
+  .dm .k { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--teal-500); font-weight: 700; margin-top: 5px; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 14px 12px 20px; }
+  .nav-group { margin-bottom: 8px; }
+  .nav-group-label {
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--ink-400); font-weight: 700; padding: 12px 12px 6px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; border-radius: 9px;
+    cursor: pointer; color: var(--ink-700);
+    font-size: 13.5px; font-weight: 500;
+    border: 1px solid transparent; text-decoration: none;
+  }
+  .nav-item:hover { background: var(--ink-50); color: var(--ink-900); }
+  .nav-item.active { background: var(--teal-50); color: var(--teal-800); border-color: var(--teal-100); font-weight: 600; }
+  .nav-item .ni-ico {
+    width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+    display: grid; place-items: center;
+    background: white; border: 1px solid var(--ink-100); color: var(--ink-600);
+  }
+  .nav-item.active .ni-ico { background: white; border-color: var(--teal-100); color: var(--teal-700); }
+  .nav-item .ni-txt { display: flex; flex-direction: column; line-height: 1.2; }
+  .nav-item .ni-sub { font-size: 11px; color: var(--ink-400); font-weight: 400; }
+  .nav-item .ni-arrow { margin-left: auto; color: var(--ink-300); }
+  .nav-item.danger:hover { background: var(--critical-bg); color: var(--critical); }
+  .nav-item.danger:hover .ni-ico { border-color: #f4c8c2; color: var(--critical); }
+  .nav-sep { height: 1px; background: var(--ink-100); margin: 8px 12px; }
+
+  /* ============ HOME ============ */
+  .home { padding: 0 24px 90px; }
+  .home-inner { max-width: 960px; margin: 0 auto; }
+  .home-greet { padding: 48px 4px 30px; }
+  .home-greet .eyebrow {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--teal-700); font-weight: 700; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  }
+  .home-greet .eyebrow .tick { font-family: 'JetBrains Mono', monospace; color: var(--ink-400); font-weight: 500; letter-spacing: 0.04em; text-transform: none; }
+  .home-greet h1 {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-style: italic; font-weight: 400;
+    font-size: 46px; line-height: 1.05; letter-spacing: -0.01em;
+    margin: 0 0 12px; color: var(--ink-900);
+  }
+  .home-greet h1 .name { font-style: normal; font-family: 'Inter'; font-weight: 600; font-size: 38px; color: var(--teal-700); }
+  .home-greet p { font-size: 15.5px; color: var(--ink-500); max-width: 560px; margin: 0; line-height: 1.55; }
+  .home-greet p strong { color: var(--ink-800); font-weight: 600; }
+
+  /* Focus card */
+  .focus {
+    background: linear-gradient(135deg, #0e1a2a 0%, #182a47 52%, #0e1a2a 100%);
+    color: white; border-radius: 18px;
+    padding: 28px 30px; position: relative; overflow: hidden;
+    box-shadow: var(--shadow-lg); border: 1px solid rgba(255,255,255,0.06);
+    display: grid; grid-template-columns: 1fr auto; gap: 26px; align-items: center;
+  }
+  .focus::before {
+    content: ''; position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse at 88% 8%, rgba(70,166,167,0.22), transparent 48%),
+      radial-gradient(ellipse at 4% 100%, rgba(70,166,167,0.10), transparent 52%);
+    pointer-events: none;
+  }
+  .focus-main { position: relative; }
+  .focus-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--teal-500); font-weight: 700; margin-bottom: 14px;
+  }
+  .focus-eyebrow .pulse {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--teal-500);
+    box-shadow: 0 0 0 0 rgba(70,166,167,0.7); animation: pulse 1.9s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(70,166,167,0.5); }
+    50% { box-shadow: 0 0 0 7px rgba(70,166,167,0); }
+  }
+  .focus-title { font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.12; margin: 0 0 6px; text-transform: capitalize; }
+  .focus-desc { color: rgba(255,255,255,0.62); font-size: 14px; max-width: 420px; line-height: 1.5; }
+  .focus-meta { display: flex; gap: 22px; margin-top: 18px; flex-wrap: wrap; }
+  .focus-meta .fm .k { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.42); font-weight: 700; margin-bottom: 3px; white-space: nowrap; }
+  .focus-meta .fm .v { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: white; white-space: nowrap; }
+  .focus-progress {
+    position: relative; height: 5px; width: 280px; max-width: 100%;
+    background: rgba(255,255,255,0.1); border-radius: 99px; overflow: hidden; margin-top: 18px;
+  }
+  .focus-progress > div { position: absolute; left: 0; top: 0; bottom: 0; width: 30%; background: linear-gradient(90deg, var(--teal-600), var(--teal-500)); border-radius: 99px; transition: width .3s ease; }
+
+  .focus-side { position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 210px; }
+  .btn-pri {
+    background: var(--teal-600); color: white; border: 0;
+    padding: 14px 22px; border-radius: 11px;
+    font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    transition: background .14s, transform .08s;
+    text-decoration: none;
+  }
+  .btn-pri:hover { background: var(--teal-500); }
+  .btn-pri:active { transform: translateY(1px); }
+  .btn-pri.lg { padding: 16px 24px; font-size: 16px; }
+  .btn-ghost-d {
+    background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9);
+    border: 1px solid rgba(255,255,255,0.14);
+    padding: 12px 18px; border-radius: 10px;
+    font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer;
+    text-align: center; transition: background .14s;
+    text-decoration: none;
+  }
+  .btn-ghost-d:hover { background: rgba(255,255,255,0.12); }
+
+  /* Live (voice) sessions */
+  .live-card {
+    margin-top: 22px; background: white; border: 1px solid var(--ink-100);
+    border-radius: 14px; box-shadow: var(--shadow-sm); padding: 18px 20px;
+  }
+  .live-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .live-title { display: inline-flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; color: var(--ink-900); }
+  .live-title .pulse {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--teal-600);
+    box-shadow: 0 0 0 0 rgba(70,166,167,0.7); animation: pulse 1.9s infinite;
+  }
+  .live-list { display: flex; flex-direction: column; gap: 8px; }
+  .live-row {
+    display: flex; align-items: center; gap: 12px; padding: 11px 13px;
+    border: 1px solid var(--ink-100); border-radius: 11px; background: var(--ink-50);
+  }
+  .live-row .lr-main { flex: 1; min-width: 0; }
+  .live-row .lr-title { font-size: 13.5px; font-weight: 600; color: var(--ink-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .live-row .lr-meta { font-size: 11.5px; color: var(--ink-500); margin-top: 2px; }
+  .live-pill {
+    font-size: 9.5px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 3px 8px; border-radius: 999px; flex-shrink: 0;
+  }
+  .live-pill.active { background: var(--teal-50); color: var(--teal-700); }
+  .live-pill.paused { background: #fdf3e3; color: #9a6a1f; }
+  .live-pill.ended  { background: var(--ink-100); color: var(--ink-500); }
+  .lr-resume {
+    flex-shrink: 0; text-decoration: none; padding: 8px 14px; border-radius: 9px;
+    background: var(--teal-600); color: white; font-size: 12.5px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 6px; transition: background .14s;
+  }
+  .lr-resume:hover { background: var(--teal-500); }
+  .lr-del {
+    flex-shrink: 0; width: 34px; height: 34px; padding: 0; border-radius: 9px; cursor: pointer;
+    background: transparent; border: 1px solid var(--ink-200); color: var(--ink-500);
+    display: inline-flex; align-items: center; justify-content: center; transition: all .14s;
+  }
+  .lr-del:hover { background: #fdecec; border-color: #e7a3a3; color: #c0392b; }
+  .lr-del:disabled { opacity: .5; cursor: default; }
+
+  /* Glance row */
+  .glance {
+    margin-top: 22px;
+    display: flex; align-items: stretch; gap: 0;
+    background: white; border: 1px solid var(--ink-100); border-radius: 14px;
+    box-shadow: var(--shadow-sm); overflow: hidden;
+  }
+  .glance .g {
+    flex: 1; padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 3px;
+    border-right: 1px solid var(--ink-100);
+  }
+  .glance .g:last-of-type { border-right: 0; }
+  .glance .g .k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--ink-500); font-weight: 600; }
+  .glance .g .v { font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 600; color: var(--ink-900); line-height: 1.1; display: flex; align-items: baseline; gap: 5px; }
+  .glance .g .v .u { font-size: 11px; color: var(--ink-400); font-weight: 500; }
+  .glance .g .s { font-size: 11.5px; color: var(--ink-500); }
+  .glance .g .s.up { color: var(--normal); font-weight: 600; }
+  .glance .g-link {
+    align-self: stretch; display: flex; align-items: center; gap: 7px;
+    padding: 0 22px; cursor: pointer;
+    background: var(--paper); color: var(--teal-700);
+    font-size: 12.5px; font-weight: 600; border: 0; border-left: 1px solid var(--ink-100);
+    transition: background .14s;
+    text-decoration: none;
+  }
+  .glance .g-link:hover { background: var(--teal-50); }
+
+  /* Two-up cards */
+  .home-cols {
+    margin-top: 22px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+  }
+  .home-card {
+    background: white; border: 1px solid var(--ink-100); border-radius: 14px;
+    box-shadow: var(--shadow-sm); overflow: hidden; display: flex; flex-direction: column;
+  }
+  .home-card-head { display: flex; align-items: baseline; gap: 10px; padding: 16px 18px 12px; }
+  .home-card-head .t { font-size: 14.5px; font-weight: 600; letter-spacing: -0.005em; }
+  .home-card-head .sub { font-size: 12px; color: var(--ink-500); }
+  .home-card-head .more {
+    margin-left: auto; font-size: 12px; color: var(--teal-700); font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px; text-decoration: none;
+  }
+  .home-card-head .more:hover { color: var(--teal-500); }
+
+  .recs { padding: 4px 14px 16px; display: flex; flex-direction: column; gap: 9px; }
+  .rec {
+    border: 1px solid var(--ink-100); border-radius: 11px; padding: 13px 15px;
+    background: var(--paper); cursor: pointer; transition: border-color .14s, box-shadow .14s;
+    text-decoration: none; color: inherit; display: block;
+  }
+  .rec:hover { border-color: var(--teal-500); box-shadow: var(--shadow-sm); }
+  .rec-tag {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 4px; display: inline-block; margin-bottom: 7px;
+    color: var(--caution); background: var(--caution-bg);
+  }
+  .rec-tag.crit { color: var(--critical); background: var(--critical-bg); }
+  .rec-tag.green { color: var(--normal); background: var(--normal-bg); }
+  .rec-name { font-size: 14.5px; font-weight: 600; color: var(--ink-900); line-height: 1.2; text-transform: capitalize; }
+  .rec-why { font-size: 12px; color: var(--ink-500); margin-top: 4px; line-height: 1.45; }
+  .rec-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+  .rec-foot .diff { font-family: 'JetBrains Mono', monospace; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 4px; background: var(--ink-50); color: var(--ink-700); font-weight: 600; }
+  .rec-foot .diff.hard { background: #fde6e2; color: #8e2b1f; }
+  .rec-foot .start { color: var(--teal-700); font-weight: 600; font-size: 12.5px; }
+
+  .recent { padding: 2px 8px 14px; }
+  .recent-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 10px; border-radius: 10px; cursor: pointer;
+    transition: background .12s;
+    text-decoration: none; color: inherit;
+  }
+  .recent-item:hover { background: var(--paper); }
+  .case-ico {
+    width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: white;
+    background: linear-gradient(140deg, #6b7a99, #3a4863);
+  }
+  .case-ico.resp { background: linear-gradient(140deg, #4a9faa, #2e6e7a); }
+  .case-ico.card { background: linear-gradient(140deg, #c25a47, #8e2e1f); }
+  .case-ico.neuro { background: linear-gradient(140deg, #6e5aa8, #3a2e6e); }
+  .case-ico.renal { background: linear-gradient(140deg, #a8826e, #6e4e3a); }
+  .case-ico.endo { background: linear-gradient(140deg, #a87a3a, #6e4e1e); }
+  .case-ico.gi { background: linear-gradient(140deg, #5fa86e, #2e6e3a); }
+  .recent-item .rt { flex: 1; min-width: 0; line-height: 1.3; }
+  .recent-item .rt .l { font-size: 13.5px; font-weight: 600; color: var(--ink-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: capitalize; }
+  .recent-item .rt .m { font-size: 11.5px; color: var(--ink-500); }
+  .recent-score {
+    font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 600;
+    color: var(--ink-900); flex-shrink: 0;
+  }
+  .recent-score.pass { color: var(--normal); }
+  .recent-score.mid { color: var(--caution); }
+  .recent-score.low { color: var(--critical); }
+  .recent-flag {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 3px 9px; border-radius: 99px; background: var(--teal-50); color: var(--teal-700);
+    flex-shrink: 0;
+  }
+  .recent-empty, .rec-empty {
+    padding: 20px 18px; text-align: center; color: var(--ink-400); font-size: 12.5px;
+  }
+
+  /* Case library on Home */
+  .lib-card {
+    margin-top: 22px; background: white; border: 1px solid var(--ink-100);
+    border-radius: 14px; box-shadow: var(--shadow-sm); overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .lib-head {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 16px 18px 14px; border-bottom: 1px solid var(--ink-50);
+  }
+  .lib-head > div { display: flex; flex-direction: column; gap: 2px; }
+  .lib-title { font-size: 15px; font-weight: 600; letter-spacing: -0.005em; }
+  .lib-sub { font-size: 12px; color: var(--ink-500); }
+  .btn-pri-sm {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
+    background: var(--teal-600); color: white; border: 0;
+    padding: 8px 14px; border-radius: 8px; font: inherit; font-size: 12.5px; font-weight: 600;
+    text-decoration: none; cursor: pointer; transition: background .14s;
+  }
+  .btn-pri-sm:hover { background: var(--teal-500); }
+
+  .lib-toolbar { padding: 12px 18px; border-bottom: 1px solid var(--ink-50); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .lib-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .lib-chip { font: inherit; font-size: 11.5px; padding: 5px 11px; border-radius: 99px; border: 1px solid var(--ink-200); background: white; color: var(--ink-700); cursor: pointer; }
+  .lib-chip.on { background: var(--ink-900); color: white; border-color: var(--ink-900); }
+  .lib-chip .ct { color: var(--ink-400); margin-left: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
+  .lib-chip.on .ct { color: rgba(255,255,255,0.55); }
+  .lib-search { margin-left: auto; display: flex; align-items: center; gap: 6px; background: var(--ink-50); border: 1px solid var(--ink-100); padding: 4px 10px; border-radius: 7px; width: 240px; }
+  .lib-search input { border: 0; background: transparent; outline: 0; font: inherit; font-size: 12.5px; flex: 1; padding: 4px 0; color: var(--ink-900); }
+  .lib-search svg { color: var(--ink-400); }
+
+  .lib-table-wrap { overflow-x: auto; }
+  table.lib-table { width: 100%; border-collapse: collapse; }
+  table.lib-table th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--ink-500); font-weight: 600; padding: 11px 14px; background: var(--paper); border-bottom: 1px solid var(--ink-100); }
+  table.lib-table td { padding: 12px 14px; border-bottom: 1px solid var(--ink-50); font-size: 13px; color: var(--ink-800); vertical-align: middle; }
+  table.lib-table tr:last-child td { border-bottom: 0; }
+  table.lib-table tr:hover td { background: var(--paper); }
+  .lib-case-name { display: flex; align-items: center; gap: 10px; }
+  .lib-case-name .ico { width: 30px; height: 30px; border-radius: 7px; flex-shrink: 0; display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: white; background: linear-gradient(140deg, #6b7a99, #3a4863); }
+  .lib-case-name .ico.resp { background: linear-gradient(140deg, #4a9faa, #2e6e7a); }
+  .lib-case-name .ico.card { background: linear-gradient(140deg, #c25a47, #8e2e1f); }
+  .lib-case-name .ico.neuro { background: linear-gradient(140deg, #6e5aa8, #3a2e6e); }
+  .lib-case-name .ico.renal { background: linear-gradient(140deg, #a8826e, #6e4e3a); }
+  .lib-case-name .ico.endo { background: linear-gradient(140deg, #a87a3a, #6e4e1e); }
+  .lib-case-name .ico.gi { background: linear-gradient(140deg, #5fa86e, #2e6e3a); }
+  .lib-case-name .meta { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+  .lib-case-name .meta .l { font-weight: 600; color: var(--ink-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: capitalize; }
+  .lib-case-name .meta .id { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-400); }
+  .lib-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .lib-pill.done { background: var(--normal-bg); color: var(--normal); }
+  .lib-pill.prog { background: var(--teal-50); color: var(--teal-700); }
+  .lib-pill.med { background: var(--caution-bg); color: var(--caution); }
+  .lib-pill.easy { background: var(--normal-bg); color: var(--normal); }
+  .lib-pill.hard { background: var(--critical-bg); color: var(--critical); }
+  .lib-pill.paused { background: var(--teal-50); color: var(--teal-700); }
+  .lib-score { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 14px; }
+  .lib-score.pass { color: var(--normal); }
+  .lib-score.mid { color: var(--caution); }
+  .lib-score.low { color: var(--critical); }
+  .lib-score.dash { color: var(--ink-400); }
+  .lib-actions { display: flex; gap: 4px; justify-content: flex-end; }
+  .lib-icon-btn { width: 28px; height: 28px; border-radius: 6px; background: white; border: 1px solid var(--ink-100); cursor: pointer; display: grid; place-items: center; color: var(--ink-700); }
+  .lib-icon-btn:hover { background: var(--ink-50); color: var(--ink-900); }
+  .lib-icon-btn.primary { background: var(--teal-600); border-color: var(--teal-600); color: white; }
+  .lib-icon-btn.primary:hover { background: var(--teal-500); }
+  .lib-icon-btn.danger:hover { background: var(--critical-bg); color: var(--critical); border-color: #f4c8c2; }
+  .lib-foot { padding: 11px 18px; border-top: 1px solid var(--ink-50); font-size: 12px; color: var(--ink-500); }
+  .lib-empty { padding: 40px; text-align: center; color: var(--ink-400); font-size: 13px; }
+
+  /* Delete-confirm modal (reused from old dashboard) */
+  .del-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; backdrop-filter: blur(4px); align-items: center; justify-content: center; }
+  .del-backdrop.on { display: flex; animation: delFadeIn .18s ease; }
+  @keyframes delFadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .del-card { width: 400px; max-width: calc(100vw - 32px); background: #fff; border-radius: 16px; box-shadow: 0 24px 64px rgba(0,0,0,0.2); padding: 30px 26px; }
+  .del-icon { width: 52px; height: 52px; border-radius: 14px; background: #fdecea; border: 1px solid #f4c8c2; display: grid; place-items: center; margin: 0 auto 18px; color: var(--critical); }
+  .del-title { font-size: 19px; font-weight: 700; text-align: center; color: var(--ink-900); margin-bottom: 8px; }
+  .del-body { font-size: 13px; color: var(--ink-500); text-align: center; line-height: 1.55; margin-bottom: 24px; }
+  .del-actions { display: flex; gap: 10px; }
+  .del-cancel { flex: 1; background: var(--ink-50); color: var(--ink-700); border: 1px solid var(--ink-200); font: inherit; font-size: 13px; font-weight: 500; padding: 11px; border-radius: 9px; cursor: pointer; }
+  .del-cancel:hover { background: var(--ink-100); }
+  .del-confirm { flex: 1; background: var(--critical); color: #fff; border: 0; font: inherit; font-size: 13px; font-weight: 700; padding: 11px; border-radius: 9px; cursor: pointer; }
+  .del-confirm:hover { opacity: 0.88; }
+
+  @media (max-width: 720px) {
+    .focus { grid-template-columns: 1fr; }
+    .glance { flex-wrap: wrap; }
+    .home-greet h1 { font-size: 36px; }
+    .home-greet h1 .name { font-size: 30px; }
+    .lib-search { width: 100%; margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!--CHROME-->
+
+<main class="home">
+  <div class="home-inner">
+
+    <div class="home-greet">
+      <div class="eyebrow"><span id="greetWord">Good day</span> <span class="tick" id="greetTick">·</span></div>
+      <h1>Welcome back, <span class="name" id="greetName">Resident</span></h1>
+      <p id="greetSub">Loading your workspace…</p>
+    </div>
+
+    <!-- Focus card: paused case OR start-a-new-case hero -->
+    <div class="focus" id="focusCard" hidden>
+      <div class="focus-main">
+        <div class="focus-eyebrow"><span class="pulse"></span> <span id="focusEyebrowText">Continue where you left off</span></div>
+        <h3 class="focus-title" id="focusTitle">—</h3>
+        <div class="focus-desc" id="focusDesc">—</div>
+        <div class="focus-meta" id="focusMeta"></div>
+        <div class="focus-progress" id="focusProgress" hidden><div></div></div>
+      </div>
+      <div class="focus-side" id="focusSide">
+        <!-- Buttons rendered by JS depending on whether there's a paused case -->
+      </div>
+    </div>
+
+    <!-- Live (voice) sessions — resume or review the voice-room runtime -->
+    <div class="live-card" id="liveCard" hidden>
+      <div class="live-head">
+        <div class="live-title"><span class="pulse"></span> Live sessions</div>
+        <a class="btn-pri-sm" href="/simulator/voice-room">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+          New live case
+        </a>
+      </div>
+      <div class="live-list" id="liveList"></div>
+    </div>
+
+    <div class="glance">
+      <div class="g">
+        <span class="k">Avg score</span>
+        <span class="v" id="glAvg">—</span>
+        <span class="s" id="glAvgSub">No evaluated cases yet</span>
+      </div>
+      <div class="g">
+        <span class="k">Current streak</span>
+        <span class="v" id="glStreak">—</span>
+        <span class="s" id="glStreakSub">—</span>
+      </div>
+      <div class="g">
+        <span class="k">This week</span>
+        <span class="v" id="glWeek">—</span>
+        <span class="s" id="glWeekSub">—</span>
+      </div>
+      <a href="/analytics" class="g-link">
+        Full analytics
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>
+      </a>
+    </div>
+
+    <!-- Case library -->
+    <div class="lib-card">
+      <div class="lib-head">
+        <div>
+          <div class="lib-title">Case library</div>
+          <div class="lib-sub" id="libSub">All cases</div>
+        </div>
+        <a class="btn-pri-sm" href="/simulator" data-new-case>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+          New case
+        </a>
+      </div>
+      <div class="lib-toolbar">
+        <div class="lib-chips" id="libChips">
+          <button class="lib-chip on" data-filter="all" type="button">All <span class="ct" id="ctAll">0</span></button>
+          <button class="lib-chip" data-filter="active" type="button">In progress <span class="ct" id="ctProg">0</span></button>
+          <button class="lib-chip" data-filter="evaluated" type="button">Evaluated <span class="ct" id="ctEval">0</span></button>
+          <button class="lib-chip" data-filter="paused" type="button">Paused <span class="ct" id="ctPaused">0</span></button>
+        </div>
+        <div class="lib-search">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="7" cy="7" r="4"/><path d="M10 10l3 3"/></svg>
+          <input id="libSearch" placeholder="Search diagnosis…" />
+        </div>
+      </div>
+      <div class="lib-table-wrap">
+        <table class="lib-table">
+          <thead><tr>
+            <th style="width:34%">Case</th>
+            <th>System</th>
+            <th>Difficulty</th>
+            <th>Status</th>
+            <th>Score</th>
+            <th>Elapsed</th>
+            <th style="text-align:right">Actions</th>
+          </tr></thead>
+          <tbody id="libBody"></tbody>
+        </table>
+      </div>
+      <div class="lib-foot" id="libShowing">—</div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  // ─── Helpers ────────────────────────────────────────────────────────────
+  function partOfDay() {
+    const h = new Date().getHours();
+    if (h < 5) return 'Late night';
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+  function fmtTick() {
+    const d = new Date();
+    const day = d.toLocaleDateString('en-GB', { weekday: 'short' });
+    const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return `· ${day} ${date} · ${time}`;
+  }
+  function humanDur(seconds) {
+    if (!seconds || seconds < 60) return `${Math.max(1, Math.round(seconds || 0))}s`;
+    const m = Math.round(seconds / 60);
+    return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${m % 60}m`;
+  }
+  function timeAgo(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+  function systemForDiagnosis(dx) {
+    const d = (dx || '').toLowerCase();
+    if (/stemi|nstemi|mi|infarct|cardiac|angina|fibrillation|af\b|tachycardia|tachy|heart/.test(d)) return { cls: 'card', code: 'CV', label: 'Cardiovascular' };
+    if (/pneumonia|asthma|copd|pulmonary|respiratory|embolism|pleural|pneumothorax/.test(d)) return { cls: 'resp', code: 'Rs', label: 'Respiratory' };
+    if (/stroke|cva|hemorrhage|seizure|meningitis|neurolog|tia/.test(d)) return { cls: 'neuro', code: 'Nv', label: 'Neurology' };
+    if (/kidney|renal|pyelonephritis|nephritis/.test(d)) return { cls: 'renal', code: 'Rn', label: 'Renal' };
+    if (/diabetic|dka|hypoglyc|thyroid|endocrine|adrenal/.test(d)) return { cls: 'endo', code: 'En', label: 'Endocrine' };
+    if (/appendi|cholecyst|pancreat|bowel|gi |gastro/.test(d)) return { cls: 'gi', code: 'GI', label: 'Gastro' };
+    return { cls: '', code: 'Dx', label: 'Other' };
+  }
+  function scoreClass(s) {
+    if (s == null) return '';
+    if (s >= 70) return 'pass';
+    if (s >= 50) return 'mid';
+    return 'low';
+  }
+
+  // ─── Recommendations heuristic (no extra API needed) ────────────────────
+  function buildRecommendations(sessions, stats) {
+    const evaluated = sessions.filter(s => s.status === 'evaluated' && s.overall_score != null);
+    const seenSystems = new Set(sessions.map(s => systemForDiagnosis(s.diagnosis).label));
+    const ALL_SYSTEMS = [
+      { label: 'Cardiovascular', dx: 'Inferior STEMI', why: 'Common emergency presentation — sharpens ECG-led decisions.' },
+      { label: 'Respiratory', dx: 'Acute Severe Asthma', why: 'Forces severity stratification under time pressure.' },
+      { label: 'Endocrine', dx: 'DKA · Type 1', why: 'Builds breadth before exams.' },
+      { label: 'Neurology', dx: 'Ischaemic Stroke', why: 'Window-driven decisions and NIH scoring.' },
+      { label: 'Renal', dx: 'Acute Kidney Injury', why: 'Layered electrolyte + volume reasoning.' },
+      { label: 'Gastro', dx: 'Acute Cholecystitis', why: 'Surgical vs medical decision pathway.' },
+    ];
+    const out = [];
+    // Biggest gap: untouched system
+    const gap = ALL_SYSTEMS.find(s => !seenSystems.has(s.label));
+    if (gap) {
+      out.push({ tag: 'New system', tagCls: 'green', name: gap.dx, why: `${gap.label} — you have 0 cases here. ${gap.why}`, diff: 'Medium', diffCls: '' });
+    }
+    // Underperforming area: low-score system
+    if (evaluated.length) {
+      const lowest = evaluated.slice().sort((a, b) => a.overall_score - b.overall_score)[0];
+      if (lowest && lowest.overall_score < 70) {
+        const sys = systemForDiagnosis(lowest.diagnosis);
+        out.push({
+          tag: 'Closes biggest gap', tagCls: 'crit',
+          name: `${sys.label} — practice harder`,
+          why: `Your weakest evaluated case was ${lowest.diagnosis} (${lowest.overall_score}). Run another at higher difficulty.`,
+          diff: 'Hard', diffCls: 'hard',
+        });
+      }
+    }
+    if (!out.length) {
+      out.push({
+        tag: 'Start here', tagCls: 'green',
+        name: ALL_SYSTEMS[0].dx, why: ALL_SYSTEMS[0].why,
+        diff: 'Medium', diffCls: '',
+      });
+    }
+    return out.slice(0, 2);
+  }
+
+  // ─── Render functions ──────────────────────────────────────────────────
+  // Resume surface for the voice-room runtime (separate from the manual library).
+  function renderLive(sessions) {
+    const card = document.getElementById('liveCard');
+    const list = document.getElementById('liveList');
+    const show = (sessions || []).filter(s => s.resumable);   // active/paused = resumable
+    if (!show.length) { card.hidden = true; return; }
+    const esc = s => (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    list.innerHTML = show.map(s => {
+      const status = s.status === 'paused' ? 'paused' : 'active';
+      return `<div class="live-row">
+        <div class="lr-main">
+          <div class="lr-title">${esc(s.title || s.case_id)}</div>
+          <div class="lr-meta">Voice room · ${timeAgo(s.updated_at)}</div>
+        </div>
+        <span class="live-pill ${status}">${status}</span>
+        <a class="lr-resume" href="/simulator/voice-room?session=${encodeURIComponent(s.id)}">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l7 5-7 5z"/></svg>
+          Resume
+        </a>
+        <button class="lr-del" data-id="${esc(s.id)}" title="Delete this run" aria-label="Delete this run">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 5v6m4-6v6"/></svg>
+        </button>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.lr-del').forEach(btn => btn.addEventListener('click', onDeleteLive));
+    card.hidden = false;
+  }
+
+  async function onDeleteLive(e) {
+    const btn = e.currentTarget;
+    const id = btn.dataset.id;
+    if (!confirm('Delete this run? This cannot be undone.')) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch(`/api/voice/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error('delete failed');
+      const row = btn.closest('.live-row');
+      if (row) row.remove();
+      // hide the whole card once the last run is gone
+      const list = document.getElementById('liveList');
+      if (list && !list.querySelector('.live-row')) document.getElementById('liveCard').hidden = true;
+    } catch (err) {
+      btn.disabled = false;
+      alert('Could not delete that run. Please try again.');
+    }
+  }
+
+  function renderFocus(paused) {
+    const card = document.getElementById('focusCard');
+    const side = document.getElementById('focusSide');
+    const eyebrow = document.getElementById('focusEyebrowText');
+    const title = document.getElementById('focusTitle');
+    const desc = document.getElementById('focusDesc');
+    const meta = document.getElementById('focusMeta');
+    const prog = document.getElementById('focusProgress');
+    card.hidden = false;
+
+    if (paused) {
+      eyebrow.textContent = 'Continue where you left off';
+      title.textContent = paused.diagnosis || 'Untitled case';
+      desc.textContent = `${paused.difficulty ? paused.difficulty[0].toUpperCase() + paused.difficulty.slice(1) : 'Medium'} case · paused ${timeAgo(paused.created_at)}.`;
+      meta.innerHTML = '';
+      const items = [
+        { k: 'Status', v: paused.status === 'paused' ? 'Paused' : 'Active' },
+        { k: 'Elapsed', v: humanDur(paused.duration_seconds) },
+        { k: 'Last touched', v: timeAgo(paused.created_at) },
+      ];
+      items.forEach(({ k, v }) => {
+        const el = document.createElement('div');
+        el.className = 'fm';
+        el.innerHTML = `<span class="k">${k}</span><span class="v">${v}</span>`;
+        meta.appendChild(el);
+      });
+      prog.hidden = false;
+      side.innerHTML = `
+        <a class="btn-pri lg" href="/simulator?resume=${paused.id}">
+          Resume case
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M4 3l9 5-9 5z"/></svg>
+        </a>
+        <a class="btn-ghost-d" href="/simulator" data-new-case>Start a new case</a>
+        <a class="btn-ghost-d" href="/analytics">View summary</a>
+      `;
+    } else {
+      eyebrow.textContent = 'Ready when you are';
+      title.textContent = 'Start your next case';
+      desc.textContent = 'No paused cases. Spin up a fresh patient encounter from the simulator.';
+      meta.innerHTML = '';
+      prog.hidden = true;
+      side.innerHTML = `
+        <a class="btn-pri lg" href="/simulator" data-new-case>
+          Start a new case
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M4 3l9 5-9 5z"/></svg>
+        </a>
+        <a class="btn-ghost-d" href="/analytics">View analytics</a>
+      `;
+    }
+  }
+
+  function renderGlance(sessions, stats) {
+    const evaluated = sessions.filter(s => s.status === 'evaluated' && s.overall_score != null);
+    if (stats.avg_score != null) {
+      document.getElementById('glAvg').innerHTML = `${Math.round(stats.avg_score)}<span class="u">/100</span>`;
+      if (evaluated.length >= 2) {
+        const recent5 = evaluated.slice(0, 5).map(s => s.overall_score);
+        const earlier = evaluated.slice(5, 10).map(s => s.overall_score);
+        if (earlier.length) {
+          const delta = Math.round((recent5.reduce((a,b)=>a+b,0)/recent5.length) - (earlier.reduce((a,b)=>a+b,0)/earlier.length));
+          const sub = document.getElementById('glAvgSub');
+          sub.textContent = `${delta >= 0 ? '▲ +' : '▼ '}${Math.abs(delta)} last ${recent5.length} cases`;
+          sub.className = 's ' + (delta >= 0 ? 'up' : '');
+        } else {
+          document.getElementById('glAvgSub').textContent = `${evaluated.length} evaluated`;
+        }
+      } else {
+        document.getElementById('glAvgSub').textContent = `${evaluated.length} evaluated`;
+      }
+    }
+
+    // Streak
+    const streak = window.CB_Chrome.computeStreak(sessions);
+    document.getElementById('glStreak').innerHTML = `${streak}<span class="u">days</span>`;
+    document.getElementById('glStreakSub').textContent = streak ? `Keep going` : 'No active streak';
+
+    // This week
+    const oneWeekAgo = Date.now() - 7 * 86400 * 1000;
+    const thisWeek = sessions.filter(s => s.created_at && new Date(s.created_at).getTime() >= oneWeekAgo).length;
+    document.getElementById('glWeek').innerHTML = `${thisWeek}<span class="u">${thisWeek === 1 ? 'case' : 'cases'}</span>`;
+    document.getElementById('glWeekSub').textContent = `${evaluated.length} evaluated all-time`;
+  }
+
+  // ─── Case library (table + filter chips + search) ──────────────────────
+  let _allSessions = [];
+  let _libFilter = 'all';
+  let _pendingDeleteSid = null;
+
+  function renderLibrary(sessions) {
+    _allSessions = sessions;
+    const evalCt = sessions.filter(s => s.status === 'evaluated').length;
+    const progCt = sessions.filter(s => s.status === 'active').length;
+    const pausedCt = sessions.filter(s => s.status === 'paused').length;
+
+    document.getElementById('libSub').textContent =
+      sessions.length ? `${sessions.length} case${sessions.length === 1 ? '' : 's'} total` : 'No cases yet';
+    document.getElementById('ctAll').textContent = sessions.length;
+    document.getElementById('ctProg').textContent = progCt;
+    document.getElementById('ctEval').textContent = evalCt;
+    document.getElementById('ctPaused').textContent = pausedCt;
+
+    document.querySelectorAll('#libChips .lib-chip').forEach(c => {
+      c.onclick = () => {
+        _libFilter = c.dataset.filter;
+        document.querySelectorAll('#libChips .lib-chip').forEach(b => b.classList.toggle('on', b === c));
+        renderLibTable();
+      };
+    });
+    const search = document.getElementById('libSearch');
+    if (!search._wired) {
+      search.addEventListener('input', renderLibTable);
+      search._wired = true;
+    }
+    renderLibTable();
+  }
+
+  function renderLibTable() {
+    const q = (document.getElementById('libSearch').value || '').toLowerCase();
+    const visible = _allSessions.filter(s => {
+      if (_libFilter !== 'all' && s.status !== _libFilter) return false;
+      if (q && !(s.diagnosis || '').toLowerCase().includes(q)) return false;
+      return true;
+    });
+    const body = document.getElementById('libBody');
+    if (!visible.length) {
+      body.innerHTML = `<tr><td colspan="7" class="lib-empty">No cases match the current filter.</td></tr>`;
+      document.getElementById('libShowing').textContent = `0 of ${_allSessions.length} cases`;
+      return;
+    }
+    body.innerHTML = visible.map(s => {
+      const sys = systemForDiagnosis(s.diagnosis);
+      const diff = (s.difficulty || 'medium').toLowerCase();
+      const diffLabel = diff[0].toUpperCase() + diff.slice(1);
+      const statusLabel = s.status === 'evaluated' ? '✓ Evaluated'
+                        : s.status === 'paused'    ? '● Paused'
+                        :                            '● Active';
+      const statusCls = s.status === 'evaluated' ? 'done'
+                      : s.status === 'paused'    ? 'paused'
+                      :                            'prog';
+      const score = (s.overall_score == null)
+        ? '<span class="lib-score dash">—</span>'
+        : `<span class="lib-score ${scoreClass(s.overall_score)}">${Math.round(s.overall_score)}</span>`;
+      const actions = s.status !== 'evaluated'
+        ? `<a class="lib-icon-btn primary" title="Resume" href="/simulator?resume=${s.id}">
+             <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 3l9 5-9 5z"/></svg>
+           </a>`
+        : `<a class="lib-icon-btn" title="Review" href="/analytics">
+             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h12v10H2z"/><path d="M5 6h6M5 9h4"/></svg>
+           </a>`;
+      return `<tr>
+        <td>
+          <div class="lib-case-name">
+            <div class="ico ${sys.cls}">${sys.code}</div>
+            <div class="meta">
+              <div class="l">${s.diagnosis || 'Untitled'}</div>
+              <div class="id">${s.id.slice(0, 8)}…</div>
+            </div>
+          </div>
+        </td>
+        <td>${sys.label}</td>
+        <td><span class="lib-pill ${diff}">${diffLabel}</span></td>
+        <td><span class="lib-pill ${statusCls}">${statusLabel}</span></td>
+        <td>${score}</td>
+        <td class="mono" style="color:var(--ink-700);font-size:12px">${humanDur(s.duration_seconds)}</td>
+        <td>
+          <div class="lib-actions">
+            ${actions}
+            <button class="lib-icon-btn danger" title="Delete" type="button" onclick="askDelete('${s.id}')">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M5 4V2.5A1 1 0 016 1.5h4a1 1 0 011 1V4M4 4v10a1 1 0 001 1h6a1 1 0 001-1V4"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+    document.getElementById('libShowing').textContent =
+      `Showing ${visible.length} of ${_allSessions.length} case${_allSessions.length === 1 ? '' : 's'}`;
+  }
+
+  // ── Delete confirmation modal ──
+  function askDelete(sid) {
+    _pendingDeleteSid = sid;
+    document.getElementById('deleteBackdrop').classList.add('on');
+  }
+  function hideDeleteConfirm() {
+    document.getElementById('deleteBackdrop').classList.remove('on');
+    _pendingDeleteSid = null;
+  }
+  async function confirmDeleteSession() {
+    const sid = _pendingDeleteSid;
+    hideDeleteConfirm();
+    try {
+      const r = await fetch('/api/dashboard/session/' + sid, { method: 'DELETE' });
+      if (!r.ok) { alert('Could not delete session'); return; }
+      _allSessions = _allSessions.filter(s => s.id !== sid);
+      renderLibrary(_allSessions);
+      // Re-render the focus card too in case it was the paused session we just nuked.
+      const paused = _allSessions.find(s => s.status === 'paused') || _allSessions.find(s => s.status === 'active');
+      renderFocus(paused);
+    } catch (e) { alert('Could not delete session'); }
+  }
+  window.askDelete = askDelete;
+  window.hideDeleteConfirm = hideDeleteConfirm;
+  window.confirmDeleteSession = confirmDeleteSession;
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hideDeleteConfirm(); });
+
+  // ─── Load & render ─────────────────────────────────────────────────────
+  async function loadHome() {
+    document.getElementById('greetWord').textContent = partOfDay();
+    document.getElementById('greetTick').textContent = fmtTick();
+
+    let me, sessions = [], stats = {};
+    try {
+      const meRes = await fetch('/api/auth/me');
+      if (meRes.status === 401) { location.href = '/'; return; }
+      me = await meRes.json();
+      document.getElementById('greetName').textContent = me.display_name || (me.email || '').split('@')[0] || 'Resident';
+    } catch (e) { /* leave default */ }
+
+    try {
+      const [sessRes, statsRes] = await Promise.all([
+        fetch('/api/dashboard/sessions'),
+        fetch('/api/dashboard/stats'),
+      ]);
+      sessions = (await sessRes.json()).sessions || [];
+      stats = await statsRes.json();
+    } catch (e) {
+      document.getElementById('greetSub').textContent = 'Could not load your workspace.';
+      return;
+    }
+
+    const paused = sessions.find(s => s.status === 'paused')
+                || sessions.find(s => s.status === 'active');
+    const evalCt = sessions.filter(s => s.status === 'evaluated').length;
+    let sub;
+    if (paused) {
+      sub = `You have <strong>one case waiting</strong>. Pick up where you left off, or start something new.`;
+    } else if (sessions.length === 0) {
+      sub = `Fresh account — no cases yet. Spin up your first encounter from the simulator.`;
+    } else {
+      sub = `<strong>${evalCt}</strong> case${evalCt === 1 ? '' : 's'} evaluated. Ready for the next one?`;
+    }
+    document.getElementById('greetSub').innerHTML = sub;
+
+    renderFocus(paused);
+    renderGlance(sessions, stats);
+    renderLibrary(sessions);
+
+    try {   // voice-room runs live in their own store; surface resumable ones
+      const r = await fetch('/api/voice/sessions');
+      if (r.ok) renderLive((await r.json()).sessions || []);
+    } catch (e) { /* non-fatal — the manual library still renders */ }
+  }
+  loadHome();
+</script>
+
+<!-- Delete confirmation modal -->
+<div id="deleteBackdrop" class="del-backdrop" role="dialog" aria-modal="true" onclick="if(event.target===this)hideDeleteConfirm()">
+  <div class="del-card">
+    <div class="del-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+        <path d="M10 11v6M14 11v6"/>
+      </svg>
+    </div>
+    <div class="del-title">Delete this session?</div>
+    <div class="del-body">This action cannot be undone. All progress and evaluation data will be permanently removed.</div>
+    <div class="del-actions">
+      <button class="del-cancel" type="button" onclick="hideDeleteConfirm()">Cancel</button>
+      <button class="del-confirm" type="button" onclick="confirmDeleteSession()">Delete session</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

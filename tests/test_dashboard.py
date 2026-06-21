@@ -28,6 +28,7 @@ def db_path(tmp_path, monkeypatch):
     yield path
 
 
+
 def make_case() -> ClinicalCase:
     return ClinicalCase.model_validate({
         "diagnosis": "myocardial infarction",
@@ -75,6 +76,13 @@ def make_authed_request(resident_id: str) -> object:
 
     class FakeRequest:
         cookies = {COOKIE_NAME: cookie_value}
+
+    return FakeRequest()
+
+
+def make_anon_request() -> object:
+    class FakeRequest:
+        cookies: dict = {}
 
     return FakeRequest()
 
@@ -350,7 +358,7 @@ def test_pause_endpoint(db_path):
     create_session("sess-pause-ep", "mi", "medium", case)
     web_app.SESSIONS["sess-pause-ep"] = make_web_session(case)
 
-    result = web_app.pause("sess-pause-ep")
+    result = web_app.pause("sess-pause-ep", web_app.PauseRequest(elapsed_seconds=0), make_anon_request())
     assert result["ok"] is True
 
     conn = _sqlite3.connect(db_path)
@@ -374,7 +382,7 @@ def test_resume_endpoint_restores_session(db_path):
     # Clear cache to simulate restart
     web_app.SESSIONS.pop("sess-resume", None)
 
-    result = web_app.resume("sess-resume")
+    result = web_app.resume("sess-resume", make_anon_request())
     assert result["session_id"] == "sess-resume"
     assert len(result["qa_pairs"]) == 1
     assert result["qa_pairs"][0]["answer"] == "Yes."
@@ -386,5 +394,24 @@ def test_resume_endpoint_raises_404_for_unknown(db_path):
     import backend.web_app as web_app
 
     with pytest.raises(HTTPException) as exc_info:
-        web_app.resume("ghost-session")
+        web_app.resume("ghost-session", make_anon_request())
     assert exc_info.value.status_code == 404
+
+
+def test_resume_denied_for_non_owner(db_path):
+    from fastapi import HTTPException
+    from backend.persistence import create_session, get_or_create_resident, save_session
+    import backend.web_app as web_app
+
+    owner = get_or_create_resident("owner@example.com")
+    intruder = get_or_create_resident("intruder@example.com")
+    case = make_case()
+    create_session("sess-owned", "mi", "medium", case, resident_id=owner)
+    save_session("sess-owned", make_web_session(case))
+    web_app.SESSIONS.pop("sess-owned", None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        web_app.resume("sess-owned", make_authed_request(intruder))
+    assert exc_info.value.status_code == 403
+    # and the owner is still allowed in
+    assert web_app.resume("sess-owned", make_authed_request(owner))["session_id"] == "sess-owned"

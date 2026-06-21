@@ -1,0 +1,549 @@
+{
+  "id": "myasthenic_crisis",
+  "schema_version": 1,
+  "meta": {
+    "title": "Myasthenia Gravis with Myasthenic Crisis",
+    "keywords": ["Myasthenia Gravis", "Myasthenic Crisis", "Neuromuscular respiratory failure", "Elective intubation"],
+    "summary": "29F, previously healthy, with 4 days of worsening dyspnoea on a background of 3 months of fatigable proximal weakness, ptosis, diplopia and dysphagia. Recently treated for a UTI with ciprofloxacin. Presents in respiratory distress from new-onset myasthenia gravis precipitating a myasthenic crisis, requiring recognition of neuromuscular respiratory failure and elective intubation.",
+    "specialty": "Emergency Medicine",
+    "setting": "Emergency Department",
+    "target_level": "junior",
+    "difficulty": "hard",
+    "estimated_minutes": 30,
+    "author": "Bader Ali",
+    "institution": "MUHC / JGH (McGill)",
+    "source": "EMSIMCASES.COM / EM-SERC, 2023-02-28, v1 (CC BY-SA 4.0)",
+    "version": 1
+  },
+  "objectives": {
+    "overall_goal": "Appreciate that patients with myasthenia gravis often present with a crisis, usually preceded by infection or surgery.",
+    "medical": [
+      "Recognise the indications for intubation in patients presenting with respiratory distress who are known for, or have symptoms suggestive of, myasthenia gravis.",
+      "Know how to assess respiratory function in neuromuscular disease, where evaluation differs from respiratory distress due to primary pulmonary illness.",
+      "Revise the immediate recommended management for myasthenic crisis."
+    ],
+    "nursing": [
+      "Recognise the need for early and continuous monitoring of vitals and respiratory status.",
+      "Know which signs are most important to follow and how they differ from monitoring of pulmonary-induced respiratory distress."
+    ],
+    "crm": [],
+    "epas": ["3.1", "3.3"]
+  },
+  "patient": {
+    "name": "EK",
+    "age": 29,
+    "gender": "female",
+    "weight_kg": 60,
+    "allergies": [],
+    "medications": ["Pantoprazole", "Ciprofloxacin (recent, for UTI)"],
+    "past_medical_history": ["Gastric reflux", "Recent urinary tract infection"],
+    "social_history": ["Non-smoker", "Occasional alcohol"],
+    "persona": "29-year-old woman, previously healthy, frightened and breathless. Speaks in short fragments and pauses to breathe between words; cannot finish a full sentence in one breath. Sitting upright, refuses to lie flat because it worsens her dyspnoea. Volunteers little unless asked. If asked about symptoms: 3 months of getting weaker, especially by the end of the day; trouble climbing stairs and holding her arms up; trouble chewing (especially steak) and, more recently, swallowing; drooping eyelids and double vision at night. Worse at the end of the day, better in the morning. Will cough and choke if given anything to drink."
+  },
+  "presentation": {
+    "chief_complaint": "Respiratory distress",
+    "opening_vignette": "29F just arrived to the hospital via EMS due to breathing difficulty and orthopnoea. Previously healthy. On 6 L face mask, sating 97%. Stays in a sitting position, refusing to lie down because of increased dyspnoea.",
+    "triage_note": [
+      "Complains of shortness of breath over several days. Worsening. No chest pain.",
+      "Difficulty using arms; feels weak."
+    ],
+    "initial_vitals": {
+      "rhythm": "Sinus",
+      "heart_rate": 105,
+      "blood_pressure": "126/84",
+      "respiratory_rate": 35,
+      "oxygen_saturation": 99,
+      "temperature_c": 37.1,
+      "glucose": 5.6,
+      "gcs": "15",
+      "fio2": "6 L O2"
+    },
+    "on_monitor": false
+  },
+  "history": [
+    {
+      "id": "ems_handover",
+      "label": "EMS handover",
+      "content": "Called 20 minutes ago for difficulty breathing. On arrival the patient was sitting in a tripod position, tachypnoeic and unable to complete full sentences. O2 sat on scene 96% on room air; oxygen given for comfort. BP and HR otherwise normal. Husband is following by car, ~5 minutes behind.",
+      "provider": "ems",
+      "reveal": "on_arrival"
+    },
+    {
+      "id": "patient_symptoms",
+      "label": "Symptoms (from patient)",
+      "content": "4 days of worsening shortness of breath; worse at night, now sleeping on 3 pillows. Over 3 months, increasing difficulty climbing stairs and holding her arms up, worse at the end of the day. Difficulty chewing (especially steak) at suppertime; more recently difficulty swallowing. For 2 weeks, eyelids drop and she gets double vision when reading before bed.",
+      "provider": "patient",
+      "reveal": "on_ask"
+    },
+    {
+      "id": "husband_collateral",
+      "label": "Collateral history (husband)",
+      "content": "3-month history of weakness: initially trouble with the 3 flights of stairs to their apartment (now the third flight is impossible), then arm weakness (cannot style her hair, could not finish painting the apartment because her arms tired). Now dysphagia, most noticeable at end of day. Clear diurnal fluctuation, worse by evening. Left eyelid drooping, better in the morning. Recently treated for a UTI with ciprofloxacin at a walk-in clinic. Non-smoker, occasional alcohol. No headache, LOC, trauma, fever, chills, night sweats or weight loss.",
+      "provider": "family",
+      "reveal": "on_ask",
+      "available_after_seconds": 300
+    },
+    {
+      "id": "husband_family_history",
+      "label": "Family history hint (husband)",
+      "content": "The husband recalls that the patient's mother had some kind of neuromuscular condition, though he cannot remember its name.",
+      "provider": "family",
+      "reveal": "on_trigger"
+    }
+  ],
+  "exam": [
+    {
+      "system": "Neurological",
+      "findings": [
+        "Bilateral moderate weakness of CN VII (facial)",
+        "Dysarthria that fatigues and worsens during the exam",
+        "Left ptosis",
+        "Neck flexion 3/5",
+        "No nystagmus; no tongue atrophy or palatal deviation",
+        "Upper limbs: power preserved but fatigues with repetition; reflexes equal, sensation intact",
+        "Lower limbs: power preserved; reflexes equal, sensation intact",
+        "No muscle atrophy in any limb"
+      ],
+      "abnormal": true,
+      "note": "Weakness is fatigable — strength declines the longer a movement is repeated. Patient cannot complete a full sentence in one breath."
+    },
+    {
+      "system": "Respiratory",
+      "findings": [
+        "Tachypnoea with shallow breathing",
+        "No nasal flaring",
+        "No audible wheeze or stridor",
+        "Decreased air entry bilaterally"
+      ],
+      "abnormal": true,
+      "note": "Pattern is rapid and shallow from respiratory-muscle fatigue, not airway obstruction or consolidation."
+    },
+    {
+      "system": "Cardiovascular",
+      "findings": ["S1 + S2 present, no added sounds"],
+      "abnormal": false
+    },
+    {
+      "system": "Abdominal",
+      "findings": ["Soft and lax; no tenderness, guarding or rebound"],
+      "abnormal": false
+    },
+    {
+      "system": "ENT/Head & Neck",
+      "findings": ["Airway clear, no secretions, no swelling or goitre, no trauma", "Mallampati 2", "Full range of neck motion"],
+      "abnormal": false
+    },
+    {
+      "system": "General",
+      "findings": ["Will cough and choke if given anything to drink (bulbar weakness / unsafe swallow)"],
+      "abnormal": true,
+      "note": "Bedside swallow demonstrates an unprotected airway — a key indication for intubation in this case."
+    }
+  ],
+  "actors": [
+    {
+      "id": "patient",
+      "role": "Patient (EK)",
+      "voice": "Breathless, frightened, short fragmented phrases with pauses to breathe.",
+      "persona": "See patient.persona. Answers only what is asked; symptoms fluctuate and are worse at end of day.",
+      "script": []
+    },
+    {
+      "id": "ems",
+      "role": "EMS",
+      "voice": "Calm, collected, but concerned.",
+      "persona": "Paramedic handing over on arrival.",
+      "script": [
+        "We were called 20 minutes ago for difficulty breathing. She was sitting tripod, tachypnoeic, couldn't finish sentences. O2 sat on scene was 96% on room air so we put her on oxygen for comfort. BP and HR are otherwise normal. Her husband is right behind us by car."
+      ]
+    },
+    {
+      "id": "husband",
+      "role": "Husband",
+      "voice": "Concerned, anxious; wants to know what is going on.",
+      "persona": "Arrives ~5 minutes after the patient. Does not speak until asked to give history.",
+      "script": [
+        "Gives the 3-month collateral history when asked (see history.husband_collateral).",
+        "If learners seem unsure of the cause, volunteers that her mother had some neuromuscular condition he can't name (see history.husband_family_history)."
+      ]
+    },
+    {
+      "id": "nurse",
+      "role": "Nurse",
+      "voice": "Calm, prompting.",
+      "persona": "Bedside nurse who can prompt the team.",
+      "script": [
+        "If no collateral history is taken, prompts the team to speak with the husband.",
+        "Confirms the neuromuscular-blocker dose before administration."
+      ]
+    },
+    {
+      "id": "rt",
+      "role": "Respiratory Therapist",
+      "voice": "Matter-of-fact.",
+      "persona": "Assists with bedside respiratory measurements and intubation.",
+      "script": ["Reports vital capacity and negative inspiratory force when asked."]
+    },
+    {
+      "id": "neuro",
+      "role": "Neurology consultant",
+      "voice": "Measured, teaching tone.",
+      "persona": "Phone/bedside consult.",
+      "script": [
+        "If not already done, prompts plasma exchange and corticosteroids.",
+        "Notes that pyridostigmine is NOT used in myasthenic crisis."
+      ]
+    },
+    {
+      "id": "icu",
+      "role": "ICU consultant",
+      "voice": "Busy but helpful.",
+      "persona": "Accepts the patient for admission.",
+      "script": [
+        "If called early, says they will come in 20 minutes — keep working the case meanwhile.",
+        "If the team is stuck, calls back and accepts the patient to ICU with myasthenia gravis as the working diagnosis."
+      ]
+    }
+  ],
+  "investigations": [
+    {
+      "id": "vbg",
+      "name": "Venous blood gas",
+      "category": "lab",
+      "result": "pH 7.31, pCO2 55 mmHg, pO2 (venous) 42 mmHg, HCO3 26 mmol/L, lactate 1.4 — early hypercapnic (type 2) respiratory failure from neuromuscular fatigue.",
+      "available_after_seconds": 120
+    },
+    {
+      "id": "cbc_lytes",
+      "name": "CBC, electrolytes, renal function",
+      "category": "lab",
+      "result": "CBC, electrolytes, urea/creatinine all within normal limits. No leukocytosis."
+    },
+    {
+      "id": "ecg",
+      "name": "ECG",
+      "category": "ecg",
+      "result": "Sinus tachycardia at ~105 bpm. No ischaemic changes, normal intervals.",
+      "visual_dx": "sinus tachycardia"
+    },
+    {
+      "id": "cxr",
+      "name": "Chest X-ray",
+      "category": "imaging",
+      "result": "No acute consolidation, effusion or pneumothorax. Possible subtle anterior mediastinal fullness.",
+      "visual_dx": "normal chest, no acute cardiopulmonary process"
+    },
+    {
+      "id": "vital_capacity",
+      "name": "Bedside vital capacity (VC)",
+      "category": "bedside",
+      "result": "VC < 20 mL/kg (and falling) — below the threshold that mandates intubation in neuromuscular respiratory failure.",
+      "available_after_seconds": 60
+    },
+    {
+      "id": "nif",
+      "name": "Negative inspiratory force (NIF)",
+      "category": "bedside",
+      "result": "NIF approximately -25 cmH2O — markedly weak inspiratory effort.",
+      "available_after_seconds": 60
+    },
+    {
+      "id": "ct_head",
+      "name": "CT head",
+      "category": "imaging",
+      "result": "Normal."
+    },
+    {
+      "id": "ct_chest",
+      "name": "CT chest (with contrast)",
+      "category": "imaging",
+      "result": "Anterior mediastinal soft-tissue mass measuring 5 x 3 x 3.6 cm, suggestive of thymoma. (MRN 5854769)."
+    }
+  ],
+  "initial_state": "baseline",
+  "states": [
+    {
+      "id": "baseline",
+      "name": "Baseline — undifferentiated respiratory distress",
+      "order": 1,
+      "vitals": {
+        "rhythm": "Sinus",
+        "heart_rate": 105,
+        "blood_pressure": "126/84",
+        "respiratory_rate": 35,
+        "oxygen_saturation": 99,
+        "temperature_c": 37.1,
+        "gcs": "15",
+        "fio2": "6 L O2"
+      },
+      "patient_status": "Awake, tachypnoeic with shallow breathing. On an oxygen mask. Unable to complete full sentences.",
+      "expected_actions": [
+        "Quick primary assessment (ABCDE)",
+        "Obtain collateral history from the husband",
+        "Focused neurological exam",
+        "ECG, CXR and labs including a blood gas"
+      ],
+      "modifiers": [],
+      "cues": [
+        {
+          "text": "If no collateral history is taken, the nurse prompts the team to speak with the husband.",
+          "actor_id": "nurse",
+          "when": "no collateral history obtained"
+        }
+      ],
+      "transitions": [
+        {
+          "to_state": "recognition",
+          "description": "Completes a focused assessment and recognises a neuromuscular pattern of respiratory failure (collateral history + neuro exam pointing to myasthenia gravis).",
+          "kind": "action",
+          "keywords": ["neuro exam", "neurological exam", "collateral", "history", "vital capacity", "blood gas", "vbg"],
+          "patient_effect": "Picture consolidates: fatigable weakness with bulbar and respiratory involvement."
+        },
+        {
+          "to_state": "recognition",
+          "description": "Time passes without the picture being pieced together.",
+          "kind": "time",
+          "after_seconds": 240
+        }
+      ],
+      "facilitator_notes": "Learners should focus on a quick primary and secondary assessment. Collateral history from the husband should point toward a neurogenic cause of respiratory failure, with myasthenia gravis most probable.",
+      "is_terminal": false
+    },
+    {
+      "id": "recognition",
+      "name": "Recognition — neuromuscular respiratory failure",
+      "order": 2,
+      "vitals": {
+        "rhythm": "Sinus",
+        "heart_rate": 106,
+        "blood_pressure": "125/78",
+        "respiratory_rate": 30,
+        "oxygen_saturation": 98,
+        "temperature_c": 37.1,
+        "gcs": "15",
+        "fio2": "6 L O2"
+      },
+      "patient_status": "Awake, tachypnoeic with shallow breathing. On an oxygen mask. Unable to complete full sentences. First VBG results are back.",
+      "expected_actions": [
+        "Recognise respiratory status is due to respiratory-muscle fatigue, not a primary lung problem",
+        "Note the unprotected airway (coughs/chokes on drinking) and neck flexion < 3/5",
+        "Decide on elective intubation and mechanical ventilation"
+      ],
+      "modifiers": [
+        {
+          "description": "If intubation is delayed, the patient becomes more distressed and hypoxic as the respiratory muscles fail.",
+          "when": "on_inaction",
+          "after_seconds": 180,
+          "keywords": ["intubate", "intubation", "rsi"],
+          "set_vitals": {"respiratory_rate": 38, "oxygen_saturation": 90, "heart_rate": 115}
+        }
+      ],
+      "cues": [
+        {
+          "text": "If learners are unsure about the cause, the husband mentions that the patient's mother had a neuromuscular condition he cannot name.",
+          "actor_id": "husband",
+          "when": "team unsure of diagnosis"
+        }
+      ],
+      "transitions": [
+        {
+          "to_state": "intubation_prep",
+          "description": "Opts for elective intubation and prepares the team for a controlled airway.",
+          "kind": "action",
+          "keywords": ["intubate", "intubation", "rsi", "secure airway", "prepare airway"],
+          "patient_effect": "Team moves to a controlled, elective intubation."
+        }
+      ],
+      "facilitator_notes": "The unsafe swallow and poor neck flexion (a bedside surrogate for respiratory-muscle strength), together with VC < 20 mL/kg, justify elective intubation before frank failure.",
+      "is_terminal": false
+    },
+    {
+      "id": "intubation_prep",
+      "name": "Intubation — paralytic dosing matters",
+      "order": 3,
+      "vitals": {
+        "rhythm": "Sinus",
+        "heart_rate": 110,
+        "blood_pressure": "126/84",
+        "respiratory_rate": 29,
+        "oxygen_saturation": 96,
+        "temperature_c": 37.1,
+        "gcs": "15",
+        "fio2": "6 L O2"
+      },
+      "patient_status": "Awake, tachypnoeic, shallow breathing on oxygen, still unable to complete full sentences. RT reports VC < 20 mL/kg and NIF ~ -25 cmH2O.",
+      "expected_actions": [
+        "Perform a rapid airway assessment and prepare the team for intubation",
+        "Account for altered neuromuscular-blocker dosing in myasthenia gravis",
+        "Have RT measure vital capacity / NIF"
+      ],
+      "modifiers": [],
+      "cues": [
+        {
+          "text": "The nurse confirms the neuromuscular-blocker dose before administration.",
+          "actor_id": "nurse",
+          "when": "before giving a paralytic"
+        }
+      ],
+      "transitions": [
+        {
+          "to_state": "post_intubation",
+          "description": "Intubates successfully with appropriate neuromuscular-blocker dosing (resistance to succinylcholine requiring a larger dose; sensitivity to rocuronium requiring a smaller dose).",
+          "kind": "action",
+          "keywords": ["rocuronium", "adjusted dose", "increased succinylcholine", "higher dose succinylcholine", "appropriate dose", "successful intubation"],
+          "patient_effect": "Airway secured; patient sedated and ventilated."
+        },
+        {
+          "to_state": "pea_arrest",
+          "description": "Gives a standard dose of succinylcholine: the mouth stays clenched; if forced or if intubation is too slow, the patient gags, vomits and aspirates.",
+          "kind": "action",
+          "keywords": ["standard dose succinylcholine", "succinylcholine 1.5", "usual dose succinylcholine", "normal dose succinylcholine"],
+          "patient_effect": "Failed paralysis and aspiration precipitate decompensation.",
+          "critical_error": true
+        }
+      ],
+      "facilitator_notes": "In myasthenia there is relative resistance to succinylcholine (needs larger doses) and relative sensitivity to non-depolarising agents such as rocuronium (needs smaller doses). RT assists with VC/NIF measurement.",
+      "is_terminal": false
+    },
+    {
+      "id": "post_intubation",
+      "name": "Post-intubation — disposition and crisis management",
+      "order": 4,
+      "vitals": {
+        "rhythm": "Sinus",
+        "heart_rate": 90,
+        "blood_pressure": "130/84",
+        "respiratory_rate": 16,
+        "oxygen_saturation": 97,
+        "temperature_c": 37.1,
+        "gcs": "intubated",
+        "fio2": "ventilated"
+      },
+      "patient_status": "Intubated and sedated, ventilated and stable.",
+      "expected_actions": [
+        "Urgent ICU and Neurology consults for admission",
+        "Consider plasma exchange or IVIG (confirm dose with Neurology)",
+        "Begin high-dose glucocorticoids",
+        "Consider and exclude alternative diagnoses (e.g. Guillain-Barré, ALS)"
+      ],
+      "modifiers": [
+        {
+          "description": "If ICU is called early, they will come in 20 minutes — the team should keep excluding other conditions and may order further investigations meanwhile.",
+          "when": "on_action",
+          "keywords": ["icu", "consult"]
+        }
+      ],
+      "cues": [
+        {
+          "text": "If the team is stuck, ICU calls back and accepts the patient with myasthenia gravis as the working diagnosis.",
+          "actor_id": "icu",
+          "when": "team stuck on disposition"
+        },
+        {
+          "text": "If not already done, Neurology prompts plasma exchange and corticosteroids, and notes that pyridostigmine is not used in myasthenic crisis.",
+          "actor_id": "neuro",
+          "when": "plasma exchange / steroids not yet started"
+        }
+      ],
+      "transitions": [
+        {
+          "to_state": "disposition",
+          "description": "Patient accepted to ICU with crisis therapy initiated.",
+          "kind": "manual",
+          "patient_effect": "Admitted to ICU on plasma exchange/IVIG and steroids."
+        }
+      ],
+      "facilitator_notes": "Recognise that pyridostigmine is NOT used in myasthenic crisis. Immediate management: admit to ICU, monitor respiratory muscle strength, plasma exchange or IVIG, and high-dose glucocorticoids.",
+      "is_terminal": false
+    },
+    {
+      "id": "pea_arrest",
+      "name": "PEA arrest (hypoxic)",
+      "order": 5,
+      "vitals": {
+        "rhythm": "PEA",
+        "heart_rate": null,
+        "blood_pressure": null,
+        "respiratory_rate": null,
+        "oxygen_saturation": 82,
+        "temperature_c": 37.1,
+        "gcs": "3"
+      },
+      "patient_status": "Unresponsive, pulseless electrical activity.",
+      "expected_actions": [
+        "Recognise an unshockable cardiac arrest",
+        "Recognise PEA is most likely secondary to hypoxia",
+        "Secure the airway and oxygenate; high-quality CPR"
+      ],
+      "modifiers": [],
+      "cues": [],
+      "transitions": [
+        {
+          "to_state": "post_intubation",
+          "description": "Once intubated/oxygenated, after ~2 minutes of CPR the patient achieves ROSC and is moved toward ICU.",
+          "kind": "time",
+          "after_seconds": 120,
+          "patient_effect": "ROSC achieved after correcting hypoxia; patient now intubated and stabilising."
+        }
+      ],
+      "facilitator_notes": "PEA here is a hypoxic arrest from failed airway management. The reversible cause is hypoxia — oxygenate and ventilate. ROSC follows once the airway is secured.",
+      "is_terminal": false
+    },
+    {
+      "id": "disposition",
+      "name": "Disposition — admitted to ICU",
+      "order": 6,
+      "vitals": {
+        "rhythm": "Sinus",
+        "heart_rate": 88,
+        "blood_pressure": "128/80",
+        "respiratory_rate": 16,
+        "oxygen_saturation": 98,
+        "temperature_c": 37.1,
+        "gcs": "intubated",
+        "fio2": "ventilated"
+      },
+      "patient_status": "Intubated, sedated and admitted to ICU with myasthenic crisis treatment under way.",
+      "expected_actions": [],
+      "modifiers": [],
+      "cues": [],
+      "transitions": [],
+      "facilitator_notes": "End state. Proceed to debrief.",
+      "is_terminal": true
+    }
+  ],
+  "debrief": {
+    "summary": "Myasthenic crisis is a life-threatening exacerbation of myasthenia gravis defined as worsening myasthenic weakness requiring intubation or non-invasive ventilation. In ~20% of patients presenting in crisis, it is the first manifestation of myasthenia gravis. This patient's crisis was likely precipitated by infection and by ciprofloxacin.",
+    "teaching_points": [
+      "Assess respiratory function in neuromuscular disease with bedside measures (vital capacity, NIF, neck flexion, single-breath count, swallow/secretions) rather than relying on SpO2 — desaturation is a late sign.",
+      "Intubate electively when respiratory-muscle strength is failing (e.g. VC < 20-30 mL/kg, weak cough, unsafe swallow) rather than waiting for arrest.",
+      "Neuromuscular blockers in MG: relative RESISTANCE to depolarising agents (succinylcholine — needs larger doses) and marked SENSITIVITY to non-depolarising agents (rocuronium/vecuronium — needs smaller doses, reverse with sugammadex).",
+      "Immediate crisis management: ICU admission, frequent monitoring of respiratory muscle strength, plasma exchange OR IVIG (400 mg/kg/day x5 days), and high-dose glucocorticoids.",
+      "Pyridostigmine is NOT used in myasthenic crisis.",
+      "Look for a precipitant (infection, surgery) and for an offending drug."
+    ],
+    "common_errors": [
+      "Treating the picture as a primary pulmonary problem and missing the neuromuscular cause.",
+      "Relying on SpO2 and delaying intubation until frank respiratory failure or arrest.",
+      "Giving a standard dose of succinylcholine and failing to account for altered NMBA dynamics in MG.",
+      "Using pyridostigmine in crisis."
+    ],
+    "discussion": [
+      {
+        "question": "What special precautions apply to neuromuscular blockers in myasthenia gravis?",
+        "answer": "Use caution with NMBAs. Patients are resistant to depolarising agents (succinylcholine — larger doses) and very sensitive to non-depolarising agents (rocuronium, vecuronium, cisatracurium — small doses, prolonged effect). If an NMBA is needed, prefer rocuronium/vecuronium and reverse with sugammadex."
+      },
+      {
+        "question": "Other than myasthenia gravis, what can present with similar neuromuscular respiratory failure?",
+        "answer": "The most common other causes of acute neuromuscular respiratory failure are Guillain-Barré syndrome and amyotrophic lateral sclerosis."
+      },
+      {
+        "question": "Which medications can unmask or worsen myasthenia gravis?",
+        "answer": "Antibiotics (aminoglycosides such as gentamicin; fluoroquinolones such as ciprofloxacin/levofloxacin; macrolides such as azithromycin/erythromycin), beta-blockers, procainamide, magnesium, chloroquine, gabapentin, phenytoin, lithium, and corticosteroids (can transiently worsen before they help)."
+      }
+    ],
+    "references": [
+      "UpToDate: Myasthenic crisis. https://www.uptodate.com/contents/myasthenic-crisis"
+    ]
+  }
+}

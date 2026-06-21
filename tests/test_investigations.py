@@ -327,7 +327,7 @@ def test_ecg_uses_deterministic_visual_path_without_generic_generator() -> None:
     result = InvestigationService(generic_generator=fake).get_result(mi_case(), "EKG")
 
     assert result.visual_payload is not None
-    assert result.visual_payload.type == "svg"
+    assert result.visual_payload.type in ("svg", "image")
     assert fake.calls == []
 
 
@@ -524,8 +524,10 @@ def test_troponin_result_is_normal_for_non_cardiac_case() -> None:
     assert "normal limits" in result.summary
 
 
-def test_ecg_visual_payload_contains_svg_and_all_leads() -> None:
+def test_ecg_visual_payload_contains_svg_and_all_leads(monkeypatch) -> None:
+    from backend import ecg_service as ecg_service_mod
     from backend.ecg_service import ECGService
+    from backend.ptbxl_service import PTBXLService
     from schemas.ecg import ALL_LEADS, ECGParameters, LeadFindings
 
     class StubECGParameterAgent:
@@ -535,6 +537,14 @@ def test_ecg_visual_payload_contains_svg_and_all_leads() -> None:
                 rhythm="sinus",
                 leads={lead: LeadFindings() for lead in ALL_LEADS},
             )
+
+    # Force the legacy SVG fallback path even if PTB-XL is installed locally.
+    from pathlib import Path
+    monkeypatch.setattr(
+        ecg_service_mod,
+        "get_ptbxl_service",
+        lambda: PTBXLService(base_dir=Path("/nonexistent-ptbxl")),
+    )
 
     service = ECGService(agent=StubECGParameterAgent())
     visual_payload = service.build_visual_payload("test diagnosis", heart_rate=72)

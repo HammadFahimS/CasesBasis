@@ -16,11 +16,13 @@ BODY_SYSTEM_KEYWORDS = {
         "cardiac",
         "heart",
         "coronary",
-        "chest",
-        "pressure",
-        "palpitation",
-        "syncope",
         "arrhythmia",
+        "angina",
+        "myocardial",
+        "atrial",
+        "ventricular",
+        "endocard",
+        "myocard",
     },
     "respiratory": {
         "respiratory",
@@ -34,19 +36,31 @@ BODY_SYSTEM_KEYWORDS = {
         "dyspnea",
         "breath",
         "hypoxia",
+        "hypoxemia",
+        "hypercapnia",
+        "sputum",
+        "pleurit",
+        # Chest symptoms belong to respiratory just as much as cardiac
+        "chest",
     },
     "neurologic": {
         "neuro",
         "brain",
         "stroke",
         "seizure",
-        "headache",
-        "confusion",
-        "weakness",
         "numbness",
         "speech",
-        "dizzy",
-        "dizziness",
+        "aphasia",
+        "ataxia",
+        "nystagmus",
+        "hemiplegia",
+        "meningism",
+        "meningeal",
+        # Specific neurologic signs not seen as secondary effects of other systems
+        "photophobia",
+        "phonophobia",
+        "nuchal",
+        "focal",
     },
     "gastrointestinal": {
         "abdominal",
@@ -55,11 +69,13 @@ BODY_SYSTEM_KEYWORDS = {
         "intestinal",
         "bowel",
         "liver",
+        "hepat",
         "pancrea",
         "append",
-        "nausea",
-        "vomit",
         "diarrhea",
+        "melena",
+        "hematemesis",
+        "ileus",
     },
     "genitourinary": {
         "urinary",
@@ -70,6 +86,7 @@ BODY_SYSTEM_KEYWORDS = {
         "flank",
         "dysuria",
         "pelvic",
+        "hematuria",
     },
     "dermatologic": {
         "skin",
@@ -78,6 +95,8 @@ BODY_SYSTEM_KEYWORDS = {
         "itch",
         "lesion",
         "blister",
+        "urticaria",
+        "erythema",
     },
     "musculoskeletal": {
         "joint",
@@ -85,10 +104,14 @@ BODY_SYSTEM_KEYWORDS = {
         "bone",
         "back",
         "limb",
-        "swelling",
-        "trauma",
         "fracture",
+        "myalgia",
+        "arthralgia",
+        "arthritis",
+        "trauma",
     },
+    # Systemic covers non-specific symptoms that appear as secondary effects across
+    # many primary-system diseases. Symptoms matched here are never "unrelated".
     "systemic": {
         "sepsis",
         "septic",
@@ -101,7 +124,6 @@ BODY_SYSTEM_KEYWORDS = {
         "weakness",
         "sweat",
         "dehydration",
-        # non-specific symptoms that appear across many system diseases
         "nausea",
         "vomit",
         "diaphoresis",
@@ -110,10 +132,32 @@ BODY_SYSTEM_KEYWORDS = {
         "anxiety",
         "restless",
         "pain",
+        # Non-specific neurological: these are secondary effects of hypoxia, metabolic
+        # disturbance, or low perfusion — not primary neurologic disease.
+        "confusion",
+        "altered",
+        "agitation",
+        "lethargy",
+        "drowsy",
+        "headache",
+        "dizzy",
+        "dizziness",
+        "lightheaded",
+        "syncope",
+        # Haemodynamic / secondary circulatory symptoms
+        "tachycardia",
+        "palpitation",
+        "pressure",
+        "hypotension",
+        # Fluid / perfusion secondary symptoms
+        "edema",
+        "swelling",
+        "cyanosis",
     },
 }
 
 GENERAL_SYMPTOM_SYSTEMS = {"systemic"}
+
 SEVERE_TERMS = {
     "shock",
     "severe",
@@ -127,6 +171,40 @@ SEVERE_TERMS = {
 }
 MILD_TERMS = {"mild", "early", "stable", "minor", "gradual"}
 LOW_HR_JUSTIFICATION_TERMS = {"bradycardia", "heart block", "beta blocker", "neurogenic", "spinal"}
+
+# Documented pathophysiological relationships: when the primary diagnosis system
+# is X, symptoms from these additional systems are clinically expected as
+# downstream / secondary manifestations.
+#
+# NOTE: "neurologic" is intentionally absent from "respiratory" because
+# hypoxia-driven confusion, altered mental status, and lethargy have been
+# moved to the `systemic` bucket above — no explicit cross-system mapping
+# is needed, and including it would incorrectly allow specific focal
+# neurologic presentations (e.g. meningism) on respiratory diagnoses.
+EXPECTED_SECONDARY_SYSTEMS: dict[str, set[str]] = {
+    "respiratory": {
+        "cardiac",          # cor pulmonale, compensatory tachycardia (also in systemic)
+        "musculoskeletal",  # accessory muscle use during respiratory distress
+    },
+    "cardiac": {
+        "respiratory",      # pulmonary oedema → dyspnoea, tachypnoea
+        "gastrointestinal", # hepatic congestion, nausea
+    },
+    "neurologic": {
+        "musculoskeletal",  # motor deficits, paralysis
+        "gastrointestinal", # dysphagia, aspiration
+    },
+    "gastrointestinal": {
+        "musculoskeletal",  # referred pain, guarding, rigidity
+    },
+    "genitourinary": {
+        "gastrointestinal", # referred / peritoneal pain
+        "musculoskeletal",  # flank radiation
+    },
+    "musculoskeletal": {
+        "neurologic",       # nerve compression, radiculopathy
+    },
+}
 
 
 def validate_medical_realism(case: ClinicalCase) -> None:
@@ -146,26 +224,40 @@ def check_symptoms_match_diagnosis(case: ClinicalCase) -> list[str]:
     if not diagnosis_systems or "systemic" in diagnosis_systems:
         return []
 
+    # Primary systems + universal systemic bucket + known downstream secondaries
+    allowed_systems = diagnosis_systems | GENERAL_SYMPTOM_SYSTEMS
+    for primary in diagnosis_systems:
+        allowed_systems |= EXPECTED_SECONDARY_SYSTEMS.get(primary, set())
+
     issues: list[str] = []
     justified_text = non_symptom_case_text(case)
     related_count = 0
     unrelated_symptoms: list[str] = []
+    classified_count = 0
 
     for symptom in case.symptoms:
         symptom_systems = classify_text(symptom)
         if not symptom_systems:
+            # Unclassifiable symptom — skip, do not penalise
             continue
-        if symptom_systems.intersection(diagnosis_systems | GENERAL_SYMPTOM_SYSTEMS):
+        classified_count += 1
+        if symptom_systems.intersection(allowed_systems):
             related_count += 1
             continue
         if symptom_is_justified(symptom, justified_text):
             continue
         unrelated_symptoms.append(symptom)
 
-    if related_count == 0:
+    if classified_count > 0 and related_count == 0:
         issues.append("symptoms do not logically relate to the diagnosis body system")
-    if len(unrelated_symptoms) >= 1:
-        issues.append("unrelated symptom systems are present without justification")
+
+    # Require a proportional fraction of symptoms to be unrelated before flagging.
+    # Real presentations routinely involve 1-2 cross-system symptoms; we only fire
+    # when a meaningful fraction of the symptom list is clearly off-system.
+    unrelated_threshold = max(1, round(classified_count * 0.4))
+    if len(unrelated_symptoms) >= unrelated_threshold:
+        issues.append("symptoms from unrelated symptom systems are present without justification")
+
     return issues
 
 

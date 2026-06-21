@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-import re
+import logging
 
 from agents.base import OpenAIJsonAgent
 from agents.prompt_loader import load, render
+from backend.diagnosis_guard import contains_diagnosis_leak, scrub_finding_text
 from schemas.clinical_case import ClinicalCase
 from schemas.physical_exam import ExamFinding, PhysicalExamResponse
+
+logger = logging.getLogger(__name__)
 
 
 class PhysicalExamAgent(OpenAIJsonAgent):
@@ -35,7 +38,7 @@ class PhysicalExamAgent(OpenAIJsonAgent):
             user_prompt=prompt,
             response_model=PhysicalExamResponse,
         )
-        return [_redact_finding(f, case.diagnosis) for f in result.results]
+        return [_scrub_finding(f, case.diagnosis) for f in result.results]
 
 
 def _format_ground_truth(systems: list[str], exam_findings: dict[str, list[str]]) -> str:
@@ -47,16 +50,46 @@ def _format_ground_truth(systems: list[str], exam_findings: dict[str, list[str]]
     return "\n".join(lines) if lines else "None"
 
 
-def _redact_finding(finding: ExamFinding, diagnosis: str) -> ExamFinding:
-    """Scrub any accidental diagnosis mention from finding text."""
-    if not diagnosis.strip():
-        return finding
-    pattern = re.compile(re.escape(diagnosis.strip()), re.IGNORECASE)
-    redacted_findings = [pattern.sub("the condition", text) for text in finding.findings]
-    redacted_summary = pattern.sub("the condition", finding.summary)
+def _scrub_finding(finding: ExamFinding, diagnosis: str) -> ExamFinding:
+    """Run every observable text field through the central guard pipeline.
+
+    Substitutes diagnosis aliases and drops interpretive clauses ("consistent
+    with...", "likely cardiac", etc.). Any sentence the LLM used to
+    editorialize gets removed; the safe observation portion is kept.
+    """
+    cleaned_findings: list[str] = []
+    for raw in finding.findings:
+        scrubbed = scrub_finding_text(raw, diagnosis)
+        if not scrubbed:
+            logger.warning(
+                "physical_exam: dropped finding (entirely interpretive): %r",
+                raw,
+            )
+            continue
+        if scrubbed != raw and contains_diagnosis_leak(raw, diagnosis):
+            logger.warning(
+                "physical_exam: scrubbed leak in finding: %r → %r",
+                raw, scrubbed,
+            )
+        cleaned_findings.append(scrubbed)
+
+    summary = scrub_finding_text(finding.summary, diagnosis)
+    if summary != finding.summary and contains_diagnosis_leak(finding.summary, diagnosis):
+        logger.warning(
+            "physical_exam: scrubbed leak in summary: %r → %r",
+            finding.summary, summary,
+        )
+
+    # If everything got stripped, fall back to a neutral placeholder so the
+    # schema's required string fields don't end up empty.
+    if not summary:
+        summary = "Examination unremarkable."
+    if not cleaned_findings:
+        cleaned_findings = ["Examination unremarkable."]
+
     return ExamFinding(
         system=finding.system,
-        findings=redacted_findings,
-        summary=redacted_summary,
+        findings=cleaned_findings,
+        summary=summary,
         abnormal=finding.abnormal,
     )

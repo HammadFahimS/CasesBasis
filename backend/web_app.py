@@ -13,10 +13,14 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from agents.physical_exam_agent import PhysicalExamAgent
 from backend.auth import (
@@ -69,9 +73,48 @@ async def lifespan(app: FastAPI):
     import logging
     import os
 
+    # These must be set before torch is imported for the first time.
+    # PyTorch's OMP/MKL thread pool creates one POSIX semaphore per worker
+    # thread. On a multi-core Mac that's ~35 semaphores. Python's
+    # resource_tracker atexit handler runs before PyTorch's C++ static
+    # destructors, so it incorrectly warns about "leaked" semaphores on every
+    # clean shutdown. Limiting the pool to 1 thread prevents the large
+    # allocation entirely — inference on short text strings doesn't benefit
+    # from parallelism anyway.
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("MKL_NUM_THREADS", "1")
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
+    # ── Startup environment validation ─────────────────────────────────────────
+    env = os.getenv("ENV", "development").lower()
+    provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+    _required: dict[str, str] = {
+        "groq": "GROQ_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "together": "TOGETHER_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
+        "cerebras": "CEREBRAS_API_KEY",
+    }
+    if provider in _required and not os.getenv(_required[provider]):
+        raise RuntimeError(
+            f"LLM_PROVIDER is '{provider}' but {_required[provider]} is not set. "
+            "Add it to your .env file."
+        )
+    if env == "production" and not os.getenv("APP_SECRET"):
+        raise RuntimeError(
+            "APP_SECRET must be set in production. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
 
     run_migrations()
+
+    from backend.simulated_case_repo import seed_gold_cases
+    try:
+        seed_gold_cases()
+    except Exception as exc:  # never block startup on seeding
+        logging.getLogger(__name__).warning("gold case seeding failed: %s", exc)
 
     from backend.cxr_service import _faiss_index
     logger = logging.getLogger(__name__)
@@ -81,17 +124,30 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # clean up torch thread-pool semaphores on shutdown
     _faiss_index._model = None
     gc.collect()
 
 
+_limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+
 app = FastAPI(title="Clinical Case Simulator", lifespan=lifespan)
+app.state.limiter = _limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+_allowed_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_origins or ["*"],  # "*" only until ALLOWED_ORIGINS is set in prod
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["content-type"],
+)
 
 
 @dataclass
 class WebSession:
     case: ClinicalCase
+    resident_id: str | None = None
     student_questions: list[str] = field(default_factory=list)
     patient_responses: list[str] = field(default_factory=list)
     investigations: list[InvestigationResult] = field(default_factory=list)
@@ -102,43 +158,129 @@ class WebSession:
     revealed_symptoms: list[str] = field(default_factory=list)
 
 
+def _strip(v: str) -> str:
+    return v.strip()
+
+
 class RequestLinkRequest(BaseModel):
     email: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if len(v) > 254:
+            raise ValueError("email too long")
+        return v
 
 
 class ResidentLoginRequest(BaseModel):
     resident_code: str
     last_name: str
 
+    @field_validator("resident_code", "last_name")
+    @classmethod
+    def validate_fields(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) > 100:
+            raise ValueError("value too long")
+        return v
+
 
 class GenerateCaseRequest(BaseModel):
     diagnosis: str
     difficulty: str = "medium"
+
+    @field_validator("diagnosis")
+    @classmethod
+    def validate_diagnosis(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("diagnosis is required")
+        if len(v) > 200:
+            raise ValueError("diagnosis must be under 200 characters")
+        return v
+
+    @field_validator("difficulty")
+    @classmethod
+    def validate_difficulty(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in ("easy", "medium", "hard"):
+            raise ValueError("difficulty must be easy, medium, or hard")
+        return v
 
 
 class QuestionRequest(BaseModel):
     session_id: str
     question: str
 
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("question is required")
+        if len(v) > 500:
+            raise ValueError("question must be under 500 characters")
+        return v
+
 
 class InvestigationRequest(BaseModel):
     session_id: str
     investigation: str
+
+    @field_validator("investigation")
+    @classmethod
+    def validate_investigation(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("investigation is required")
+        if len(v) > 200:
+            raise ValueError("investigation must be under 200 characters")
+        return v
 
 
 class InterpretationRequest(BaseModel):
     session_id: str
     interpretation: str
 
+    @field_validator("interpretation")
+    @classmethod
+    def validate_interpretation(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) > 2000:
+            raise ValueError("interpretation must be under 2000 characters")
+        return v
+
 
 class DiagnosisRequest(BaseModel):
     session_id: str
     diagnosis: str
 
+    @field_validator("diagnosis")
+    @classmethod
+    def validate_diagnosis(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("diagnosis is required")
+        if len(v) > 200:
+            raise ValueError("diagnosis must be under 200 characters")
+        return v
+
 
 class DoctorConsultRequest(BaseModel):
     session_id: str
     question: str
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("question is required")
+        if len(v) > 500:
+            raise ValueError("question must be under 500 characters")
+        return v
 
 
 class EvaluateRequest(BaseModel):
@@ -148,6 +290,21 @@ class EvaluateRequest(BaseModel):
 
 class PauseRequest(BaseModel):
     elapsed_seconds: int = 0
+
+
+class ECGRerenderRequest(BaseModel):
+    """Re-render the most recent ECG investigation at a different sample rate."""
+    session_id: str
+    sample_rate_hz: int = 500  # 100 or 500
+
+
+class ECGAlgorithmRequest(BaseModel):
+    """Inputs for the doctor-facing synthetic-ECG generator."""
+    diagnosis: str
+    heart_rate: int | None = None
+    age: int | None = None
+    gender: str | None = None
+    blood_pressure: str | None = None
 
 
 SESSIONS: dict[str, WebSession] = {}
@@ -162,9 +319,16 @@ GRAPH: ClinicalKnowledgeGraph | None = None
 PHYSICAL_EXAM_AGENT: PhysicalExamAgent | None = None
 
 
+# ── Health check ───────────────────────────────────────────────────────────────
+
+@app.get("/health")
+def health_check() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.get("/api/graph/{session_id}")
-def get_graph_data(session_id: str) -> dict[str, Any]:
-    get_session(session_id)
+def get_graph_data(session_id: str, http_request: Request) -> dict[str, Any]:
+    _get_owned_session(session_id, http_request)  # 404/403 if not the caller's
     try:
         import falkordb as _falkordb
         host = os.getenv("FALKORDB_HOST", "localhost")
@@ -213,18 +377,583 @@ def index() -> str:
 
 @app.get("/simulator", response_class=HTMLResponse)
 def simulator_page() -> str:
-    return HTML_PAGE
+    return _inject_drawer(HTML_PAGE)
 
 
-@app.get("/dashboard", response_class=HTMLResponse)
-def dashboard_page() -> str:
-    return (Path(__file__).parent / "static" / "dashboard.html").read_text()
+@app.get("/simulator/simulated", response_class=HTMLResponse)
+def simulated_intro_page() -> str:
+    """Intro / explainer page for the new simulated-dynamic-case mode.
+
+    Reached from the 'New case' chooser modal when the resident picks the
+    simulated option; the 'Start' button hands off to the simulator with
+    `?mode=simulated`. Standalone interstitial — it carries its own slim top
+    bar rather than the full home/analytics chrome."""
+    return (Path(__file__).parent / "static" / "simulated_intro.html").read_text()
+
+
+@app.get("/simulator/voice-room", response_class=HTMLResponse)
+def voice_room_page() -> str:
+    """Full-screen voice-driven simulation room (the simulated-case runtime UI).
+
+    Standalone immersive page; the case id is read from ?case= in JS and the
+    patient HUD + vitals are seeded from the loaded simulated case."""
+    return (Path(__file__).parent / "static" / "voice_room.html").read_text()
+
+
+# ── Voice model I/O (minimal request/response plumbing) ─────────────────────
+def _voice_session_payload(session: Any) -> dict[str, Any]:
+    """Seed data the Voice Room needs to render a freshly started session."""
+    case = session.case
+    engine = session.engine
+    return {
+        "session_id": session.id,
+        "case_id": case.id,
+        "meta": case.meta.model_dump(),
+        "patient": case.patient.model_dump(exclude_none=True),
+        "presentation": {
+            "chief_complaint": case.presentation.chief_complaint,
+            "opening_vignette": case.presentation.opening_vignette,
+        },
+        "vitals": engine.current_vitals().model_dump(exclude_none=True),
+        "state": {"id": engine.run.current_state_id, "name": engine.state.name},
+        # The case's own menu, so the panels offer only orderable tests / examinable
+        # systems / pageable consultants (everything here returns a real result).
+        "menu": {
+            "exam_systems": [e.system for e in case.exam],
+            "investigations": [
+                {"id": i.id, "name": i.name, "category": i.category}
+                for i in case.investigations
+            ],
+            "consultants": [
+                {"id": a.id, "role": a.role} for a in _case_consultants(case)
+            ],
+        },
+    }
+
+
+def _case_consultants(case: Any) -> list[Any]:
+    from backend.consult_voice import consultants
+    return consultants(case)
+
+
+def _persist_turn(session: Any, turn: Any) -> None:
+    """Write a session through after a turn (ended turns are parked as concluded)."""
+    from backend.voice_session import persist_session
+    persist_session(session, "ended" if getattr(turn, "ended", False) else "active")
+
+
+def _turn_payload(turn: Any) -> dict[str, Any]:
+    """The wire shape of one grounded turn — shared by the voice and action routes."""
+    return {
+        "reply": turn.reply,
+        "speaker": turn.speaker,
+        "vitals": turn.vitals,
+        "state": {"id": turn.state_id, "name": turn.state_name},
+        "revealed": turn.revealed,
+        "transitioned": turn.transitioned,
+        "critical": turn.critical_error,
+        "ended": turn.ended,
+        "clock_events": turn.clock_events,
+        "diagnostic": turn.diagnostic,
+    }
+
+
+@app.post("/api/voice/session")
+@_limiter.limit("30/minute")
+def api_voice_session(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Start a live engine-backed voice session for a case. Returns seed data."""
+    resident_id = require_resident(request)
+    case_id = (body.get("case_id") or "").strip()
+    if not case_id:
+        raise HTTPException(status_code=400, detail="case_id required")
+    from backend.nurse_brain import make_intent_matcher, opening_narration
+    from backend.voice_session import CaseNotFound, start_session
+    try:
+        session = start_session(case_id, resident_id, intent_matcher=make_intent_matcher())
+    except CaseNotFound:
+        raise HTTPException(status_code=404, detail="case not found")
+    payload = _voice_session_payload(session)
+    payload["intro"] = opening_narration(session)  # nurse's spoken bedside handoff
+    return payload
+
+
+@app.post("/api/voice/resume")
+@_limiter.limit("30/minute")
+def api_voice_resume(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Rehydrate a parked voice run for full visual resume (transcript + cards + state).
+
+    Returns the same seed shape as ``/api/voice/session`` plus the saved transcript
+    channels and diagnostics cards, and no ``intro`` — the handoff is not re-narrated."""
+    resident_id = require_resident(request)
+    session_id = (body.get("session_id") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    from backend.voice_session import AccessDenied, CaseNotFound, get_session
+    try:
+        session = get_session(session_id, resident_id)
+    except CaseNotFound:
+        raise HTTPException(status_code=404, detail="session not found")
+    except AccessDenied:
+        raise HTTPException(status_code=403, detail="access denied")
+    payload = _voice_session_payload(session)
+    payload["resumed"] = True
+    payload["history"] = session.history
+    payload["patient_history"] = session.patient_history
+    payload["cards"] = session.cards
+    return payload
+
+
+@app.post("/api/voice/stt")
+@_limiter.limit("60/minute")
+async def api_voice_stt(request: Request) -> dict[str, Any]:
+    """Speech-to-text. The browser POSTs the raw recorded audio as the body."""
+    require_resident(request)
+    audio = await request.body()
+    if not audio:
+        raise HTTPException(status_code=400, detail="empty audio")
+    content_type = request.headers.get("content-type", "audio/webm")
+    from backend.voice_service import transcribe
+    try:
+        text = transcribe(audio, content_type)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("STT failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"transcription failed: {exc}")
+    return {"text": text}
+
+
+@app.post("/api/voice/llm")
+@_limiter.limit("60/minute")
+def api_voice_llm(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """The nurse's reply to one resident utterance.
+
+    With a ``session_id`` the reply is grounded in the live SimulationEngine
+    (real vitals/results, state transitions). Without one it falls back to the
+    stateless generic nurse — both via the app's Cerebras provider."""
+    resident_id = require_resident(request)
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="empty text")
+
+    session_id = (body.get("session_id") or "").strip()
+    if not session_id:
+        from backend.voice_service import nurse_reply
+        try:
+            return {"reply": nurse_reply(text, body.get("history"))}
+        except Exception as exc:
+            logging.getLogger(__name__).warning("LLM reply failed: %s", exc)
+            raise HTTPException(status_code=502, detail=f"nurse reply failed: {exc}")
+
+    from backend.nurse_brain import run_turn
+    from backend.voice_session import AccessDenied, CaseNotFound, get_session
+    try:
+        session = get_session(session_id, resident_id)
+    except CaseNotFound:
+        raise HTTPException(status_code=404, detail="session not found")
+    except AccessDenied:
+        raise HTTPException(status_code=403, detail="access denied")
+    try:
+        turn = run_turn(session, text)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("nurse turn failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"nurse reply failed: {exc}")
+    _persist_turn(session, turn)
+    return _turn_payload(turn)
+
+
+@app.post("/api/voice/action")
+@_limiter.limit("60/minute")
+def api_voice_action(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """A grounded turn from an explicit panel click (examine a system, order a test,
+    call a consultant). Deterministic — skips the interpret LLM call — and returns
+    the same shape as ``/api/voice/llm`` so the front-end applies it identically."""
+    resident_id = require_resident(request)
+    session_id = (body.get("session_id") or "").strip()
+    op = (body.get("op") or "").strip()
+    target = (body.get("target") or "").strip() or None
+    if not session_id or not op:
+        raise HTTPException(status_code=400, detail="session_id and op required")
+
+    from backend.nurse_brain import OPS, run_action
+    if op not in OPS:
+        raise HTTPException(status_code=400, detail=f"unknown op: {op}")
+    from backend.voice_session import AccessDenied, CaseNotFound, get_session
+    try:
+        session = get_session(session_id, resident_id)
+    except CaseNotFound:
+        raise HTTPException(status_code=404, detail="session not found")
+    except AccessDenied:
+        raise HTTPException(status_code=403, detail="access denied")
+    try:
+        turn = run_action(session, op, target)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("voice action failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"action failed: {exc}")
+    _persist_turn(session, turn)
+    return _turn_payload(turn)
+
+
+@app.post("/api/voice/llm-patient")
+@_limiter.limit("60/minute")
+def api_voice_patient(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """The patient's in-character spoken reply (role-play, not engine-grounded)."""
+    resident_id = require_resident(request)
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="empty text")
+    session_id = (body.get("session_id") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    from backend.patient_voice import patient_reply
+    from backend.voice_session import AccessDenied, CaseNotFound, get_session
+    try:
+        session = get_session(session_id, resident_id)
+    except CaseNotFound:
+        raise HTTPException(status_code=404, detail="session not found")
+    except AccessDenied:
+        raise HTTPException(status_code=403, detail="access denied")
+    try:
+        reply = patient_reply(session, text)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("patient reply failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"patient reply failed: {exc}")
+    from backend.voice_session import persist_session
+    persist_session(session)  # the patient exchange is part of the resumable transcript
+    return {"reply": reply, "speaker": "patient"}
+
+
+@app.post("/api/voice/debrief")
+@_limiter.limit("30/minute")
+def api_voice_debrief(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Conclude a run and return its end-of-case debrief (auto-end or manual 'End case')."""
+    resident_id = require_resident(request)
+    session_id = (body.get("session_id") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    from backend.voice_debrief import build_debrief
+    from backend.voice_session import AccessDenied, CaseNotFound, end_session, get_session
+    try:
+        session = get_session(session_id, resident_id)
+    except CaseNotFound:
+        raise HTTPException(status_code=404, detail="session not found")
+    except AccessDenied:
+        raise HTTPException(status_code=403, detail="access denied")
+    try:
+        debrief = build_debrief(session)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("debrief build failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"debrief failed: {exc}")
+    end_session(session_id)  # viewing the debrief concludes the case
+    return debrief
+
+
+@app.post("/api/voice/pause")
+@_limiter.limit("60/minute")
+def api_voice_pause(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Park a run (status=paused) so the resident can leave and resume it later."""
+    resident_id = require_resident(request)
+    session_id = (body.get("session_id") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    from backend.voice_session import AccessDenied, CaseNotFound, get_session, persist_session
+    try:
+        session = get_session(session_id, resident_id)
+    except CaseNotFound:
+        raise HTTPException(status_code=404, detail="session not found")
+    except AccessDenied:
+        raise HTTPException(status_code=403, detail="access denied")
+    persist_session(session, "paused")
+    return {"ok": True}
+
+
+@app.post("/api/voice/unpause")
+@_limiter.limit("60/minute")
+def api_voice_unpause(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Resume a paused run in place: reset the clock so parked wall-time does not
+    advance the engine, and flip the status back to active."""
+    resident_id = require_resident(request)
+    session_id = (body.get("session_id") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    import time
+
+    from backend.voice_session import AccessDenied, CaseNotFound, get_session, persist_session
+    try:
+        session = get_session(session_id, resident_id)
+    except CaseNotFound:
+        raise HTTPException(status_code=404, detail="session not found")
+    except AccessDenied:
+        raise HTTPException(status_code=403, detail="access denied")
+    session.last_tick = time.monotonic()   # the time parked must not tick the engine
+    persist_session(session, "active")
+    return {"ok": True}
+
+
+@app.get("/api/voice/sessions")
+@_limiter.limit("60/minute")
+def api_voice_sessions(request: Request) -> dict[str, Any]:
+    """The resident's recent/resumable voice runs (for the home 'resume' surface)."""
+    resident_id = require_resident(request)
+    from backend import voice_persistence
+    from backend.simulated_case_repo import get_case
+    titles: dict[str, str] = {}
+    out = []
+    for s in voice_persistence.list_for_resident(resident_id):
+        cid = s["case_id"]
+        if cid not in titles:
+            row = get_case(cid)
+            titles[cid] = (row["case"].get("meta", {}).get("title") if row else None) or cid
+        out.append({**s, "title": titles[cid], "resumable": s["status"] != "ended"})
+    return {"sessions": out}
+
+
+@app.delete("/api/voice/sessions/{session_id}")
+@_limiter.limit("60/minute")
+def api_voice_session_delete(session_id: str, request: Request) -> dict[str, Any]:
+    """Delete one of the resident's voice runs (owner-scoped)."""
+    resident_id = require_resident(request)
+    from backend import voice_persistence, voice_session
+    if not voice_persistence.delete(session_id, resident_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    voice_session._SESSIONS.pop(session_id, None)   # drop any live copy too
+    return {"ok": True}
+
+
+# Default TTS voices per speaker (overridable via env). The nurse default lives
+# in voice_service; the patient is a distinct voice so the two are tellable apart.
+PATIENT_TTS_VOICE = os.getenv("TOGETHER_PATIENT_TTS_VOICE", "australian woman")
+# A consultant phoned by the resident should sound distinct from the bedside nurse.
+CONSULT_TTS_VOICE = os.getenv("TOGETHER_CONSULT_TTS_VOICE", "professional man")
+
+
+@app.post("/api/voice/tts")
+@_limiter.limit("60/minute")
+def api_voice_tts(body: dict[str, Any], request: Request) -> Response:
+    """Text-to-speech. Returns audio bytes (mp3) for the browser to play.
+
+    ``speaker`` selects the voice (nurse default vs patient); an explicit
+    ``voice`` still wins for auditioning."""
+    require_resident(request)
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="empty text")
+    voice = body.get("voice")
+    if not voice:
+        speaker = (body.get("speaker") or "").lower()
+        if speaker == "patient":
+            voice = PATIENT_TTS_VOICE
+        elif speaker == "consult":
+            voice = CONSULT_TTS_VOICE
+    from backend.voice_service import synthesize
+    try:
+        audio = synthesize(text, voice)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("TTS failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"synthesis failed: {exc}")
+    return Response(content=audio, media_type="audio/mpeg")
+
+
+@app.get("/api/voice/sample")
+def api_voice_sample(request: Request, voice: str | None = None, text: str | None = None) -> Response:
+    """Audition a TTS voice in the browser. GET so it's clickable.
+
+    e.g. /api/voice/sample?voice=professional%20woman"""
+    require_resident(request)
+    line = text or (
+        "Heart rate is one hundred ten, sinus tachycardia. Fifteen litres "
+        "non-rebreather is on — I'll read the gas back to you when it's up."
+    )
+    from backend.voice_service import synthesize
+    try:
+        audio = synthesize(line, voice)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"synthesis failed: {exc}")
+    return Response(content=audio, media_type="audio/mpeg")
+
+
+@app.get("/crud-simulations", response_class=HTMLResponse)
+def crud_simulations_page() -> str:
+    """CRUD catalogue for authored simulated dynamic cases."""
+    return _serve_with_chrome("crud_simulations.html")
+
+
+@app.get("/crud-simulations/edit", response_class=HTMLResponse)
+def crud_simulations_editor_page() -> str:
+    """Graph editor for one simulated case (case id read from ?id= in JS).
+
+    Standalone full-screen tool — carries its own slim top bar instead of the
+    shared chrome so the graph canvas gets the full viewport."""
+    return (Path(__file__).parent / "static" / "sim_case_editor.html").read_text()
+
+
+# ── Simulated-case CRUD API ─────────────────────────────────────────────────
+@app.get("/api/simulated-cases")
+def api_list_simulated_cases(http_request: Request) -> dict[str, Any]:
+    require_resident(http_request)
+    from backend.simulated_case_repo import list_cases as _list
+    return {"cases": _list()}
+
+
+@app.get("/api/simulated-cases/{case_id}")
+def api_get_simulated_case(case_id: str, http_request: Request) -> dict[str, Any]:
+    require_resident(http_request)
+    from backend.simulated_case_repo import get_case
+    case = get_case(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="case not found")
+    return case
+
+
+@app.post("/api/simulated-cases")
+@_limiter.limit("30/minute")
+def api_create_simulated_case(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    resident_id = require_resident(request)
+    from backend.simulated_case_repo import CaseValidationError, create_case
+    try:
+        return create_case(body.get("case", {}), body.get("layout", {}), created_by=resident_id)
+    except CaseValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.put("/api/simulated-cases/{case_id}")
+@_limiter.limit("60/minute")
+def api_update_simulated_case(case_id: str, body: dict[str, Any], request: Request) -> dict[str, Any]:
+    require_resident(request)
+    from backend.simulated_case_repo import (
+        CaseProtectedError,
+        CaseValidationError,
+        update_case,
+    )
+    try:
+        return update_case(case_id, body.get("case", {}), body.get("layout"))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="case not found")
+    except CaseProtectedError:
+        raise HTTPException(status_code=403, detail="gold cases cannot be edited — duplicate it first")
+    except CaseValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.delete("/api/simulated-cases/{case_id}")
+def api_delete_simulated_case(case_id: str, http_request: Request) -> dict[str, Any]:
+    require_resident(http_request)
+    from backend.simulated_case_repo import CaseProtectedError, delete_case
+    try:
+        delete_case(case_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="case not found")
+    except CaseProtectedError:
+        raise HTTPException(status_code=403, detail="gold cases cannot be deleted")
+    return {"ok": True}
+
+
+@app.post("/api/simulated-cases/{case_id}/duplicate")
+@_limiter.limit("30/minute")
+def api_duplicate_simulated_case(case_id: str, request: Request) -> dict[str, Any]:
+    resident_id = require_resident(request)
+    from backend.simulated_case_repo import duplicate_case
+    try:
+        return duplicate_case(case_id, created_by=resident_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="case not found")
+
+
+def _serve_with_chrome(filename: str) -> str:
+    """Inject the shared top-bar + drawer markup into a page.
+
+    Pages that opt into the new chrome contain a literal `<!--CHROME-->`
+    placeholder right after `<body>`; this helper swaps it for the contents
+    of `_chrome.html` at serve time so we don't duplicate ~150 lines of
+    markup across pages. The `<!--DRAWER-->` placeholder is also supported
+    for pages that have their own top bar but still need the drawer + burger
+    behaviour (simulator, ECG-algorithm).
+    """
+    static_dir = Path(__file__).parent / "static"
+    body = (static_dir / filename).read_text()
+    body = body.replace("<!--CHROME-->", (static_dir / "_chrome.html").read_text())
+    body = body.replace("<!--DRAWER-->", (static_dir / "_drawer.html").read_text())
+    return body
+
+
+def _inject_drawer(html: str) -> str:
+    """Swap a `<!--DRAWER-->` placeholder for the drawer-only partial."""
+    drawer = (Path(__file__).parent / "static" / "_drawer.html").read_text()
+    return html.replace("<!--DRAWER-->", drawer)
+
+
+@app.get("/home", response_class=HTMLResponse)
+def home_page() -> str:
+    """The new calm landing page after login — greeting, focus card, glance, recs."""
+    return _serve_with_chrome("home.html")
+
+
+@app.get("/analytics", response_class=HTMLResponse)
+def analytics_page() -> str:
+    """The dense analytics & performance view (was /dashboard)."""
+    return _serve_with_chrome("analytics.html")
+
+
+@app.get("/dashboard")
+def dashboard_redirect() -> RedirectResponse:
+    """Legacy `/dashboard` URL — kept as a redirect so old bookmarks still land
+    somewhere useful. The post-login default is now `/home`."""
+    return RedirectResponse(url="/home", status_code=302)
+
+
+@app.get("/ecg-algorithm", response_class=HTMLResponse)
+def ecg_algorithm_page() -> str:
+    """Doctor-facing review page for the synthetic ECG generation algorithm."""
+    return _serve_with_chrome("ecg_algorithm.html")
+
+
+@app.post("/api/ecg-algorithm/render")
+@_limiter.limit("20/minute")
+def render_synthetic_ecg(body: ECGAlgorithmRequest, request: Request) -> dict[str, Any]:
+    """Force the legacy LLM+numpy synthetic ECG path, regardless of PTB-XL.
+
+    Returns the SVG, the LLM-produced ECGParameters, and a markdown trace that
+    explains how the SVG was constructed. Used by the algorithm-review page so
+    clinicians can audit each step.
+    """
+    from agents.ecg import ECGParameterAgent
+    from agents.prompt_loader import load
+    from backend.ecg_algorithm import build_algorithm_markdown
+    from backend.ecg_synthesizer import synthesize_ecg_svg
+
+    diagnosis = (body.diagnosis or "").strip()
+    if not diagnosis:
+        raise HTTPException(status_code=400, detail="diagnosis is required")
+
+    agent = ECGParameterAgent()
+    params = agent.generate(diagnosis, heart_rate=body.heart_rate)
+    svg = synthesize_ecg_svg(params)
+    system_prompt = load("ecg", "system")
+    markdown = build_algorithm_markdown(
+        diagnosis=diagnosis,
+        heart_rate=body.heart_rate,
+        params=params,
+        system_prompt=system_prompt,
+        provider=agent.provider,
+        model=agent.model,
+        case_summary={
+            "age": body.age,
+            "gender": body.gender,
+            "blood_pressure": body.blood_pressure,
+        },
+    )
+    return {
+        "svg": svg,
+        "parameters": params.model_dump(),
+        "markdown": markdown,
+        "model": agent.model,
+        "provider": agent.provider,
+    }
 
 
 # ── Auth endpoints ─────────────────────────────────────────────────────────────
 
 @app.post("/api/auth/request-link")
-def request_magic_link(body: RequestLinkRequest) -> dict[str, str]:
+@_limiter.limit("5/minute")
+def request_magic_link(request: Request, body: RequestLinkRequest) -> dict[str, str]:
     import logging as _logging
     _logger = _logging.getLogger(__name__)
 
@@ -256,7 +985,7 @@ def verify_magic_link(token: str) -> RedirectResponse:
         raise HTTPException(status_code=400, detail="link already used or not found")
 
     cookie_value = make_session_cookie(resident_id)
-    redirect = RedirectResponse(url="/dashboard", status_code=302)
+    redirect = RedirectResponse(url="/home", status_code=302)
     redirect.set_cookie(
         COOKIE_NAME,
         cookie_value,
@@ -281,7 +1010,8 @@ def test_login(response: Response) -> dict[str, Any]:
 
 
 @app.post("/api/auth/login")
-def login_resident(body: ResidentLoginRequest, response: Response) -> dict[str, Any]:
+@_limiter.limit("10/minute")
+def login_resident(request: Request, body: ResidentLoginRequest, response: Response) -> dict[str, Any]:
     resident_id = find_resident_by_code(body.resident_code, body.last_name)
     if resident_id is None:
         raise HTTPException(status_code=404, detail="not_found")
@@ -290,7 +1020,8 @@ def login_resident(body: ResidentLoginRequest, response: Response) -> dict[str, 
 
 
 @app.post("/api/auth/signup")
-def signup_resident(body: ResidentLoginRequest, response: Response) -> dict[str, Any]:
+@_limiter.limit("5/minute")
+def signup_resident(request: Request, body: ResidentLoginRequest, response: Response) -> dict[str, Any]:
     existing = find_resident_by_code(body.resident_code, body.last_name)
     if existing:
         _set_auth_cookie(response, existing)
@@ -347,9 +1078,18 @@ def dashboard_stats(http_request: Request) -> dict[str, Any]:
     return get_resident_stats(resident_id)
 
 
+# Per-resident coaching-insight cache: resident_id -> (evaluation signature, insight).
+# The insight is a pure function of the recent evaluation set, so we only pay the
+# LLM call when that set actually changes (a new case completes), not on every
+# analytics page view.
+_COACHING_CACHE: dict[str, tuple[str, str]] = {}
+
+
 @app.get("/api/dashboard/coaching-insight")
 async def dashboard_coaching_insight(http_request: Request) -> dict[str, Any]:
     import asyncio
+    import hashlib
+
     from agents.base import build_llm_client, get_llm_provider, resolve_model
 
     resident_id = require_resident(http_request)
@@ -375,6 +1115,13 @@ async def dashboard_coaching_insight(http_request: Request) -> dict[str, Any]:
             lines.append(f"  Feedback: {brief}")
         summaries.append("\n".join(lines))
 
+    # The insight depends only on this evaluation set — serve the cached one
+    # unless the set changed since we last generated it.
+    signature = hashlib.sha256("\n\n".join(summaries).encode()).hexdigest()
+    cached = _COACHING_CACHE.get(resident_id)
+    if cached and cached[0] == signature:
+        return {"insight": cached[1], "has_data": True}
+
     system_prompt = (
         "You are a clinical education coach reviewing a medical resident's case performance. "
         "Be specific, direct, and actionable. Reference actual patterns from the data. Never give generic advice."
@@ -398,7 +1145,9 @@ async def dashboard_coaching_insight(http_request: Request) -> dict[str, Any]:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
         )
-        return {"insight": insight.strip(), "has_data": True}
+        insight = insight.strip()
+        _COACHING_CACHE[resident_id] = (signature, insight)
+        return {"insight": insight, "has_data": True}
     except Exception as exc:
         logger.warning("coaching insight LLM failed: %s", exc)
         return {"insight": None, "has_data": False}
@@ -432,8 +1181,8 @@ def dashboard_delete_session(session_id: str, http_request: Request) -> dict[str
 # ── Pause / resume endpoints ───────────────────────────────────────────────────
 
 @app.post("/api/sessions/{session_id}/pause")
-def pause(session_id: str, body: PauseRequest) -> dict[str, bool]:
-    get_session(session_id)  # raises 404 if unknown
+def pause(session_id: str, body: PauseRequest, http_request: Request) -> dict[str, bool]:
+    _get_owned_session(session_id, http_request)  # 404/403 if not the caller's
     graph = get_graph()
     snapshot = graph.get_context(session_id) if graph and graph.enabled else None
     pause_session(session_id, snapshot, body.elapsed_seconds)
@@ -442,33 +1191,39 @@ def pause(session_id: str, body: PauseRequest) -> dict[str, bool]:
 
 
 @app.post("/api/sessions/{session_id}/resume")
-def resume(session_id: str) -> dict[str, Any]:
+def resume(session_id: str, http_request: Request) -> dict[str, Any]:
     session = load_session(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="session not found")
-    SESSIONS[session_id] = session
-    log_event(session_id, "session.resumed")
 
     from backend.db import get_db as _get_db
     conn = _get_db()
-    try:
-        row = conn.execute("SELECT status, duration_seconds FROM web_sessions WHERE id=?", (session_id,)).fetchone()
-        status = row["status"] if row else "active"
-        duration_seconds = row["duration_seconds"] if row else 0
-    finally:
-        conn.close()
+    row = conn.execute(
+        "SELECT status, duration_seconds, resident_id FROM web_sessions WHERE id=?",
+        (session_id,),
+    ).fetchone()
+    # Only the owning resident may rehydrate a run (anonymous runs stay open).
+    owner = row["resident_id"] if row else None
+    caller = get_current_resident_id(http_request)
+    if owner is not None and caller is not None and owner != caller:
+        raise HTTPException(status_code=403, detail="access denied")
 
+    SESSIONS[session_id] = session
+    log_event(session_id, "session.resumed")
+    status = row["status"] if row else "active"
+    duration_seconds = row["duration_seconds"] if row else 0
     return _full_state_response(session, session_id, status, duration_seconds=duration_seconds or 0)
 
 
 @app.post("/api/cases")
-def generate_case(request: GenerateCaseRequest, http_request: Request) -> dict[str, Any]:
-    resident_id = get_current_resident_id(http_request)
-    clinical_case = get_or_generate_cached_case(request.diagnosis, request.difficulty)
+@_limiter.limit("10/minute")
+def generate_case(body: GenerateCaseRequest, request: Request) -> dict[str, Any]:
+    resident_id = get_current_resident_id(request)
+    clinical_case = get_or_generate_cached_case(body.diagnosis, body.difficulty)
     session_id = str(uuid4())
-    SESSIONS[session_id] = WebSession(case=clinical_case)
-    create_session(session_id, request.diagnosis, request.difficulty, clinical_case, resident_id=resident_id)
-    log_event(session_id, "session.created", {"diagnosis": request.diagnosis, "difficulty": request.difficulty}, resident_id=resident_id)
+    SESSIONS[session_id] = WebSession(case=clinical_case, resident_id=resident_id)
+    create_session(session_id, body.diagnosis, body.difficulty, clinical_case, resident_id=resident_id)
+    log_event(session_id, "session.created", {"diagnosis": body.diagnosis, "difficulty": body.difficulty}, resident_id=resident_id)
     graph = get_graph()
     if graph and graph.enabled:
         graph.init_session(session_id, clinical_case)
@@ -479,46 +1234,47 @@ def generate_case(request: GenerateCaseRequest, http_request: Request) -> dict[s
 
 
 @app.post("/api/questions")
-def ask_question(request: QuestionRequest) -> dict[str, Any]:
-    session = get_session(request.session_id)
+@_limiter.limit("60/minute")
+def ask_question(body: QuestionRequest, request: Request) -> dict[str, Any]:
+    session = _get_owned_session(body.session_id, request)
     history = list(zip(session.student_questions, session.patient_responses))
     answer = get_patient_service().answer_question(
-        session.case, request.question,
+        session.case, body.question,
         conversation_history=history,
         revealed_symptoms=session.revealed_symptoms,
     )
-    session.student_questions.append(request.question)
+    session.student_questions.append(body.question)
     session.patient_responses.append(answer)
-    # Track which case symptoms the patient has mentioned so far
     for symptom in session.case.symptoms:
         if symptom not in session.revealed_symptoms and symptom.lower() in answer.lower():
             session.revealed_symptoms.append(symptom)
     graph = get_graph()
     if graph and graph.enabled:
-        graph.add_turn(request.session_id, request.question, answer)
-    save_session(request.session_id, session)
-    log_event(request.session_id, "question.asked", {
-        "question": request.question,
+        graph.add_turn(body.session_id, body.question, answer)
+    save_session(body.session_id, session)
+    log_event(body.session_id, "question.asked", {
+        "question": body.question,
         "turn_index": len(session.student_questions) - 1,
     })
     return {
-        "question": request.question,
+        "question": body.question,
         "answer": answer,
     }
 
 
 @app.post("/api/investigations")
-def order_investigation(request: InvestigationRequest) -> dict[str, Any]:
-    session = get_session(request.session_id)
-    results = get_investigation_service().get_results(session.case, request.investigation)
+@_limiter.limit("30/minute")
+def order_investigation(body: InvestigationRequest, request: Request) -> dict[str, Any]:
+    session = _get_owned_session(body.session_id, request)
+    results = get_investigation_service().get_results(session.case, body.investigation)
     session.investigations.extend(results)
     graph = get_graph()
     if graph and graph.enabled:
         for result in results:
-            graph.add_investigation(request.session_id, result)
-    save_session(request.session_id, session)
+            graph.add_investigation(body.session_id, result)
+    save_session(body.session_id, session)
     for result in results:
-        log_event(request.session_id, "investigation.ordered", {
+        log_event(body.session_id, "investigation.ordered", {
             "investigation": result.investigation,
             "status": result.status,
         })
@@ -533,50 +1289,97 @@ def order_investigation(request: InvestigationRequest) -> dict[str, Any]:
     }
 
 
+@app.post("/api/investigations/ecg-rerender")
+@_limiter.limit("60/minute")
+def rerender_ecg(body: ECGRerenderRequest, request: Request) -> dict[str, Any]:
+    """Re-render the most recent ECG investigation at a chosen sample rate.
+
+    Powers the 100 Hz / 500 Hz toggle in the ECG panel. The picked PTB-XL
+    record is unchanged — only the source signal's sampling rate. The session's
+    stored investigation result is updated so the new SVG persists across
+    reloads.
+    """
+    session = _get_owned_session(body.session_id, request)
+    if body.sample_rate_hz not in (100, 500):
+        raise HTTPException(status_code=400, detail="sample_rate_hz must be 100 or 500")
+
+    # Find the most recent ECG investigation with a PTB-XL source_record.
+    ecg_idx = next(
+        (i for i in range(len(session.investigations) - 1, -1, -1)
+         if "ecg" in (session.investigations[i].investigation or "").lower()
+         and session.investigations[i].visual_payload is not None
+         and getattr(session.investigations[i].visual_payload, "source_record", "")),
+        None,
+    )
+    if ecg_idx is None:
+        raise HTTPException(status_code=404, detail="no ECG investigation to re-render")
+
+    inv = session.investigations[ecg_idx]
+    source_record = inv.visual_payload.source_record  # type: ignore[union-attr]
+
+    from backend.ptbxl_service import get_ptbxl_service
+    svg = get_ptbxl_service().rerender_record(source_record, sample_rate_hz=body.sample_rate_hz)
+    if svg is None:
+        raise HTTPException(status_code=500, detail="re-render failed")
+
+    # Mutate the visual_payload in place and persist.
+    inv.visual_payload.svg = svg  # type: ignore[union-attr]
+    save_session(body.session_id, session)
+    log_event(body.session_id, "ecg.rerendered", {
+        "sample_rate_hz": body.sample_rate_hz,
+        "source_record": source_record,
+    })
+    return {"svg": svg, "sample_rate_hz": body.sample_rate_hz, "source_record": source_record}
+
+
 @app.post("/api/interpretations")
-def submit_interpretation(request: InterpretationRequest) -> dict[str, Any]:
-    session = get_session(request.session_id)
-    session.interpretations.append(request.interpretation)
-    save_session(request.session_id, session)
-    log_event(request.session_id, "interpretation.submitted", {"interpretation": request.interpretation})
+@_limiter.limit("30/minute")
+def submit_interpretation(body: InterpretationRequest, request: Request) -> dict[str, Any]:
+    session = _get_owned_session(body.session_id, request)
+    session.interpretations.append(body.interpretation)
+    save_session(body.session_id, session)
+    log_event(body.session_id, "interpretation.submitted", {"interpretation": body.interpretation})
     return {
         "interpretations": session.interpretations,
     }
 
 
 @app.post("/api/diagnosis")
-def submit_diagnosis(request: DiagnosisRequest) -> dict[str, Any]:
-    session = get_session(request.session_id)
-    session.diagnosis_guess = request.diagnosis
-    save_session(request.session_id, session)
-    log_event(request.session_id, "diagnosis.submitted", {"guess": request.diagnosis})
+@_limiter.limit("10/minute")
+def submit_diagnosis(body: DiagnosisRequest, request: Request) -> dict[str, Any]:
+    session = _get_owned_session(body.session_id, request)
+    session.diagnosis_guess = body.diagnosis
+    save_session(body.session_id, session)
+    log_event(body.session_id, "diagnosis.submitted", {"guess": body.diagnosis})
     return {
-        "diagnosis_guess": request.diagnosis,
+        "diagnosis_guess": body.diagnosis,
     }
 
 
 @app.post("/api/doctor-consult")
-def call_doctor(request: DoctorConsultRequest) -> dict[str, Any]:
-    session = get_session(request.session_id)
+@_limiter.limit("10/minute")
+def call_doctor(body: DoctorConsultRequest, request: Request) -> dict[str, Any]:
+    session = _get_owned_session(body.session_id, request)
     graph = get_graph()
-    graph_context = graph.get_context(request.session_id) if graph and graph.enabled else ""
+    graph_context = graph.get_context(body.session_id) if graph and graph.enabled else ""
     response = get_doctor_consult_service().consult(
         session.case,
         session.student_questions,
         session.patient_responses,
         session.investigations,
-        request.question,
+        body.question,
         session_context={"clinical_picture": graph_context} if graph_context else None,
     )
     session.doctor_consults.append(response)
-    save_session(request.session_id, session)
-    log_event(request.session_id, "consult.called", {"question": request.question})
+    save_session(body.session_id, session)
+    log_event(body.session_id, "consult.called", {"question": body.question})
     return response.model_dump()
 
 
 @app.post("/api/evaluate")
-def evaluate(request: EvaluateRequest) -> dict[str, Any]:
-    session = get_session(request.session_id)
+@_limiter.limit("5/minute")
+def evaluate(body: EvaluateRequest, request: Request) -> dict[str, Any]:
+    session = _get_owned_session(body.session_id, request)
     questions = list(session.student_questions)
     responses = list(session.patient_responses)
     if session.diagnosis_guess:
@@ -584,7 +1387,7 @@ def evaluate(request: EvaluateRequest) -> dict[str, Any]:
         responses.append("I'm not sure.")
 
     graph = get_graph()
-    graph_entity_names = graph.get_entity_names(request.session_id) if graph and graph.enabled else []
+    graph_entity_names = graph.get_entity_names(body.session_id) if graph and graph.enabled else []
 
     evaluation = get_evaluator().evaluate(
         session.case,
@@ -596,16 +1399,17 @@ def evaluate(request: EvaluateRequest) -> dict[str, Any]:
         graph_entity_names=graph_entity_names or None,
         exams_performed=[e.system for e in session.physical_exams],
     )
-    save_evaluation(request.session_id, evaluation, elapsed_seconds=request.elapsed_seconds)
-    log_event(request.session_id, "session.evaluated", {"overall_score": getattr(evaluation, "overall_score", None), "elapsed_seconds": request.elapsed_seconds})
+    save_evaluation(body.session_id, evaluation, elapsed_seconds=body.elapsed_seconds)
+    log_event(body.session_id, "session.evaluated", {"overall_score": getattr(evaluation, "overall_score", None), "elapsed_seconds": body.elapsed_seconds})
     return evaluation.model_dump()
 
 
 @app.post("/api/physical-exam")
-def physical_exam(request: PhysicalExamRequest) -> dict[str, Any]:
-    session = get_session(request.session_id)
+@_limiter.limit("20/minute")
+def physical_exam(body: PhysicalExamRequest, request: Request) -> dict[str, Any]:
+    session = _get_owned_session(body.session_id, request)
     already_examined = [e.system for e in session.physical_exams]
-    new_systems = [s for s in request.systems if s not in already_examined]
+    new_systems = [s for s in body.systems if s not in already_examined]
     if not new_systems:
         return {"results": [e.model_dump() for e in session.physical_exams]}
 
@@ -616,12 +1420,12 @@ def physical_exam(request: PhysicalExamRequest) -> dict[str, Any]:
     if graph and graph.enabled:
         for finding in results:
             try:
-                graph.add_examination(request.session_id, finding)
+                graph.add_examination(body.session_id, finding)
             except Exception:
                 pass
 
-    save_session(request.session_id, session)
-    log_event(request.session_id, "exam.performed", {"systems": new_systems})
+    save_session(body.session_id, session)
+    log_event(body.session_id, "exam.performed", {"systems": new_systems})
     return {"results": [e.model_dump() for e in results]}
 
 
@@ -632,6 +1436,21 @@ def get_session(session_id: str) -> WebSession:
         if session is None:
             raise HTTPException(status_code=404, detail="session not found")
         SESSIONS[session_id] = session
+    return session
+
+
+def _get_owned_session(session_id: str, http_request: Request) -> WebSession:
+    """Return the session only if it belongs to the requesting resident.
+
+    A session that has an owner may only be accessed by that owner — an
+    unauthenticated or mismatched caller is denied. Anonymous sessions (no
+    resident_id, e.g. created before login) stay open as a capability keyed by
+    the unguessable session id.
+    """
+    session = get_session(session_id)
+    resident_id = get_current_resident_id(http_request)
+    if session.resident_id is not None and session.resident_id != resident_id:
+        raise HTTPException(status_code=403, detail="access denied")
     return session
 
 
@@ -713,6 +1532,7 @@ def case_preview(case: ClinicalCase) -> dict[str, Any]:
     return {
         "age": case.patient.age,
         "gender": case.patient.gender,
+        "name": case.patient.name,
         "race": case.patient.race,
         "occupation": case.patient.occupation,
         "persona_description": case.patient.persona_description,
@@ -851,6 +1671,8 @@ HTML_PAGE = """
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet"/>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.js"></script>
     <style>
     :root{
       --ink-950:#0a0f17;--ink-900:#111824;--ink-800:#1a2332;--ink-700:#273347;
@@ -898,6 +1720,22 @@ HTML_PAGE = """
     .cb-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#4a5a78,#2d3a52);color:white;font-size:11px;font-weight:600;display:grid;place-items:center;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.1)}
     .cb-topbar-btn{background:var(--ink-700);color:var(--ink-200);border:1px solid var(--ink-600);font:inherit;font-size:11px;font-weight:500;padding:5px 10px;border-radius:5px;cursor:pointer;transition:background .15s,color .15s;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:5px;line-height:1}
     .cb-topbar-btn:hover{background:var(--ink-600);color:white}
+    .cb-topbar-btn-submit{background:var(--teal-600);color:#fff;border:0;font:inherit;font-size:11px;font-weight:600;padding:5px 10px;border-radius:5px;cursor:pointer;transition:background .15s;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;line-height:1;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.12)}
+    .cb-topbar-btn-submit:hover{background:var(--teal-500)}
+    .cb-topbar-btn-save-exit{background:linear-gradient(135deg,rgba(46,194,126,0.2),rgba(70,166,167,0.2));color:#3dd68c;border:1px solid rgba(46,194,126,0.4);font:inherit;font-size:11px;font-weight:600;padding:5px 10px;border-radius:5px;cursor:pointer;transition:background .15s,color .15s,border-color .15s;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;line-height:1}
+    .cb-topbar-btn-save-exit:hover{background:linear-gradient(135deg,rgba(46,194,126,0.32),rgba(70,166,167,0.32));color:#6aeaa6;border-color:rgba(46,194,126,0.6)}
+    /* Submit confirmation modal */
+    .cb-submit-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;backdrop-filter:blur(6px);align-items:center;justify-content:center;animation:kgFadeIn .18s ease}
+    .cb-submit-backdrop.on{display:flex}
+    .cb-submit-card{width:420px;max-width:calc(100vw - 32px);background:linear-gradient(180deg,#121a28 0%,#0d1420 100%);color:#e9edf2;border:1px solid rgba(255,255,255,0.08);border-radius:16px;box-shadow:0 30px 80px rgba(8,12,20,0.6);padding:32px 28px;animation:cbPauseRise .3s cubic-bezier(.2,.7,.1,1) both}
+    .cb-submit-icon{width:52px;height:52px;border-radius:14px;background:rgba(70,166,167,0.12);border:1px solid rgba(70,166,167,0.25);display:grid;place-items:center;margin:0 auto 18px;color:var(--teal-400)}
+    .cb-submit-title{font-size:20px;font-weight:700;text-align:center;margin-bottom:8px;letter-spacing:-.02em}
+    .cb-submit-body{font-size:13px;color:var(--ink-300);text-align:center;line-height:1.55;margin-bottom:24px}
+    .cb-submit-actions{display:flex;gap:10px}
+    .cb-submit-cancel{flex:1;background:var(--ink-700);color:var(--ink-200);border:1px solid var(--ink-600);font:inherit;font-size:13px;font-weight:500;padding:11px;border-radius:9px;cursor:pointer;transition:background .15s}
+    .cb-submit-cancel:hover{background:var(--ink-600);color:white}
+    .cb-submit-confirm{flex:1;background:linear-gradient(135deg,var(--teal-600),var(--teal-500));color:white;border:0;font:inherit;font-size:13px;font-weight:700;padding:11px;border-radius:9px;cursor:pointer;transition:opacity .15s;display:flex;align-items:center;justify-content:center;gap:7px}
+    .cb-submit-confirm:hover{opacity:0.9}
     /* ── Login modal ── */
     .cb-login-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:300;backdrop-filter:blur(4px);animation:kgFadeIn .18s ease;align-items:center;justify-content:center}
     .cb-login-backdrop.on{display:flex}
@@ -940,35 +1778,109 @@ HTML_PAGE = """
     .cb-step.done .cb-step-num{background:var(--teal-700);color:white;box-shadow:none}
     .cb-step.active{color:white}
     .cb-step.active .cb-step-num{background:var(--teal-500);color:var(--ink-950);box-shadow:0 0 0 3px rgba(70,166,167,0.25)}
-    /* ── Patient strip ── */
-    .cb-pt-strip{background:white;border-bottom:1px solid var(--ink-100);padding:18px 24px;display:grid;grid-template-columns:1.4fr 1fr 1.6fr;gap:28px;align-items:stretch}
+    /* ── Section label (still used in performance panel summary) ── */
     .cb-ps-label{font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--ink-400);font-weight:600;margin-bottom:8px}
-    .cb-cc{font-family:'Instrument Serif',Georgia,serif;font-size:26px;line-height:1.15;letter-spacing:-0.01em;color:var(--ink-900);margin-bottom:10px}
-    .cb-cc-quote{color:var(--ink-400)}
-    .cb-chips{display:flex;flex-wrap:wrap;gap:6px}
-    .cb-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:3px 9px;border-radius:999px;background:var(--ink-50);color:var(--ink-700);border:1px solid var(--ink-100)}
-    .cb-chip .cb-k{color:var(--ink-400);font-weight:500}
-    .cb-chip-teal{background:var(--teal-50);color:var(--teal-700);border-color:oklch(0.88 0.06 195)}
-    .cb-vitals{display:flex;flex-wrap:nowrap;gap:8px}
-    .cb-vital{background:white;border:1px solid var(--ink-100);border-radius:8px;padding:10px 12px;position:relative;overflow:hidden;flex:0 0 auto;min-width:72px}
-    .cb-vital::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ink-200)}
-    .cb-vital.critical{background:var(--critical-bg);border-color:#f4c8c2}
-    .cb-vital.critical::before{background:var(--critical)}
-    .cb-vital.caution{background:var(--caution-bg);border-color:#f1d9a8}
-    .cb-vital.caution::before{background:var(--caution)}
-    .cb-vital.normal::before{background:var(--normal)}
-    .cb-v-row{display:flex;align-items:flex-start}
-    .cb-v-label{font-size:9.5px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-400);font-weight:600}
-    .cb-v-val{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:20px;color:var(--ink-900);line-height:1.1;margin-top:4px;display:flex;align-items:baseline;gap:4px}
-    .cb-v-unit{font-size:11px;color:var(--ink-500);font-weight:500}
-    .cb-v-flag{margin-left:auto;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px}
-    .cb-v-flag.high,.cb-v-flag.low{background:var(--critical);color:white}
-    .cb-v-flag.warn{background:var(--caution);color:white}
-    .cb-v-meta{font-size:10px;color:var(--ink-500);margin-top:4px}
-    .cb-persona-card{background:var(--ink-50);border:1px solid var(--ink-100);border-radius:8px;padding:12px 14px;display:flex;gap:12px;align-items:flex-start;height:100%;box-sizing:border-box}
-    .cb-persona-avatar{width:44px;height:44px;border-radius:50%;flex-shrink:0;background:linear-gradient(140deg,#c8b8a0,#8a6e52);box-shadow:inset 0 -10px 16px rgba(0,0,0,0.15),inset 0 0 0 1px rgba(255,255,255,0.2);display:grid;place-items:center;color:white;font-weight:600;font-size:13px}
-    .cb-persona-name{font-style:normal;font-weight:600;color:var(--ink-900);margin-bottom:2px;font-size:12px}
-    .cb-persona-text{font-size:12px;color:var(--ink-700);line-height:1.5;font-style:italic}
+    /* ── Imaging panel — modality launch cards ── */
+    #panel-imaging .wb-fp-body{padding:14px 14px 16px;display:flex;flex-direction:column;gap:9px;background:var(--paper,#fbfcfd)}
+    .img-card{display:grid;grid-template-columns:42px 1fr auto;align-items:center;gap:12px;padding:11px 13px;border:1.5px solid var(--ink-200);border-radius:10px;background:white;cursor:pointer;transition:border-color .15s ease,background .15s ease,transform .12s ease;text-align:left;font:inherit;color:inherit}
+    .img-card:hover{background:var(--ink-50)}
+    .img-card[data-state="idle"]:hover{border-color:var(--teal-500);transform:translateY(-1px)}
+    .img-card[data-state="pending"]{border-color:var(--teal-500);background:var(--teal-50);cursor:wait;animation:imgPulse 1.4s ease-in-out infinite}
+    .img-card[data-state="available"]{border-color:#2ec27e;background:#f0fbf4}
+    .img-card[data-state="available"]:hover{border-color:#1f9a60;transform:translateY(-1px)}
+    .img-card[data-state="disabled"]{border-style:dashed;border-color:var(--ink-100);background:var(--ink-50);cursor:not-allowed;opacity:0.65}
+    .img-card[data-state="disabled"]:hover{background:var(--ink-50);transform:none}
+    @keyframes imgPulse{0%,100%{box-shadow:0 0 0 0 rgba(70,166,167,0.18)}50%{box-shadow:0 0 0 4px rgba(70,166,167,0.10)}}
+    .img-card-icon{width:42px;height:42px;border-radius:9px;background:var(--ink-50);display:grid;place-items:center;color:var(--ink-500);flex-shrink:0;border:1px solid var(--ink-100)}
+    .img-card[data-state="pending"] .img-card-icon{background:var(--teal-50);color:var(--teal-600);border-color:color-mix(in oklch,var(--teal-600) 22%,white)}
+    .img-card[data-state="available"] .img-card-icon{background:#e6f8ee;color:#1f7a55;border-color:#bce7d0}
+    .img-card[data-state="disabled"] .img-card-icon{color:var(--ink-400)}
+    .img-card-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+    .img-card-name{font-size:13.5px;font-weight:600;color:var(--ink-900);letter-spacing:-0.01em}
+    .img-card[data-state="disabled"] .img-card-name{color:var(--ink-500)}
+    .img-card-sub{font-size:11px;color:var(--ink-500);font-family:'JetBrains Mono',monospace;letter-spacing:0.02em}
+    .img-card[data-state="pending"] .img-card-sub{color:var(--teal-600)}
+    .img-card[data-state="available"] .img-card-sub{color:#1f7a55}
+    .img-card-cta{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--ink-400);font-family:'JetBrains Mono',monospace;letter-spacing:0.04em;text-transform:uppercase}
+    .img-card[data-state="idle"] .img-card-cta{color:var(--ink-500)}
+    .img-card[data-state="idle"]:hover .img-card-cta{color:var(--teal-600)}
+    .img-card[data-state="pending"] .img-card-cta{color:var(--teal-600)}
+    .img-card[data-state="available"] .img-card-cta{color:#1f7a55}
+    .img-card[data-state="disabled"] .img-card-cta{color:var(--ink-300)}
+    .img-card-spin{display:none;width:14px;height:14px;border:2px solid color-mix(in oklch,var(--teal-600) 30%,white);border-top-color:var(--teal-600);border-radius:50%;animation:imgSpin .8s linear infinite}
+    .img-card[data-state="pending"] .img-card-spin{display:inline-block}
+    @keyframes imgSpin{to{transform:rotate(360deg)}}
+    .img-card-check{display:none;width:16px;height:16px;color:#1f7a55}
+    .img-card[data-state="available"] .img-card-check{display:inline-block}
+    /* ── Consults panel — department call cards ── */
+    #panel-consults .wb-fp-body{padding:14px 14px 16px;display:flex;flex-direction:column;gap:9px;background:var(--paper,#fbfcfd)}
+    .cons-card{display:grid;grid-template-columns:42px 1fr auto;align-items:center;gap:12px;padding:11px 13px;border:1.5px solid var(--ink-200);border-radius:10px;background:white;cursor:not-allowed;transition:border-color .15s ease,background .15s ease,transform .12s ease;text-align:left;font:inherit;color:inherit;border-style:dashed;opacity:0.85}
+    .cons-card[data-state="idle"]{cursor:pointer;border-style:solid;opacity:1}
+    .cons-card[data-state="idle"]:hover{border-color:var(--teal-500);background:var(--ink-50);transform:translateY(-1px)}
+    .cons-card-icon{width:42px;height:42px;border-radius:9px;display:grid;place-items:center;color:white;flex-shrink:0;font-weight:600;font-size:13px;letter-spacing:0.04em;font-family:'JetBrains Mono',monospace}
+    .cons-card[data-dept="neurology"] .cons-card-icon{background:linear-gradient(140deg,#6366f1,#4338ca)}
+    .cons-card[data-dept="nephrology"] .cons-card-icon{background:linear-gradient(140deg,#10b981,#047857)}
+    .cons-card[data-dept="icu"]        .cons-card-icon{background:linear-gradient(140deg,#ef4444,#b91c1c)}
+    .cons-card[data-state="disabled"] .cons-card-icon{filter:grayscale(0.6);opacity:0.75}
+    .cons-card-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+    .cons-card-name{font-size:13.5px;font-weight:600;color:var(--ink-900);letter-spacing:-0.01em}
+    .cons-card[data-state="disabled"] .cons-card-name{color:var(--ink-600)}
+    .cons-card-sub{font-size:11px;color:var(--ink-500);font-family:'JetBrains Mono',monospace;letter-spacing:0.02em}
+    .cons-card-cta{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--ink-400);font-family:'JetBrains Mono',monospace;letter-spacing:0.04em;text-transform:uppercase}
+    .cons-card[data-state="idle"]:hover .cons-card-cta{color:var(--teal-600)}
+    .cons-card-cta svg{width:13px;height:13px}
+    /* ── Patient panel (vertical, lives in the GridStack workbench) ── */
+    #panel-patient .wb-fp-body{padding:0;display:flex;flex-direction:column;overflow:hidden;background:var(--paper,#fbfcfd)}
+    .pp-scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column}
+    .pp-head{padding:16px 16px 14px;background:linear-gradient(180deg,#ffffff,#fbfcfd);border-bottom:1px solid var(--ink-100);display:flex;flex-direction:column;gap:12px}
+    .pp-id{display:flex;align-items:center;gap:12px}
+    .pp-avatar{width:46px;height:46px;border-radius:50%;flex-shrink:0;background:linear-gradient(140deg,#9a8468,#6f5a40);color:#fff;font-weight:600;font-size:16px;display:grid;place-items:center;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18),0 2px 6px rgba(111,90,64,0.3);letter-spacing:0.02em}
+    .pp-id-text{min-width:0;flex:1}
+    .pp-name{font-size:16.5px;font-weight:600;letter-spacing:-0.01em;line-height:1.2;color:var(--ink-900)}
+    .pp-name .pp-desc{color:var(--ink-500);font-weight:400;font-size:12.5px}
+    .pp-live{display:inline-flex;align-items:center;gap:6px;margin-top:3px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#1f7a55}
+    .pp-live .pp-live-dot{width:7px;height:7px;border-radius:50%;background:#1f7a55;animation:ppBlink 1.6s infinite}
+    @keyframes ppBlink{0%,100%{opacity:1}50%{opacity:0.25}}
+    .pp-persona{font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-size:14.5px;line-height:1.4;color:var(--ink-600);padding:10px 12px;border-radius:9px;background:var(--ink-50);border:1px solid var(--ink-100)}
+    .pp-persona:empty{display:none}
+    .pp-chips{display:flex;flex-wrap:wrap;gap:6px}
+    .pp-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-600);background:white;border:1px solid var(--ink-100);border-radius:7px;padding:4px 9px}
+    .pp-chip b{color:var(--ink-900);font-weight:600}
+    .pp-chip.role{background:var(--teal-50);border-color:color-mix(in oklch,var(--teal-600) 22%,white);color:var(--teal-700);font-weight:600}
+    .pp-cc{padding:14px 16px;border-bottom:1px solid var(--ink-100)}
+    .pp-sec-label{font-size:10px;text-transform:uppercase;letter-spacing:0.12em;color:var(--ink-400);font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+    .pp-sec-label::after{content:'';flex:1;height:1px;background:var(--ink-100)}
+    .pp-cc-quote{font-family:'Instrument Serif',Georgia,serif;font-size:24px;line-height:1.2;color:var(--ink-900)}
+    .pp-cc-quote em{font-style:italic}
+    .pp-vitals{padding:14px 16px}
+    .pp-vitals-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .pp-vital{position:relative;overflow:hidden;border:1px solid var(--ink-100);border-radius:10px;background:white;padding:10px 11px 9px 13px}
+    .pp-vital::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:#1f7a55}
+    .pp-vital.warn{border-color:#f0d49a;background:#fdf3e2}
+    .pp-vital.warn::before{background:#b76e00}
+    .pp-v-top{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+    .pp-v-label{font-size:10.5px;font-weight:700;letter-spacing:0.06em;color:var(--ink-500);text-transform:uppercase}
+    .pp-vital.warn .pp-v-label{color:#b76e00}
+    .pp-v-label sub{font-size:8px}
+    .pp-v-arrow{margin-left:auto;width:17px;height:17px;border-radius:5px;background:#b76e00;color:#fff;display:grid;place-items:center}
+    .pp-v-val{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:22px;line-height:1.05;color:var(--ink-900);display:flex;align-items:baseline;gap:4px}
+    .pp-v-val .pp-v-unit{font-size:10.5px;color:var(--ink-400);font-weight:500}
+    .pp-v-flag{font-size:10.5px;font-style:italic;color:#b76e00;margin-top:4px;font-weight:500}
+    .pp-v-ok{font-size:10.5px;color:var(--ink-400);margin-top:4px}
+    /* Lead II ECG monitor — pinned at the bottom of the panel */
+    .pp-ecg{background:#07090f;position:relative;border-top:1px solid #000;flex-shrink:0}
+    .pp-ecg-bar{display:flex;align-items:center;gap:10px;padding:9px 14px 5px}
+    .pp-ecg-lead{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:12.5px;color:#34e7b6;letter-spacing:0.04em;border:1px solid color-mix(in oklch,#34e7b6 40%,transparent);border-radius:6px;padding:2px 7px;background:color-mix(in oklch,#34e7b6 10%,transparent)}
+    .pp-ecg-cap{font-size:10.5px;color:#56627a;font-family:'JetBrains Mono',monospace;letter-spacing:0.04em}
+    .pp-ecg-hr{margin-left:auto;display:flex;align-items:center;gap:7px}
+    .pp-ecg-hr .pp-heart{color:#34e7b6;display:grid;place-items:center;transition:transform .08s ease}
+    .pp-ecg-hr .pp-heart.beat{transform:scale(1.35)}
+    .pp-ecg-hr .pp-hr-num{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:20px;color:#34e7b6;line-height:1}
+    .pp-ecg-hr .pp-hr-unit{font-family:'JetBrains Mono',monospace;font-size:10px;color:#56627a;align-self:flex-end;margin-bottom:2px}
+    .pp-ecg-canvas-wrap{position:relative;height:108px}
+    #ppEcg{display:block;width:100%;height:100%}
+    .pp-ecg-foot{display:flex;align-items:center;justify-content:space-between;padding:5px 14px 10px;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#3f495e;letter-spacing:0.05em}
+    .pp-ecg-foot .pp-gain{color:#56627a}
     /* ── Main 3-col grid ── */
     .cb-main{display:grid;grid-template-columns:minmax(320px,1.05fr) minmax(340px,1.25fr) minmax(280px,0.95fr);gap:14px;padding:14px 24px 24px;align-items:start}
     .cb-col{display:flex;flex-direction:column;gap:14px;min-width:0}
@@ -1024,6 +1936,12 @@ HTML_PAGE = """
     /* ── ECG viewer ── */
     .cb-ecg-meta{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#0f0606;color:#d4a4a4;font-family:'JetBrains Mono',monospace;font-size:10px;border-top:1px solid #2a1010}
     .cb-ecg-meta strong{color:#ffd9a4;font-weight:600}
+    /* Sample-rate toggle in the ECG panel header */
+    .cb-rate-toggle{display:inline-flex;border:1px solid var(--ink-200);border-radius:6px;overflow:hidden;background:var(--ink-50);margin-right:4px}
+    .cb-rate-btn{font:inherit;font-size:10.5px;font-weight:600;padding:4px 8px;border:0;background:transparent;color:var(--ink-500);cursor:pointer;letter-spacing:0.02em;transition:background .15s,color .15s}
+    .cb-rate-btn:hover{color:var(--ink-700)}
+    .cb-rate-btn.active{background:white;color:var(--teal-700);box-shadow:inset 0 0 0 1px var(--teal-500)}
+    .cb-rate-btn:disabled{opacity:0.55;cursor:wait}
     /* ── Lab table ── */
     .cb-lab-table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11.5px}
     .cb-lab-table th{background:var(--ink-50);color:var(--ink-500);text-align:left;font-weight:600;font-size:9.5px;text-transform:uppercase;letter-spacing:0.08em;padding:6px 10px;border-bottom:1px solid var(--ink-100)}
@@ -1043,9 +1961,9 @@ HTML_PAGE = """
     /* ── Knowledge graph dark stage ── */
     .cb-kg-stage{position:relative;overflow:hidden;height:320px;background:radial-gradient(ellipse at 20% 20%,rgba(70,166,167,0.06),transparent 60%),radial-gradient(ellipse at 80% 80%,rgba(215,122,58,0.05),transparent 60%),var(--ink-900)}
     /* KG expanded overlay */
-    #graphPanel.kg-expanded{position:fixed;inset:40px;z-index:200;border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,0.45);display:flex;flex-direction:column;transition:all .28s cubic-bezier(.4,0,.2,1)}
-    #graphPanel.kg-expanded .cb-panel-body-wrap{flex:1;min-height:0;display:flex;flex-direction:column}
-    #graphPanel.kg-expanded .cb-kg-stage{flex:1;min-height:0;height:auto}
+    #panel-kg.kg-expanded{position:fixed;inset:40px;z-index:200;border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,0.45);display:flex;flex-direction:column;transition:all .28s cubic-bezier(.4,0,.2,1)}
+    #panel-kg.kg-expanded .cb-panel-body-wrap{flex:1;min-height:0;display:flex;flex-direction:column}
+    #panel-kg.kg-expanded .cb-kg-stage{flex:1;min-height:0;height:auto}
     .cb-kg-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:199;backdrop-filter:blur(3px);animation:kgFadeIn .2s ease}
     .cb-kg-backdrop.on{display:block}
     @keyframes kgFadeIn{from{opacity:0}to{opacity:1}}
@@ -1076,6 +1994,43 @@ HTML_PAGE = """
     .cb-exam-sys-label{font-size:11.5px;font-weight:500;color:var(--ink-800);line-height:1.2}
     .cb-exam-sys-sublabel{font-size:10px;color:var(--ink-400);line-height:1.3;margin-top:1px}
     .cb-exam-results{display:flex;flex-direction:column;gap:8px;padding:0 14px 14px}
+    /* ── New Physical Examination panel (design refresh, 2026-06-09) ── */
+    .pe-body{padding:14px 16px 4px}
+    .pe-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;gap:12px}
+    .pe-label{font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--ink-500);font-weight:700}
+    .pe-selectbar{display:flex;align-items:center;gap:10px}
+    .pe-count-pill{font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:500;color:var(--ink-600);background:var(--ink-50);border:1px solid var(--ink-100);border-radius:99px;padding:3px 10px}
+    .pe-count-pill b{color:var(--ink-900);font-weight:600}
+    .pe-link{background:none;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:600;color:var(--teal-700);padding:3px 4px;border-radius:6px}
+    .pe-link:hover{color:var(--teal-600);text-decoration:underline}
+    .pe-link:disabled{color:var(--ink-300);cursor:default;text-decoration:none}
+    .pe-systems{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .pe-sys{--c:var(--ink-500);display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--ink-100);border-radius:11px;background:white;cursor:pointer;user-select:none;position:relative;transition:border-color .14s,background .14s,box-shadow .14s,transform .06s}
+    .pe-sys::before{content:'';position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:var(--c);opacity:0;transition:opacity .14s}
+    .pe-sys:hover{border-color:var(--ink-200);background:var(--paper)}
+    .pe-sys:active{transform:translateY(0.5px)}
+    .pe-sys.on{border-color:color-mix(in oklch, var(--c) 55%, var(--ink-200));background:color-mix(in oklch, var(--c) 7%, white);box-shadow:0 1px 2px rgba(15,23,42,0.04)}
+    .pe-sys.on::before{opacity:1}
+    .pe-sys.done{cursor:default;opacity:0.75}
+    .pe-sys.done:hover{background:color-mix(in oklch, var(--c) 5%, white)}
+    .pe-sys .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;background:var(--c);box-shadow:0 0 0 3px color-mix(in oklch, var(--c) 16%, transparent)}
+    .pe-sys .name{font-size:14px;font-weight:500;color:var(--ink-800);flex:1;line-height:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .pe-sys.on .name{color:var(--ink-900);font-weight:600}
+    .pe-sys .check{width:20px;height:20px;border-radius:6px;flex-shrink:0;border:1.5px solid var(--ink-200);background:white;display:grid;place-items:center;color:white;transition:background .14s,border-color .14s}
+    .pe-sys .check svg{opacity:0;transform:scale(0.6);transition:opacity .14s,transform .14s}
+    .pe-sys.on .check{background:var(--c);border-color:var(--c)}
+    .pe-sys.on .check svg,.pe-sys.done .check svg{opacity:1;transform:scale(1)}
+    .pe-sys.done .check{background:var(--c);border-color:var(--c)}
+    .pe-foot{padding:12px 16px 14px;display:flex;align-items:center;gap:14px;border-top:1px solid var(--ink-50)}
+    .pe-meta{font-size:12.5px;color:var(--ink-500);line-height:1.3;flex:1;min-width:0}
+    .pe-meta b{color:var(--ink-900);font-weight:600}
+    .pe-examine{margin-left:auto;display:inline-flex;align-items:center;gap:9px;background:linear-gradient(180deg,var(--ink-800),var(--ink-950));color:white;border:0;border-radius:11px;padding:12px 20px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:0 6px 16px rgba(10,15,23,0.22);transition:filter .14s,transform .06s,opacity .14s;flex-shrink:0}
+    .pe-examine:hover{filter:brightness(1.12)}
+    .pe-examine:active{transform:translateY(1px)}
+    .pe-examine .badge{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;background:rgba(255,255,255,0.16);color:white;border-radius:99px;padding:1px 8px;min-width:22px;text-align:center}
+    .pe-examine:disabled{background:var(--ink-100);color:var(--ink-400);box-shadow:none;cursor:default;filter:none}
+    .pe-examine:disabled .badge{background:rgba(0,0,0,0.06);color:var(--ink-400)}
+    @media (max-width:560px){.pe-systems{grid-template-columns:1fr}.pe-foot{flex-wrap:wrap}.pe-examine{margin-left:0;width:100%;justify-content:center}}
     .cb-perf-status{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;padding:4px 8px;border-radius:4px;font-weight:600;display:inline-flex;align-items:center;gap:6px;align-self:flex-start;line-height:1.3}
     .cb-perf-status.in-progress{color:var(--caution);background:var(--caution-bg)}
     .cb-perf-status.complete{color:var(--normal);background:var(--normal-bg)}
@@ -1118,6 +2073,17 @@ HTML_PAGE = """
     .cb-statusbar{background:var(--ink-900);color:var(--ink-500);font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:5px 24px;display:flex;gap:20px;align-items:center;border-top:1px solid var(--ink-800);flex-shrink:0;position:sticky;bottom:0;z-index:40}
     .cb-statusbar strong{color:var(--ink-200);font-weight:500}
     .cb-statusbar .cb-sb-dot{width:5px;height:5px;border-radius:50%;background:#2ec27e;box-shadow:0 0 0 2px rgba(46,194,126,0.18);display:inline-block;margin-right:5px;animation:cbPulse 2s ease-in-out infinite}
+    /* ── Inline rail tabs that live in the status bar (Performance + KG) ── */
+    .cb-sb-tabs{display:flex;align-items:center;gap:6px;margin-left:auto}
+    .cb-sb-tab{display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--ink-700);border-radius:6px;padding:3px 9px;color:var(--ink-300);cursor:pointer;font:inherit;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.04em;line-height:1;text-transform:uppercase;transition:background .15s ease,color .15s ease,border-color .15s ease;position:relative}
+    .cb-sb-tab:hover{background:rgba(255,255,255,0.04);color:var(--ink-100);border-color:var(--ink-600)}
+    .cb-sb-tab.active{background:rgba(70,166,167,0.16);border-color:var(--teal-500);color:var(--teal-500)}
+    .cb-sb-tab svg{display:block;flex-shrink:0}
+    .cb-sb-tab .cb-sb-tab-meta{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink-500);font-weight:500;letter-spacing:0.02em}
+    .cb-sb-tab.active .cb-sb-tab-meta{color:var(--teal-500)}
+    .cb-sb-tab.has-update::after{content:'';position:absolute;top:-2px;right:-2px;width:6px;height:6px;background:#2ec27e;border-radius:50%;box-shadow:0 0 0 2px var(--ink-900)}
+    .cb-sb-tab.has-alert::after{content:'';position:absolute;top:-2px;right:-2px;width:6px;height:6px;background:var(--critical);border-radius:50%;box-shadow:0 0 0 2px var(--ink-900);animation:wbBlinkAlert 1.6s ease-in-out infinite}
+    .cb-sb-brand{color:var(--ink-500)}
     /* ── Chat message system ── */
     .cb-chat-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth;background:var(--ink-50);min-height:400px;max-height:520px}
     .cb-chat-body::-webkit-scrollbar{width:4px}
@@ -1240,13 +2206,132 @@ HTML_PAGE = """
     .cb-pause-ghost:hover{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.22)}
     .cb-pause-foot{margin-top:14px;padding-top:12px;border-top:1px dashed rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:rgba(255,255,255,0.4)}
     .cb-pause-kbd b{font-family:'JetBrains Mono',monospace;font-weight:600;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);color:rgba(255,255,255,0.7);font-size:10px}
+
+    /* ================================================================
+       WORKBENCH v3 — rails + docks + center stage
+       ================================================================ */
+    .wb-workbench{display:flex;align-items:stretch;background:radial-gradient(ellipse at 50% 0%,rgba(70,166,167,0.05),transparent 50%),linear-gradient(180deg,var(--ink-50) 0%,#eef1f6 100%);flex:1;min-height:520px;position:relative;overflow:hidden}
+    /* Rails */
+    .wb-rail{width:84px;flex-shrink:0;background:linear-gradient(180deg,var(--ink-950),var(--ink-900));border-right:1px solid #000;display:flex;flex-direction:column;padding:12px 8px;gap:4px;position:relative;z-index:2}
+    .wb-rail.wb-rail-right{border-right:0;border-left:1px solid #000}
+    .wb-rail-label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-500);font-weight:600;text-align:center;padding:6px 0 4px;border-bottom:1px dashed var(--ink-700);margin-bottom:6px}
+    .wb-rail-tab{background:transparent;border:1px solid transparent;border-radius:8px;color:var(--ink-400);cursor:pointer;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;font:inherit;font-size:10px;line-height:1.2;text-align:center;position:relative;transition:background .15s ease,color .15s ease}
+    .wb-rail-tab:hover{background:rgba(255,255,255,0.04);color:var(--ink-200)}
+    .wb-rail-tab.active{background:rgba(70,166,167,0.10);border-color:rgba(70,166,167,0.35);color:var(--teal-500)}
+    .wb-rail-tab svg{display:block}
+    .wb-rt-label{font-weight:600;font-size:9px;letter-spacing:0em}
+    .wb-rt-meta{font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--ink-500);font-weight:500;margin-top:1px;white-space:nowrap}
+    .wb-rail-tab.active .wb-rt-meta{color:var(--teal-500)}
+    .wb-rail-tab.has-update::after{content:'';position:absolute;top:6px;right:8px;width:6px;height:6px;background:#2ec27e;border-radius:50%;box-shadow:0 0 0 2px rgba(46,194,126,0.25)}
+    .wb-rail-tab.has-alert::after{content:'';position:absolute;top:6px;right:8px;width:6px;height:6px;background:var(--critical);border-radius:50%;box-shadow:0 0 0 2px rgba(196,58,44,0.25);animation:wbBlinkAlert 1.6s ease-in-out infinite}
+    @keyframes wbBlinkAlert{0%,100%{opacity:1}50%{opacity:0.3}}
+    .wb-rail-tab.active::before{content:'';position:absolute;top:50%;transform:translateY(-50%);width:3px;height:24px;background:var(--teal-500);border-radius:0 3px 3px 0}
+    .wb-rail.wb-rail-left .wb-rail-tab.active::before{left:-8px}
+    .wb-rail.wb-rail-right .wb-rail-tab.active::before{right:-8px}
+    .wb-rail-spacer{flex:1}
+    .wb-rail-foot{padding:6px 0 0;border-top:1px dashed var(--ink-700);font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--ink-500);text-align:center;line-height:1.4}
+    /* ── Grid area (fills space between rails, scrollable) ── */
+    #gs-area{flex:1;min-width:0;overflow:auto;position:relative;background:radial-gradient(ellipse at 50% 0%,rgba(70,166,167,0.07),transparent 60%),linear-gradient(180deg,var(--ink-50) 0%,#eef1f6 100%)}
+    #gs-area .grid-stack{min-height:100%;padding:12px;box-sizing:border-box;background:transparent}
+    /* Override GridStack default colors so it matches our theme */
+    .grid-stack>.grid-stack-item>.grid-stack-item-content{border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(15,23,42,0.06),0 8px 24px rgba(15,23,42,0.10);inset:4px}
+    .grid-stack-placeholder>.placeholder-content{border:2px dashed var(--teal-500);border-radius:10px;background:rgba(70,166,167,0.06)}
+    /* Float panels — fill their grid cell */
+    .wb-float-panel{display:flex;flex-direction:column;width:100%;height:100%;background:white;border:1px solid var(--ink-100);border-radius:10px;overflow:hidden;position:relative}
+    @keyframes wbPanelIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    .grid-stack-item-content .wb-float-panel{animation:wbPanelIn .2s cubic-bezier(.2,.7,.1,1) both}
+    /* Drag handle = panel header */
+    .wb-fp-head{cursor:move;user-select:none}
+    .wb-fp-head .wb-fp-close{cursor:pointer}
+    .wb-fp-close,.wb-fp-actions button{cursor:pointer!important}
+    .wb-fp-head{display:flex;align-items:center;gap:8px;padding:9px 10px 9px 12px;background:linear-gradient(180deg,white,#fafbfc);border-bottom:1px solid var(--ink-100);flex-shrink:0}
+    .wb-fp-title-group{display:flex;align-items:baseline;gap:8px;min-width:0}
+    .wb-fp-title{font-size:12px;font-weight:600;color:var(--ink-900);letter-spacing:-0.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .wb-fp-sub{font-size:10px;color:var(--ink-400);font-family:'JetBrains Mono',monospace;white-space:nowrap}
+    .wb-fp-actions{margin-left:auto;display:flex;gap:2px;align-items:center}
+    .wb-fp-close{width:22px;height:22px;border-radius:5px;background:transparent;border:0;color:var(--ink-500);cursor:pointer;display:grid;place-items:center}
+    .wb-fp-close:hover{background:var(--critical-bg);color:var(--critical)}
+    /* Pin button */
+    .wb-pin-btn{width:22px;height:22px;border-radius:5px;background:transparent;border:0;color:var(--ink-400);cursor:pointer;display:grid;place-items:center;transition:color .15s,background .15s;flex-shrink:0}
+    .wb-pin-btn:hover{background:rgba(70,166,167,0.12);color:var(--teal-600)}
+    .wb-pin-btn.pinned{color:var(--teal-500)}
+    .wb-pin-btn.pinned svg{fill:var(--teal-500);stroke:var(--teal-600)}
+    /* Pinned panel: teal top accent bar */
+    .wb-float-panel.pinned{border-top:2.5px solid var(--teal-500)}
+    .wb-float-panel.pinned .wb-fp-head{background:linear-gradient(180deg,rgba(70,166,167,0.06),rgba(70,166,167,0.02))}
+    /* Rail tab pinned indicator: small teal dot bottom-right */
+    .wb-tab-pin-dot{display:none;position:absolute;top:4px;left:4px;width:16px;height:16px;border-radius:4px;background:rgba(0,0,0,0.28);border:1px solid rgba(255,255,255,0.06);cursor:pointer;place-items:center;color:var(--ink-400);transition:background .15s,color .15s}
+    .wb-rail-tab:hover .wb-tab-pin-dot{display:grid}
+    .wb-rail-tab.active .wb-tab-pin-dot{display:grid}
+    .wb-tab-pin-dot:hover{background:rgba(59,130,246,0.18);color:#60a5fa;border-color:rgba(59,130,246,0.35)}
+    .wb-tab-pin-dot.pinned{display:grid;background:rgba(59,130,246,0.22);color:#3b82f6;border-color:rgba(59,130,246,0.5)}
+    .wb-tab-pin-dot.pinned svg{fill:#3b82f6;stroke:#2563eb}
+    .wb-fp-body{flex:1;overflow:auto;background:white}
+    .wb-fp-body::-webkit-scrollbar{width:8px}
+    .wb-fp-body::-webkit-scrollbar-thumb{background:var(--ink-200);border-radius:8px}
+    /* KG fullscreen expand — handled by the original rule above */
+    /* Center stage CSS removed — GridStack handles layout */
+    .wb-stage-hero{background:linear-gradient(180deg,white 0%,#fafcfd 100%);border:1px solid var(--ink-100);border-radius:14px;padding:18px 20px 16px;box-shadow:var(--shadow-sm);position:relative;overflow:hidden}
+    .wb-stage-hero::before{content:'';position:absolute;right:-40px;top:-40px;width:180px;height:180px;background:radial-gradient(circle,rgba(70,166,167,0.10),transparent 70%);pointer-events:none}
+    .wb-hero-row{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+    .wb-hero-avatar{width:56px;height:56px;border-radius:50%;background:linear-gradient(140deg,#c8b8a0,#8a6e52);box-shadow:inset 0 -12px 18px rgba(0,0,0,0.18),inset 0 0 0 1.5px rgba(255,255,255,0.25);display:grid;place-items:center;color:white;font-weight:600;font-size:16px;flex-shrink:0}
+    .wb-hero-name{font-size:18px;font-weight:600;color:var(--ink-900);letter-spacing:-0.01em}
+    .wb-hero-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-500);margin-top:2px}
+    .wb-hero-status-pill{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;padding:4px 10px;border-radius:99px;background:var(--critical-bg);color:var(--critical);text-transform:uppercase;letter-spacing:0.08em}
+    .wb-hero-status-pill::before{content:'';width:6px;height:6px;background:var(--critical);border-radius:50%;animation:wbBlinkAlert 1.4s infinite}
+    .wb-hero-status-since{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-500)}
+    /* Stage ECG strip */
+    .wb-stage-ecg{background:radial-gradient(ellipse at 50% 100%,rgba(40,180,120,0.08),transparent 60%),linear-gradient(180deg,#0a1119,#0d1421);border-radius:12px;border:1px solid rgba(70,166,167,0.18);overflow:hidden;position:relative;height:110px;margin-top:12px}
+    .wb-stage-ecg-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(50,180,120,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(50,180,120,0.05) 1px,transparent 1px),linear-gradient(rgba(50,180,120,0.10) 1px,transparent 1px),linear-gradient(90deg,rgba(50,180,120,0.10) 1px,transparent 1px);background-size:10px 10px,10px 10px,50px 50px,50px 50px;-webkit-mask-image:linear-gradient(90deg,transparent,black 6%,black 94%,transparent);mask-image:linear-gradient(90deg,transparent,black 6%,black 94%,transparent)}
+    .wb-stage-ecg-line{position:absolute;inset:0;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent 0%,black 7%,black 93%,transparent 100%);mask-image:linear-gradient(90deg,transparent 0%,black 7%,black 93%,transparent 100%)}
+    .wb-stage-ecg-track{position:absolute;left:0;top:0;height:100%;width:200%;animation:wbEcgScroll 2.4s linear infinite}
+    @keyframes wbEcgScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+    .wb-stage-ecg-track svg{width:100%;height:100%;display:block}
+    .wb-stage-ecg-track svg .trace{fill:none;stroke:oklch(0.78 0.22 145);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 3px oklch(0.88 0.22 145)) drop-shadow(0 0 8px rgba(80,220,140,0.4))}
+    .wb-ecg-meta-bar{position:absolute;left:14px;top:10px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(120,255,180,0.7);font-weight:600;display:flex;gap:8px;align-items:center;z-index:1}
+    .wb-ecg-lead-tag{border:1px solid rgba(120,255,180,0.22);padding:1px 5px;border-radius:3px;font-size:9px}
+    .wb-ecg-bpm{position:absolute;right:14px;top:10px;text-align:right;font-family:'JetBrains Mono',monospace;color:rgba(120,255,180,0.85);z-index:1}
+    .wb-ecg-bpm .v{font-size:20px;font-weight:700;line-height:1;text-shadow:0 0 6px rgba(120,255,180,0.45)}
+    .wb-ecg-bpm .k{font-size:8.5px;color:rgba(255,255,255,0.4);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px}
+    /* Stage vitals */
+    .wb-stage-vitals{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    .wb-stage-vital{background:white;border:1px solid var(--ink-100);border-radius:10px;padding:14px 14px 12px;position:relative;overflow:hidden}
+    .wb-stage-vital::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ink-200)}
+    .wb-stage-vital.critical{background:linear-gradient(180deg,var(--critical-bg),white);border-color:#f4c8c2}
+    .wb-stage-vital.critical::before{background:var(--critical)}
+    .wb-stage-vital.caution{background:linear-gradient(180deg,var(--caution-bg),white);border-color:#f1d9a8}
+    .wb-stage-vital.caution::before{background:var(--caution)}
+    .wb-stage-vital.normal::before{background:var(--normal)}
+    .wb-svital-head{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+    .wb-svital-name{font-size:11px;font-weight:600;color:var(--ink-700);letter-spacing:0.02em}
+    .wb-svital-flag{margin-left:auto;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:0.04em}
+    .wb-svital-flag.low,.wb-svital-flag.high{background:var(--critical);color:white}
+    .wb-svital-flag.warn{background:var(--caution);color:white}
+    .wb-svital-val{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:30px;color:var(--ink-900);line-height:1;letter-spacing:-0.02em;display:flex;align-items:baseline;gap:4px}
+    .wb-svital-val small{font-size:12px;color:var(--ink-500);font-weight:500;letter-spacing:0}
+    .wb-svital-trend{font-size:10px;color:var(--ink-500);margin-top:6px;font-family:'JetBrains Mono',monospace}
+    /* Stage meta row */
+    .wb-stage-meta{display:flex;gap:18px;padding:10px 14px;background:rgba(255,255,255,0.6);border:1px solid var(--ink-100);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:11px;backdrop-filter:blur(6px);flex-wrap:wrap}
+    .wb-stage-meta .mk{color:var(--ink-400);font-size:9.5px;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;display:block}
+    .wb-stage-meta .mv{color:var(--ink-900);font-weight:600;font-size:12px}
+    .wb-stage-meta .mv.tealv{color:var(--teal-700)}
+    /* Grid empty tip */
+    .gs-empty-tip{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-400);padding:6px 12px;background:rgba(255,255,255,0.7);backdrop-filter:blur(6px);border:1px dashed var(--ink-200);border-radius:99px;pointer-events:none;white-space:nowrap}
+    /* Inner panel bodies — fill their GridStack cell */
+    .wb-fp-body .cb-chat-body{max-height:none;flex:1;min-height:200px}
+    .wb-fp-body .cb-exam-layout{overflow-y:auto}
+    .wb-fp-body .cb-kg-stage{height:100%;min-height:300px}
+    .wb-fp-body .cb-cxr-stage{aspect-ratio:1/1}
   </style>
 </head>
-<body class="bg-slate-50 min-h-screen text-slate-800">
+<body class="bg-slate-50 min-h-screen text-slate-800" style="display:flex;flex-direction:column;min-height:100vh">
 
 <!-- HEADER -->
 <header class="cb-topbar sticky top-0 z-50">
   <div class="cb-topbar-row">
+    <button class="cb-burger" data-cb-burger type="button" aria-label="Open menu" title="Menu">
+      <span class="lines"><span></span><span></span><span></span></span>
+    </button>
     <div class="cb-brand">
       <div class="cb-brand-mark" aria-hidden="true"></div>
       <div>
@@ -1312,327 +2397,545 @@ HTML_PAGE = """
       <button id="pauseBtn" hidden onclick="pauseSession()" class="cb-topbar-btn" title="Pause and save this session">
         <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1"/><rect x="9" y="2" width="4" height="12" rx="1"/></svg>Pause
       </button>
-      <a href="/dashboard" id="dashLink" hidden class="cb-topbar-btn">Dashboard</a>
+      <button id="submitCaseBtn" hidden onclick="showSubmitConfirm()" class="cb-topbar-btn-submit" title="Submit case for final evaluation">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>Submit
+      </button>
+      <button id="saveExitBtn" hidden onclick="saveAndExit()" class="cb-topbar-btn-save-exit" title="Save evaluated case and return to dashboard">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8l4 4 8-8"/></svg>Save &amp; Exit
+      </button>
+      <a href="/home" id="dashLink" hidden class="cb-topbar-btn">Home</a>
       <div id="userAvatar" hidden class="cb-avatar" title="" style="cursor:default;background:linear-gradient(135deg,var(--teal-700),var(--teal-500))"></div>
       <button id="logoutBtn" hidden onclick="doLogout()" class="cb-topbar-btn">Log out</button>
       <a href="/" id="loginLink" class="cb-topbar-btn">Log in</a>
     </div>
   </div>
   <!-- Workflow stepper -->
-  <nav class="cb-stepper" aria-label="Workflow steps">
-    <div class="cb-step active" id="step1"><span class="cb-step-num" id="sn1">1</span><span class="cb-step-label">Generate Case</span></div>
-    <div class="cb-step" id="step2"><span class="cb-step-num" id="sn2">2</span><span class="cb-step-label">Patient Overview</span></div>
-    <div class="cb-step" id="step3"><span class="cb-step-num" id="sn3">3</span><span class="cb-step-label">Patient Interview</span></div>
-    <div class="cb-step" id="step4"><span class="cb-step-num" id="sn4">4</span><span class="cb-step-label">Order Investigations</span></div>
-    <div class="cb-step" id="step5"><span class="cb-step-num" id="sn5">5</span><span class="cb-step-label">Interpret Results</span></div>
-    <div class="cb-step" id="step6"><span class="cb-step-num" id="sn6">6</span><span class="cb-step-label">Submit Diagnosis</span></div>
-    <div class="cb-step" id="step7"><span class="cb-step-num" id="sn7">7</span><span class="cb-step-label">Evaluate</span></div>
-  </nav>
 </header>
 
-<main class="max-w-screen-2xl mx-auto">
+<main style="width:100%;flex:1;min-height:0;display:flex;flex-direction:column">
 
-  <!-- PATIENT OVERVIEW STRIP (shown after case generated) -->
-  <section id="vitalsStrip" hidden aria-label="Patient overview" class="cb-pt-strip fade-in">
-    <!-- Chief complaint + chips -->
-    <div>
-      <div class="cb-ps-label">Chief Complaint</div>
-      <div class="cb-cc"><span class="cb-cc-quote">&ldquo;</span><span id="pvCC"></span><span class="cb-cc-quote">&rdquo;</span></div>
-      <div class="cb-chips">
-        <span class="cb-chip" id="pvAgeChip"><span class="cb-k">Age</span> <span id="pvAge"></span></span>
-        <span class="cb-chip" id="pvGenderChip"><span class="cb-k">Sex</span> <span id="pvGender"></span></span>
-        <span class="cb-chip" id="pvRaceChip" hidden><span class="cb-k">Race</span> <span id="pvRace"></span></span>
-        <span class="cb-chip cb-chip-teal" id="pvOccChip" hidden><span id="pvOccupation"></span></span>
-      </div>
-    </div>
-    <!-- Vital tiles -->
-    <div>
-      <div class="cb-ps-label">Vitals on Presentation</div>
-      <div class="cb-vitals">
-        <div class="cb-vital" id="vtHR">
-          <div class="cb-v-row"><span class="cb-v-label">HR</span><span class="cb-v-flag" id="vfHR" hidden></span></div>
-          <div class="cb-v-val"><span id="pvHR"></span><span class="cb-v-unit">bpm</span></div>
-        </div>
-        <div class="cb-vital" id="vtBP">
-          <div class="cb-v-row"><span class="cb-v-label">BP</span><span class="cb-v-flag" id="vfBP" hidden></span></div>
-          <div class="cb-v-val"><span id="pvBP"></span><span class="cb-v-unit">mmHg</span></div>
-        </div>
-        <div class="cb-vital" id="vtSPO2">
-          <div class="cb-v-row"><span class="cb-v-label">SpO₂</span><span class="cb-v-flag" id="vfSPO2" hidden></span></div>
-          <div class="cb-v-val"><span id="pvSPO2"></span><span class="cb-v-unit">%</span></div>
-        </div>
-        <div class="cb-vital" id="vtRR">
-          <div class="cb-v-row"><span class="cb-v-label">RR</span><span class="cb-v-flag" id="vfRR" hidden></span></div>
-          <div class="cb-v-val"><span id="pvRR"></span><span class="cb-v-unit">/min</span></div>
-        </div>
-      </div>
-    </div>
-    <!-- Persona card -->
-    <div>
-      <div class="cb-ps-label">Persona</div>
-      <div class="cb-persona-card" id="pvPersonaCard">
-        <div class="cb-persona-avatar" id="pvPersonaAvatar">?</div>
+  <!-- KG backdrop for expanded view -->
+  <div class="cb-kg-backdrop" id="kgBackdrop" onclick="collapseKg()"></div>
+
+  <!-- Login modal -->
+  <div class="cb-login-backdrop" id="loginBackdrop" onclick="if(event.target===this)hideLoginModal()">
+    <div class="cb-login-card" style="position:relative">
+      <button class="cb-login-close" onclick="hideLoginModal()" aria-label="Close">&times;</button>
+      <div class="cb-login-logo">
+        <div class="cb-login-mark"></div>
         <div>
-          <div class="cb-persona-name" id="pvPersonaName"></div>
-          <div class="cb-persona-text" id="pvPersona"></div>
+          <div class="cb-login-title">Cases<span style="color:var(--teal-600)">Basis</span></div>
         </div>
       </div>
+      <p class="cb-login-sub">Enter your email and we'll send you a magic sign-in link — no password needed.</p>
+      <label class="cb-login-label" for="loginEmail">Email address</label>
+      <input id="loginEmail" class="cb-login-input" type="email" placeholder="you@example.com"
+        onkeydown="if(event.key==='Enter')doRequestLink()"/>
+      <button id="loginSubmitBtn" class="cb-login-btn" onclick="doRequestLink()">Send sign-in link</button>
+      <div id="loginMsg" class="cb-login-msg"></div>
+      <div id="loginDevLink" class="cb-login-devlink">
+        <strong>Dev mode — click your magic link:</strong>
+        <a id="loginDevAnchor" href="#"></a>
+      </div>
+      <div class="cb-login-divider">or</div>
+      <button class="cb-login-test-btn" onclick="doTestLogin()">
+        ⚡ Test Resident
+      </button>
+      <span class="cb-login-test-label">Instant login · no account needed · dev only</span>
     </div>
-  </section>
+  </div>
 
-  <!-- MAIN GRID: 3 columns -->
-  <div class="cb-main">
+  <!-- ================================================================
+       WORKBENCH v3: left-rail · left-dock · stage · right-dock · right-rail
+       ================================================================ -->
+  <div class="wb-workbench">
 
-    <!-- ── COL 1: Patient chat ── -->
-    <div class="cb-col">
-      <div class="cb-panel">
-        <div class="cb-panel-head">
-          <span class="cb-panel-num">03</span>
-          <span class="cb-panel-title">Patient Interview</span>
-          <span id="chatTurnBadge" hidden class="cb-chip" style="background:var(--teal-50);color:var(--teal-700);border-color:oklch(0.85 0.06 195);font-size:10px;padding:1px 7px"></span>
-        </div>
-        <div id="chatArea" class="cb-chat-body">
-          <div class="cb-chat-divider">Generate a case to begin</div>
-        </div>
-        <div class="cb-chat-foot">
-          <div class="cb-chat-ctrl">
-            <label class="cb-toggle" onclick="toggleTts()">
-              <span id="ttsTrack" class="cb-toggle-track"></span>
-              <span>Read patient responses aloud</span>
-            </label>
-            <span id="ttsVoiceLabel" style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-400)">EN-US · Auto</span>
-          </div>
-          <div class="cb-chat-input">
-            <input id="question" placeholder="Ask the patient a question…"
-              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askQuestion()}"/>
-            <button id="micBtn" onclick="toggleMic()" title="Speak your question" class="cb-chat-mic">
-              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
-              </svg>
-            </button>
-            <button id="askBtn" onclick="askQuestion()" class="cb-chat-send" title="Send">
-              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 8l12-6-4 14-3-6-5-2z"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
+    <!-- ══════════ LEFT RAIL ══════════ -->
+    <aside class="wb-rail wb-rail-left" aria-label="Clinician inputs">
+      <div class="wb-rail-label">YOU</div>
 
-      <!-- KG backdrop for expanded view -->
-      <div class="cb-kg-backdrop" id="kgBackdrop" onclick="collapseKg()"></div>
+      <button class="wb-rail-tab active" data-panel="panel-interview" title="Patient Interview">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M3 5h18v11H8l-4 4z"/><path d="M7 9h10M7 12h7"/></svg>
+        <span class="wb-rt-label">Interview</span>
+        <span class="wb-rt-meta" id="chatTurnBadge">—</span>
+      
+        <span class="wb-tab-pin-dot" data-pin-tab="panel-interview" title="Pin panel" onclick="event.stopPropagation();wbTogglePin('panel-interview')"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></span>
+      </button>
 
-      <!-- Login modal -->
-      <div class="cb-login-backdrop" id="loginBackdrop" onclick="if(event.target===this)hideLoginModal()">
-        <div class="cb-login-card" style="position:relative">
-          <button class="cb-login-close" onclick="hideLoginModal()" aria-label="Close">&times;</button>
-          <div class="cb-login-logo">
-            <div class="cb-login-mark"></div>
-            <div>
-              <div class="cb-login-title">Cases<span style="color:var(--teal-600)">Basis</span></div>
-            </div>
-          </div>
-          <p class="cb-login-sub">Enter your email and we'll send you a magic sign-in link — no password needed.</p>
-          <label class="cb-login-label" for="loginEmail">Email address</label>
-          <input id="loginEmail" class="cb-login-input" type="email" placeholder="you@example.com"
-            onkeydown="if(event.key==='Enter')doRequestLink()"/>
-          <button id="loginSubmitBtn" class="cb-login-btn" onclick="doRequestLink()">Send sign-in link</button>
-          <div id="loginMsg" class="cb-login-msg"></div>
-          <div id="loginDevLink" class="cb-login-devlink">
-            <strong>Dev mode — click your magic link:</strong>
-            <a id="loginDevAnchor" href="#"></a>
-          </div>
-          <div class="cb-login-divider">or</div>
-          <button class="cb-login-test-btn" onclick="doTestLogin()">
-            ⚡ Test Resident
-          </button>
-          <span class="cb-login-test-label">Instant login · no account needed · dev only</span>
-        </div>
-      </div>
+      <button class="wb-rail-tab" data-panel="panel-phys-exam" title="Physical Examination">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><circle cx="12" cy="5" r="2.4"/><path d="M12 8v7M8 11l4-2 4 2M9 21l3-6 3 6"/></svg>
+        <span class="wb-rt-label">Physical Exam</span>
+        <span class="wb-rt-meta" id="examDoneBadge">—</span>
+      
+        <span class="wb-tab-pin-dot" data-pin-tab="panel-phys-exam" title="Pin panel" onclick="event.stopPropagation();wbTogglePin('panel-phys-exam')"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></span>
+      </button>
 
-      <!-- Knowledge Graph -->
-      <div id="graphPanel" hidden class="cb-panel fade-in">
-        <div class="cb-panel-head cb-panel-head-toggle" onclick="togglePanel('graphPanel')">
-          <span class="cb-panel-num">KG</span>
-          <span class="cb-panel-title">Knowledge Graph</span>
-          <span id="graphStatus" class="text-xs italic" style="color:var(--ink-400);margin-left:6px">Waiting…</span>
-          <span id="graphBadge" hidden class="cb-chip" style="font-size:10px;padding:1px 7px;margin-left:6px"></span>
-          <div style="margin-left:auto;display:flex;align-items:center;gap:4px">
-            <div id="graphControls" hidden style="display:flex;align-items:center;gap:2px">
-              <button onclick="event.stopPropagation();graphZoomIn()" class="cb-iconbtn" style="font-size:14px;font-weight:700">+</button>
-              <button onclick="event.stopPropagation();graphZoomOut()" class="cb-iconbtn" style="font-size:14px;font-weight:700">−</button>
-              <button onclick="event.stopPropagation();graphFit()" class="cb-iconbtn" style="font-size:10px;padding:0 4px">Fit</button>
-            </div>
-            <button onclick="event.stopPropagation();toggleKgExpand()" id="kgExpandBtn" class="cb-iconbtn" title="Expand">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-                <path d="M1 4.5V1h3.5M7.5 1H11v3.5M11 7.5V11H7.5M4.5 11H1V7.5"/>
-              </svg>
-            </button>
-            <svg class="cb-panel-chev" width="14" height="14" viewBox="0 0 14 14" fill="none" style="margin-left:2px"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          </div>
-        </div>
-        <div class="cb-panel-body-wrap">
-        <div class="cb-kg-stage">
-          <div class="cb-kg-grid"></div>
-          <div id="kgStatBar" hidden class="cb-kg-stat">
-            <span><strong id="kgNodeCount">0</strong> nodes</span>
-            <span><strong id="kgEdgeCount">0</strong> edges</span>
-            <span id="kgRecentSpan" hidden><strong id="kgRecentCount">+0</strong> last min</span>
-          </div>
-          <div id="graphEmpty" class="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none">
-            <svg class="w-10 h-10" fill="none" stroke="rgba(255,255,255,0.18)" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
-            </svg>
-            <p class="text-xs" style="color:rgba(255,255,255,0.3)">Ask questions to build the graph</p>
-          </div>
-          <svg id="graphSvg" style="position:absolute;inset:0;width:100%;height:100%;cursor:grab"></svg>
-          <div class="cb-kg-legend">
-            <div class="cb-kg-legend-item"><div class="cb-kg-dot" style="background:#f97316"></div>Symptom</div>
-            <div class="cb-kg-legend-item"><div class="cb-kg-dot" style="background:#f59e0b"></div>Risk</div>
-            <div class="cb-kg-legend-item"><div class="cb-kg-dot" style="background:#6366f1"></div>Finding</div>
-            <div class="cb-kg-legend-item"><div class="cb-kg-dot" style="background:#60a5fa"></div>Medication</div>
-            <div class="cb-kg-legend-item"><div class="cb-kg-dot" style="background:#10b981"></div>Diagnosis</div>
-          </div>
-          <div id="graphTooltip" class="graph-tooltip" style="display:none"></div>
-        </div>
-        </div>
-      </div>
-    </div>
+      <button class="wb-rail-tab" data-panel="panel-invest" title="Order Investigations">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M9 3h6v5l4 8a3 3 0 0 1-2.7 4H7.7A3 3 0 0 1 5 16l4-8z"/></svg>
+        <span class="wb-rt-label">Investigations</span>
+        <span class="wb-rt-meta" id="invCountBadge">—</span>
 
-    <!-- ── COL 2: Investigations ── -->
-    <div class="cb-col">
+        <span class="wb-tab-pin-dot" data-pin-tab="panel-invest" title="Pin panel" onclick="event.stopPropagation();wbTogglePin('panel-invest')"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></span>
+      </button>
 
-      <!-- Order form -->
-      <div class="cb-panel">
-        <div class="cb-panel-head">
-          <span class="cb-panel-num">04</span>
-          <span class="cb-panel-title">Investigations</span>
-          <span id="invCountBadge" hidden class="cb-chip" style="background:var(--ink-50);color:var(--ink-600);font-size:10px;padding:1px 7px;margin-left:auto"></span>
-        </div>
-        <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
-          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-            <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--ink-400);font-weight:600;margin-right:2px;flex-shrink:0">Quick order</span>
-            <button class="qchip" data-inv="cxr"      onclick="quickOrder('CXR')">CXR</button>
-            <button class="qchip" data-inv="abg"      onclick="quickOrder('ABG')">ABG</button>
-            <button class="qchip" data-inv="cbc"      onclick="quickOrder('CBC')">CBC</button>
-            <button class="qchip" data-inv="ecg"      onclick="quickOrder('ECG')">ECG</button>
-            <button class="qchip" data-inv="troponin" onclick="quickOrder('Troponin')">Troponin</button>
-            <button class="qchip" data-inv="ddimer"   onclick="quickOrder('D-dimer')">D-dimer</button>
-            <button class="qchip" data-inv="ue"       onclick="quickOrder('U&amp;E')">U&amp;E</button>
-            <button class="qchip" data-inv="peakflow" onclick="quickOrder('Peak Flow')">Peak Flow</button>
-          </div>
-          <div style="display:flex;gap:6px">
-            <input id="investigation" value="" placeholder="Order any investigation… e.g. 'serum tryptase'"
-              style="flex:1;min-width:0;padding:6px 10px;font:inherit;font-size:12px;border:1px dashed var(--ink-200);border-radius:6px;background:var(--ink-50);color:var(--ink-800);outline:0"
-              onkeydown="if(event.key==='Enter')orderInvestigation()"/>
-            <button id="invBtn" onclick="orderInvestigation()"
-              style="font:inherit;font-size:11px;font-weight:500;padding:6px 10px;border-radius:6px;background:white;border:1px solid var(--ink-200);color:var(--ink-700);cursor:pointer;flex-shrink:0">
-              Order
-            </button>
-          </div>
-          <div id="invResults" style="display:flex;flex-direction:column;gap:10px"></div>
-        </div>
-      </div>
+      <div class="wb-rail-spacer"></div>
+      <div class="wb-rail-foot">CLINICIAN<br/>INPUTS</div>
+    </aside>
 
-      <!-- Physical Exam panel -->
-      <div id="examPanel" class="cb-panel collapsed">
-        <div class="cb-panel-head cb-panel-head-toggle" onclick="togglePanel('examPanel')">
-          <span class="cb-panel-num">PE</span>
-          <span class="cb-panel-title">Physical Examination</span>
-          <span id="examDoneBadge" hidden class="cb-chip" style="background:var(--teal-50);color:var(--teal-700);border-color:oklch(0.85 0.06 195);font-size:10px;padding:1px 7px;margin-left:6px"></span>
-          <svg class="cb-panel-chev" width="14" height="14" viewBox="0 0 14 14" fill="none" style="margin-left:auto"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    <!-- ══════════ PANEL STORE (off-grid, panels live here when closed) ══════════ -->
+    <div id="gs-store" aria-hidden="true" style="display:none">
+
+      <section class="wb-float-panel pinned" id="panel-patient">
+        <div class="wb-fp-head">
+          <div class="wb-fp-title-group">
+            <span class="wb-fp-title">Patient</span>
+            <span class="wb-fp-sub" id="ppHeadSub">On presentation</span>
+          </div>
         </div>
-        <div class="cb-panel-body-wrap">
-          <div class="cb-exam-layout">
-            <!-- Body image -->
-            <div class="cb-exam-body cb-exam-body-col" id="examBodyWrap">
-              <img src="/body-image.png" alt="Body diagram" draggable="false"/>
-              <!-- Pins injected by JS -->
-            </div>
-            <!-- System checklist -->
-            <div class="cb-exam-checklist-col">
-              <div class="cb-exam-systems" id="examSystems">
-                <div class="cb-exam-sys-row" onclick="toggleExamSys(this,'General')">
-                  <div class="cb-exam-sys-accent" style="background:#64748b"></div>
-                  <div class="cb-exam-sys-cb"></div>
-                  <div class="cb-exam-sys-label">General</div>
-                </div>
-                <div class="cb-exam-sys-row" onclick="toggleExamSys(this,'Cardiovascular')">
-                  <div class="cb-exam-sys-accent" style="background:#ef4444"></div>
-                  <div class="cb-exam-sys-cb"></div>
-                  <div class="cb-exam-sys-label">Cardiovascular</div>
-                </div>
-                <div class="cb-exam-sys-row" onclick="toggleExamSys(this,'Respiratory')">
-                  <div class="cb-exam-sys-accent" style="background:#06b6d4"></div>
-                  <div class="cb-exam-sys-cb"></div>
-                  <div class="cb-exam-sys-label">Respiratory</div>
-                </div>
-                <div class="cb-exam-sys-row" onclick="toggleExamSys(this,'Abdominal')">
-                  <div class="cb-exam-sys-accent" style="background:#f97316"></div>
-                  <div class="cb-exam-sys-cb"></div>
-                  <div class="cb-exam-sys-label">Abdominal</div>
-                </div>
-                <div class="cb-exam-sys-row" onclick="toggleExamSys(this,'Neurological')">
-                  <div class="cb-exam-sys-accent" style="background:#8b5cf6"></div>
-                  <div class="cb-exam-sys-cb"></div>
-                  <div class="cb-exam-sys-label">Neurological</div>
-                </div>
-                <div class="cb-exam-sys-row" onclick="toggleExamSys(this,'Musculoskeletal')">
-                  <div class="cb-exam-sys-accent" style="background:#10b981"></div>
-                  <div class="cb-exam-sys-cb"></div>
-                  <div class="cb-exam-sys-label">Musculoskeletal</div>
-                </div>
-                <div class="cb-exam-sys-row" onclick="toggleExamSys(this,'Dermatological')">
-                  <div class="cb-exam-sys-accent" style="background:#ec4899"></div>
-                  <div class="cb-exam-sys-cb"></div>
-                  <div class="cb-exam-sys-label">Dermatological</div>
-                </div>
-                <div class="cb-exam-sys-row" onclick="toggleExamSys(this,'ENT/Head &amp; Neck')">
-                  <div class="cb-exam-sys-accent" style="background:#f59e0b"></div>
-                  <div class="cb-exam-sys-cb"></div>
-                  <div class="cb-exam-sys-label">ENT / Head &amp; Neck</div>
-                </div>
-                <div class="cb-exam-sys-row" onclick="toggleExamSys(this,'Peripheral Vascular')">
-                  <div class="cb-exam-sys-accent" style="background:#6366f1"></div>
-                  <div class="cb-exam-sys-cb"></div>
-                  <div class="cb-exam-sys-label">Peripheral Vascular</div>
+        <div class="wb-fp-body">
+          <div class="pp-scroll">
+            <div class="pp-head">
+              <div class="pp-id">
+                <div class="pp-avatar" id="ppAvatar">?</div>
+                <div class="pp-id-text">
+                  <div class="pp-name"><span id="ppName">—</span> <span class="pp-desc" id="ppDesc"></span></div>
+                  <div class="pp-live"><span class="pp-live-dot"></span>Monitoring · On presentation</div>
                 </div>
               </div>
-              <button id="examBtn" onclick="performExam()"
-                style="font:inherit;font-size:11px;font-weight:600;padding:7px 12px;border-radius:6px;background:var(--ink-900);color:white;border:0;cursor:pointer;transition:background .15s"
-                onmouseover="this.style.background='var(--ink-700)'" onmouseout="this.style.background='var(--ink-900)'">
-                Examine selected
+              <div class="pp-persona" id="ppPersona"></div>
+              <div class="pp-chips">
+                <span class="pp-chip" id="ppAgeChip">Age <b id="ppAge">—</b></span>
+                <span class="pp-chip" id="ppSexChip">Sex <b id="ppSex">—</b></span>
+                <span class="pp-chip" id="ppRaceChip" hidden>Race <b id="ppRace"></b></span>
+                <span class="pp-chip role" id="ppOccChip" hidden><span id="ppOcc"></span></span>
+              </div>
+            </div>
+            <div class="pp-cc">
+              <div class="pp-sec-label">Chief complaint</div>
+              <div class="pp-cc-quote"><em id="ppCC">—</em></div>
+            </div>
+            <div class="pp-vitals">
+              <div class="pp-sec-label">Vitals on presentation</div>
+              <div class="pp-vitals-grid">
+                <div class="pp-vital" id="ppVitHR">
+                  <div class="pp-v-top">
+                    <span class="pp-v-label">HR</span>
+                    <span class="pp-v-arrow" id="ppArrowHR" hidden><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M4 7l4-4 4 4"/></svg></span>
+                  </div>
+                  <div class="pp-v-val"><span id="ppHR">—</span> <span class="pp-v-unit">bpm</span></div>
+                  <div class="pp-v-flag" id="ppFlagHR" hidden></div>
+                  <div class="pp-v-ok" id="ppOkHR">within range</div>
+                </div>
+                <div class="pp-vital" id="ppVitBP">
+                  <div class="pp-v-top">
+                    <span class="pp-v-label">BP</span>
+                    <span class="pp-v-arrow" id="ppArrowBP" hidden><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M4 7l4-4 4 4"/></svg></span>
+                  </div>
+                  <div class="pp-v-val"><span id="ppBP">—</span> <span class="pp-v-unit">mmHg</span></div>
+                  <div class="pp-v-flag" id="ppFlagBP" hidden></div>
+                  <div class="pp-v-ok" id="ppOkBP">within range</div>
+                </div>
+                <div class="pp-vital" id="ppVitSPO2">
+                  <div class="pp-v-top">
+                    <span class="pp-v-label">SpO<sub>2</sub></span>
+                    <span class="pp-v-arrow" id="ppArrowSPO2" hidden><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M4 9l4 4 4-4"/></svg></span>
+                  </div>
+                  <div class="pp-v-val"><span id="ppSPO2">—</span> <span class="pp-v-unit">%</span></div>
+                  <div class="pp-v-flag" id="ppFlagSPO2" hidden></div>
+                  <div class="pp-v-ok" id="ppOkSPO2">within range</div>
+                </div>
+                <div class="pp-vital" id="ppVitRR">
+                  <div class="pp-v-top">
+                    <span class="pp-v-label">RR</span>
+                    <span class="pp-v-arrow" id="ppArrowRR" hidden><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M4 7l4-4 4 4"/></svg></span>
+                  </div>
+                  <div class="pp-v-val"><span id="ppRR">—</span> <span class="pp-v-unit">/min</span></div>
+                  <div class="pp-v-flag" id="ppFlagRR" hidden></div>
+                  <div class="pp-v-ok" id="ppOkRR">within range</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="pp-ecg" id="ppEcgWrap" hidden>
+            <div class="pp-ecg-bar">
+              <span class="pp-ecg-lead">II</span>
+              <span class="pp-ecg-cap">Lead II · live</span>
+              <div class="pp-ecg-hr">
+                <span class="pp-heart" id="ppHeart"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 14s-5.5-3.8-5.5-7.3A3 3 0 0 1 8 4.6a3 3 0 0 1 5.5 2.1C13.5 10.2 8 14 8 14Z"/></svg></span>
+                <span class="pp-hr-num" id="ppHRMon">—</span>
+                <span class="pp-hr-unit">bpm</span>
+              </div>
+            </div>
+            <div class="pp-ecg-canvas-wrap"><canvas id="ppEcg"></canvas></div>
+            <div class="pp-ecg-foot">
+              <span class="pp-gain">25 mm/s · 10 mm/mV</span>
+              <span id="ppRhythm">SINUS RHYTHM</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="wb-float-panel" id="panel-interview">
+        <div class="wb-fp-head">
+          <div class="wb-fp-title-group">
+            <span class="wb-fp-title">Patient Interview</span>
+            <span class="wb-fp-sub" id="chatTurnSub">—</span>
+          </div>
+          <div class="wb-fp-actions">
+            <button class="cb-iconbtn" title="Toggle voice" onclick="toggleTts()" style="width:22px;height:22px">
+              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg>
+            </button>
+            
+            <button class="wb-pin-btn" onclick="wbTogglePin('panel-interview')" data-pin-id="panel-interview" title="Pin panel"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></button>
+            <button class="wb-fp-close" onclick="wbClosePanel('panel-interview')" title="Collapse">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="wb-fp-body" style="display:flex;flex-direction:column">
+          <div id="chatArea" class="cb-chat-body" style="flex:1;max-height:none">
+            <div class="cb-chat-divider">Generate a case to begin</div>
+          </div>
+          <div class="cb-chat-foot">
+            <div class="cb-chat-ctrl">
+              <label class="cb-toggle" onclick="toggleTts()">
+                <span id="ttsTrack" class="cb-toggle-track"></span>
+                <span>Read responses aloud</span>
+              </label>
+              <span id="ttsVoiceLabel" style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-400)">EN-US · Auto</span>
+            </div>
+            <div class="cb-chat-input">
+              <input id="question" placeholder="Ask the patient a question…"
+                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askQuestion()}"/>
+              <button id="micBtn" onclick="toggleMic()" title="Speak your question" class="cb-chat-mic">
+                <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+              </button>
+              <button id="askBtn" onclick="askQuestion()" class="cb-chat-send" title="Send">
+                <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8l12-6-4 14-3-6-5-2z"/></svg>
               </button>
             </div>
           </div>
-          <div id="examResults" class="cb-exam-results"></div>
         </div>
-      </div>
+      </section>
 
-      <!-- ECG panel -->
-      <div id="ecgPanel" hidden class="cb-panel fade-in">
-        <div class="cb-panel-head cb-panel-head-toggle" onclick="togglePanel('ecgPanel')">
-          <span class="cb-panel-num">ECG</span>
-          <span class="cb-panel-title">Electrocardiogram · 12-lead</span>
-          <svg class="cb-panel-chev" width="14" height="14" viewBox="0 0 14 14" fill="none" style="margin-left:auto"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        </div>
-        <div class="cb-panel-body-wrap">
-          <div id="ecgContent" class="ecg-wrap"></div>
-          <div id="ecgMeta" hidden class="cb-ecg-meta">
-            <span id="ecgMetaLeft">—</span>
-            <span id="ecgMetaRight" style="text-align:right;max-width:60%"></span>
+      <section class="wb-float-panel" id="panel-phys-exam">
+        <div class="wb-fp-head">
+          <div class="wb-fp-title-group">
+            <span class="wb-fp-title">Physical Examination</span>
+            <span class="wb-fp-sub">Select systems, then examine</span>
+          </div>
+          <div class="wb-fp-actions">
+            
+            <button class="wb-pin-btn" onclick="wbTogglePin('panel-phys-exam')" data-pin-id="panel-phys-exam" title="Pin panel"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></button>
+            <button class="wb-fp-close" onclick="wbClosePanel('panel-phys-exam')" title="Collapse">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
           </div>
         </div>
-      </div>
-
-      <!-- CXR panel -->
-      <div id="cxrPanel" hidden class="cb-panel fade-in">
-        <div class="cb-panel-head cb-panel-head-toggle" onclick="togglePanel('cxrPanel')">
-          <span class="cb-panel-num">CXR</span>
-          <span class="cb-panel-title">Chest Radiograph · PA</span>
-          <svg class="cb-panel-chev" width="14" height="14" viewBox="0 0 14 14" fill="none" style="margin-left:auto"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <div class="wb-fp-body">
+          <div class="pe-body">
+            <div class="pe-top">
+              <span class="pe-label">Body systems</span>
+              <div class="pe-selectbar">
+                <span class="pe-count-pill"><b id="peCount">0</b> of 9 selected</span>
+                <button class="pe-link" id="peToggleAll" type="button" onclick="peToggleAll()">Select all</button>
+              </div>
+            </div>
+            <div class="pe-systems" id="examSystems">
+              <div class="pe-sys" data-name="General"             style="--c:#5b6b85" onclick="toggleExamSys(this,'General')"><span class="dot"></span><span class="name">General</span><span class="check"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></span></div>
+              <div class="pe-sys" data-name="Cardiovascular"      style="--c:#ef4444" onclick="toggleExamSys(this,'Cardiovascular')"><span class="dot"></span><span class="name">Cardiovascular</span><span class="check"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></span></div>
+              <div class="pe-sys" data-name="Respiratory"         style="--c:#06b6d4" onclick="toggleExamSys(this,'Respiratory')"><span class="dot"></span><span class="name">Respiratory</span><span class="check"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></span></div>
+              <div class="pe-sys" data-name="Abdominal"           style="--c:#f97316" onclick="toggleExamSys(this,'Abdominal')"><span class="dot"></span><span class="name">Abdominal</span><span class="check"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></span></div>
+              <div class="pe-sys" data-name="Neurological"        style="--c:#8b5cf6" onclick="toggleExamSys(this,'Neurological')"><span class="dot"></span><span class="name">Neurological</span><span class="check"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></span></div>
+              <div class="pe-sys" data-name="Musculoskeletal"     style="--c:#10b981" onclick="toggleExamSys(this,'Musculoskeletal')"><span class="dot"></span><span class="name">Musculoskeletal</span><span class="check"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></span></div>
+              <div class="pe-sys" data-name="Dermatological"      style="--c:#ec4899" onclick="toggleExamSys(this,'Dermatological')"><span class="dot"></span><span class="name">Dermatological</span><span class="check"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></span></div>
+              <div class="pe-sys" data-name="ENT/Head &amp; Neck"  style="--c:#f59e0b" onclick="toggleExamSys(this,'ENT/Head &amp; Neck')"><span class="dot"></span><span class="name">ENT / Head &amp; Neck</span><span class="check"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></span></div>
+              <div class="pe-sys" data-name="Peripheral Vascular" style="--c:#6366f1" onclick="toggleExamSys(this,'Peripheral Vascular')"><span class="dot"></span><span class="name">Peripheral Vascular</span><span class="check"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></span></div>
+            </div>
+          </div>
+          <div class="pe-foot">
+            <div class="pe-meta" id="peMeta">No systems selected yet.</div>
+            <button class="pe-examine" id="examBtn" type="button" onclick="performExam()" disabled>
+              Examine selected
+              <span class="badge" id="peBadge">0</span>
+            </button>
+          </div>
+          <div id="examResults" class="cb-exam-results"></div>
         </div>
-        <div class="cb-panel-body-wrap">
+      </section>
+
+      <section class="wb-float-panel wide" id="panel-invest">
+        <div class="wb-fp-head">
+          <div class="wb-fp-title-group">
+            <span class="wb-fp-title">Investigations</span>
+            <span class="wb-fp-sub" id="invOrderedSub">—</span>
+          </div>
+          <div class="wb-fp-actions">
+            
+            <button class="wb-pin-btn" onclick="wbTogglePin('panel-invest')" data-pin-id="panel-invest" title="Pin panel"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></button>
+            <button class="wb-fp-close" onclick="wbClosePanel('panel-invest')" title="Collapse">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="wb-fp-body">
+          <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+              <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--ink-400);font-weight:600;margin-right:2px;flex-shrink:0">Quick order</span>
+              <button class="qchip" data-inv="abg"      onclick="quickOrder('ABG')">ABG</button>
+              <button class="qchip" data-inv="cbc"      onclick="quickOrder('CBC')">CBC</button>
+              <button class="qchip" data-inv="troponin" onclick="quickOrder('Troponin')">Troponin</button>
+              <button class="qchip" data-inv="ddimer"   onclick="quickOrder('D-dimer')">D-dimer</button>
+              <button class="qchip" data-inv="ue"       onclick="quickOrder('U&amp;E')">U&amp;E</button>
+              <button class="qchip" data-inv="peakflow" onclick="quickOrder('Peak Flow')">Peak Flow</button>
+            </div>
+            <div style="display:flex;gap:6px">
+              <input id="investigation" value="" placeholder="Order any investigation… e.g. 'serum tryptase'"
+                style="flex:1;min-width:0;padding:6px 10px;font:inherit;font-size:12px;border:1px dashed var(--ink-200);border-radius:6px;background:var(--ink-50);color:var(--ink-800);outline:0"
+                onkeydown="if(event.key==='Enter')orderInvestigation()"/>
+              <button id="invBtn" onclick="orderInvestigation()"
+                style="font:inherit;font-size:11px;font-weight:500;padding:6px 10px;border-radius:6px;background:white;border:1px solid var(--ink-200);color:var(--ink-700);cursor:pointer;flex-shrink:0">Order</button>
+            </div>
+            <div id="invResults" style="display:flex;flex-direction:column;gap:10px"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="wb-float-panel wide" id="panel-reasoning">
+        <div class="wb-fp-head">
+          <div class="wb-fp-title-group">
+            <span class="wb-fp-title">Reasoning &amp; Diagnosis</span>
+            <span class="wb-fp-sub" id="interpCharCount">0 / 1000</span>
+          </div>
+          <div class="wb-fp-actions">
+            
+            <button class="wb-pin-btn" onclick="wbTogglePin('panel-reasoning')" data-pin-id="panel-reasoning" title="Pin panel"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></button>
+            <button class="wb-fp-close" onclick="wbClosePanel('panel-reasoning')" title="Collapse">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="wb-fp-body">
+          <div class="cb-panel-body" style="gap:14px">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <span style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-500);font-weight:600">Clinical Interpretation</span>
+              </div>
+              <textarea id="interpretation" rows="4" placeholder="Your interpretation of ordered tests…"
+                class="cb-field" oninput="updateInterpCount(this)" style="resize:vertical;width:100%"></textarea>
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:6px;gap:8px">
+                <ul id="interpList" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:3px;flex:1;font-size:11.5px;color:var(--ink-700)"></ul>
+                <button id="interpBtn" onclick="submitInterpretation()"
+                  style="background:var(--ink-900);color:white;border:0;font:inherit;font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:6px;cursor:pointer;flex-shrink:0"
+                  onmouseover="this.style.background='var(--ink-800)'" onmouseout="this.style.background='var(--ink-900)'">Save</button>
+              </div>
+            </div>
+            <div class="cb-section-div">Working Diagnosis</div>
+            <div>
+              <div style="display:flex;gap:6px">
+                <input id="diagnosisGuess" placeholder="Your working diagnosis…"
+                  class="cb-field" style="flex:1;min-width:0"
+                  onkeydown="if(event.key==='Enter')submitDiagnosis()"/>
+                <button id="diagnosisBtn" onclick="submitDiagnosis()"
+                  style="background:var(--teal-600);color:white;border:0;font:inherit;font-size:11.5px;font-weight:600;padding:8px 12px;border-radius:6px;cursor:pointer;flex-shrink:0;white-space:nowrap;display:inline-flex;align-items:center;gap:5px"
+                  onmouseover="this.style.background='var(--teal-500)'" onmouseout="this.style.background='var(--teal-600)'">
+                  Submit <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M3 8l3 3 7-7"/></svg>
+                </button>
+              </div>
+              <div id="diagnosisResult" hidden style="margin-top:8px;background:var(--teal-50);border:1px solid oklch(0.85 0.06 195);border-radius:7px;padding:8px 10px;font-size:12px;color:var(--teal-700)" class="fade-in"></div>
+            </div>
+            <div class="cb-section-div">Senior Doctor</div>
+            <div style="border:1px solid var(--ink-100);border-radius:8px;overflow:hidden">
+              <div class="cb-doctor-head">
+                <div class="cb-doctor-avatar"></div>
+                <div>
+                  <div class="cb-doctor-name">Dr. Hamza</div>
+                  <div class="cb-doctor-role">Senior ER Physician</div>
+                </div>
+                <div class="cb-doctor-status">On call</div>
+              </div>
+              <div id="doctorConsults"></div>
+              <div style="display:flex;gap:6px;padding:8px 10px;align-items:flex-end">
+                <textarea id="doctorQuestion" rows="2" placeholder="Ask Dr. Hamza for guidance…"
+                  class="cb-field" style="flex:1;resize:none"></textarea>
+                <button id="doctorBtn" onclick="callDoctor()"
+                  style="background:var(--ink-900);color:white;border:0;font:inherit;font-size:11.5px;font-weight:600;padding:8px 12px;border-radius:6px;cursor:pointer;flex-shrink:0;white-space:nowrap"
+                  onmouseover="this.style.background='var(--ink-800)'" onmouseout="this.style.background='var(--ink-900)'">Ask</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="wb-float-panel" id="panel-imaging">
+        <div class="wb-fp-head">
+          <div class="wb-fp-title-group">
+            <span class="wb-fp-title">Imaging</span>
+            <span class="wb-fp-sub" id="imagingPanelSub">Order studies · open results</span>
+          </div>
+          <div class="wb-fp-actions">
+            <button class="wb-pin-btn" onclick="wbTogglePin('panel-imaging')" data-pin-id="panel-imaging" title="Pin panel"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></button>
+            <button class="wb-fp-close" onclick="wbClosePanel('panel-imaging')" title="Collapse">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="wb-fp-body">
+          <button type="button" class="img-card" data-modality="cxr" data-state="idle" onclick="onImagingCardClick('cxr')">
+            <span class="img-card-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 7c-1 4-1 7 0 11M15 7c1 4 1 7 0 11M12 5v15"/></svg></span>
+            <span class="img-card-text">
+              <span class="img-card-name">Chest X-ray</span>
+              <span class="img-card-sub" data-role="status">Not ordered</span>
+            </span>
+            <span class="img-card-cta"><span data-role="cta">Order</span>
+              <span class="img-card-spin"></span>
+              <svg class="img-card-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>
+            </span>
+          </button>
+          <button type="button" class="img-card" data-modality="ecg" data-state="idle" onclick="onImagingCardClick('ecg')">
+            <span class="img-card-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l2-6 3 12 2-8 2 4h8"/></svg></span>
+            <span class="img-card-text">
+              <span class="img-card-name">12-Lead ECG</span>
+              <span class="img-card-sub" data-role="status">Not ordered</span>
+            </span>
+            <span class="img-card-cta"><span data-role="cta">Order</span>
+              <span class="img-card-spin"></span>
+              <svg class="img-card-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>
+            </span>
+          </button>
+          <button type="button" class="img-card" data-modality="us" data-state="disabled" disabled>
+            <span class="img-card-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M5 14a7 7 0 0 1 14 0"/><path d="M5 14v3a3 3 0 0 0 3 3M19 14v3a3 3 0 0 1-3 3"/><circle cx="12" cy="14" r="1.6"/></svg></span>
+            <span class="img-card-text">
+              <span class="img-card-name">Ultrasound</span>
+              <span class="img-card-sub" data-role="status">Coming soon</span>
+            </span>
+            <span class="img-card-cta"><span data-role="cta">TBA</span></span>
+          </button>
+          <button type="button" class="img-card" data-modality="ct" data-state="disabled" disabled>
+            <span class="img-card-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></span>
+            <span class="img-card-text">
+              <span class="img-card-name">CT Scan</span>
+              <span class="img-card-sub" data-role="status">Coming soon</span>
+            </span>
+            <span class="img-card-cta"><span data-role="cta">TBA</span></span>
+          </button>
+          <button type="button" class="img-card" data-modality="mri" data-state="disabled" disabled>
+            <span class="img-card-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 6v12M17 6v12M3 12h18"/></svg></span>
+            <span class="img-card-text">
+              <span class="img-card-name">MRI</span>
+              <span class="img-card-sub" data-role="status">Coming soon</span>
+            </span>
+            <span class="img-card-cta"><span data-role="cta">TBA</span></span>
+          </button>
+        </div>
+      </section>
+
+      <section class="wb-float-panel" id="panel-consults">
+        <div class="wb-fp-head">
+          <div class="wb-fp-title-group">
+            <span class="wb-fp-title">Consults</span>
+            <span class="wb-fp-sub" id="consultsPanelSub">Call a specialist team</span>
+          </div>
+          <div class="wb-fp-actions">
+            <button class="wb-pin-btn" onclick="wbTogglePin('panel-consults')" data-pin-id="panel-consults" title="Pin panel"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></button>
+            <button class="wb-fp-close" onclick="wbClosePanel('panel-consults')" title="Collapse">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="wb-fp-body">
+          <button type="button" class="cons-card" data-dept="neurology" data-state="disabled" disabled>
+            <span class="cons-card-icon">NEU</span>
+            <span class="cons-card-text">
+              <span class="cons-card-name">Neurology</span>
+              <span class="cons-card-sub">On call · TBA</span>
+            </span>
+            <span class="cons-card-cta">TBA</span>
+          </button>
+          <button type="button" class="cons-card" data-dept="nephrology" data-state="disabled" disabled>
+            <span class="cons-card-icon">NEP</span>
+            <span class="cons-card-text">
+              <span class="cons-card-name">Nephrology</span>
+              <span class="cons-card-sub">On call · TBA</span>
+            </span>
+            <span class="cons-card-cta">TBA</span>
+          </button>
+          <button type="button" class="cons-card" data-dept="icu" data-state="disabled" disabled>
+            <span class="cons-card-icon">ICU</span>
+            <span class="cons-card-text">
+              <span class="cons-card-name">Intensive Care</span>
+              <span class="cons-card-sub">On call · TBA</span>
+            </span>
+            <span class="cons-card-cta">TBA</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="wb-float-panel wide" id="panel-kg">
+        <div class="wb-fp-head">
+          <div class="wb-fp-title-group">
+            <span class="wb-fp-title">Knowledge Graph</span>
+            <span class="wb-fp-sub" id="graphBadge">—</span>
+          </div>
+          <div class="wb-fp-actions">
+            <div id="graphControls" hidden style="display:flex;align-items:center;gap:2px">
+              <button onclick="event.stopPropagation();graphZoomIn()" class="cb-iconbtn" style="width:22px;height:22px;font-size:14px;font-weight:700">+</button>
+              <button onclick="event.stopPropagation();graphZoomOut()" class="cb-iconbtn" style="width:22px;height:22px;font-size:14px;font-weight:700">−</button>
+              <button onclick="event.stopPropagation();graphFit()" class="cb-iconbtn" style="width:30px;height:22px;font-size:10px">Fit</button>
+            </div>
+            <button onclick="toggleKgExpand()" id="kgExpandBtn" class="cb-iconbtn" style="width:22px;height:22px" title="Expand">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 4.5V1h3.5M7.5 1H11v3.5M11 7.5V11H7.5M4.5 11H1V7.5"/></svg>
+            </button>
+            
+            <button class="wb-pin-btn" onclick="wbTogglePin('panel-kg')" data-pin-id="panel-kg" title="Pin panel"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></button>
+            <button class="wb-fp-close" onclick="wbClosePanel('panel-kg')" title="Collapse">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="wb-fp-body">
+          <div class="cb-kg-stage">
+            <div class="cb-kg-grid"></div>
+            <div id="kgStatBar" hidden class="cb-kg-stat">
+              <span><strong id="kgNodeCount">0</strong> nodes</span>
+              <span><strong id="kgEdgeCount">0</strong> edges</span>
+              <span id="kgRecentSpan" hidden><strong id="kgRecentCount">+0</strong> last min</span>
+            </div>
+            <div id="graphEmpty" class="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none">
+              <svg class="w-10 h-10" fill="none" stroke="rgba(255,255,255,0.18)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/></svg>
+              <p class="text-xs" style="color:rgba(255,255,255,0.3)">Ask questions to build the graph</p>
+            </div>
+            <div id="graphStatus" hidden class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <p class="text-xs italic" style="color:rgba(255,255,255,0.4)">Waiting…</p>
+            </div>
+            <svg id="graphSvg" style="position:absolute;inset:0;width:100%;height:100%;cursor:grab"></svg>
+            <div class="cb-kg-legend">
+              <div class="cb-kg-legend-item"><div class="cb-kg-dot" style="background:#f97316"></div>Symptom</div>
+              <div class="cb-kg-legend-item"><div class="cb-kg-dot" style="background:#f59e0b"></div>Risk</div>
+              <div class="cb-kg-legend-item"><div class="cb-kg-dot" style="background:#6366f1"></div>Finding</div>
+              <div class="cb-kg-legend-item"><div class="cb-kg-dot" style="background:#60a5fa"></div>Medication</div>
+              <div class="cb-kg-legend-item"><div class="cb-kg-dot" style="background:#10b981"></div>Diagnosis</div>
+            </div>
+            <div id="graphTooltip" class="graph-tooltip" style="display:none"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="wb-float-panel viewer" id="panel-cxr">
+        <div class="wb-fp-head">
+          <div class="wb-fp-title-group">
+            <span class="wb-fp-title">Chest Radiograph</span>
+            <span class="wb-fp-sub" id="cxrFindingLabel">PA · SYNTH</span>
+          </div>
+          <div class="wb-fp-actions">
+            
+            <button class="wb-pin-btn" onclick="wbTogglePin('panel-cxr')" data-pin-id="panel-cxr" title="Pin panel"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></button>
+            <button class="wb-fp-close" onclick="wbClosePanel('panel-cxr')" title="Collapse">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="wb-fp-body" style="padding:0">
           <div class="cb-cxr-viewer">
             <div class="cb-cxr-toolbar">
               <div style="display:flex;gap:2px">
@@ -1657,7 +2960,7 @@ HTML_PAGE = """
             <div class="cb-cxr-window-info">
               <span>W: 1500 &nbsp;&nbsp; L: -600</span>
               <span>ZOOM 100% · PA</span>
-              <span id="cxrFindingLabel">RoentGen-v2 · synth</span>
+              <span>RoentGen-v2 · synth</span>
             </div>
             <div id="cxrFindingBanner" hidden class="cb-cxr-finding-banner">
               <span class="cb-cxr-finding-tag">AI · Provisional</span>
@@ -1665,167 +2968,116 @@ HTML_PAGE = """
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-    </div>
-
-    <!-- ── COL 3: Side rail ── -->
-    <div class="cb-col">
-
-      <!-- 05–06: Reasoning & Diagnosis (merged panel) -->
-      <div class="cb-panel">
-        <div class="cb-panel-head">
-          <span class="cb-panel-num">05 – 06</span>
-          <span class="cb-panel-title">Reasoning &amp; Diagnosis</span>
+      <section class="wb-float-panel wide" id="panel-ecg">
+        <div class="wb-fp-head">
+          <div class="wb-fp-title-group">
+            <span class="wb-fp-title">Electrocardiogram · 12-lead</span>
+            <span class="wb-fp-sub" id="ecgPanelSub">—</span>
+          </div>
+          <div class="wb-fp-actions">
+            <div id="ecgRateToggle" class="cb-rate-toggle" hidden title="Sample rate of the source signal">
+              <button type="button" class="cb-rate-btn" data-rate="100" onclick="setEcgRate(100)">100 Hz</button>
+              <button type="button" class="cb-rate-btn active" data-rate="500" onclick="setEcgRate(500)">500 Hz</button>
+            </div>
+            <button class="wb-pin-btn" onclick="wbTogglePin('panel-ecg')" data-pin-id="panel-ecg" title="Pin panel"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></button>
+            <button class="wb-fp-close" onclick="wbClosePanel('panel-ecg')" title="Collapse">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
         </div>
-        <div class="cb-panel-body" style="gap:14px">
-
-          <!-- Clinical Interpretation -->
-          <div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-              <span style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-500);font-weight:600">Clinical Interpretation</span>
-              <span id="interpCharCount" style="font-size:10.5px;color:var(--ink-400)">0 / 1000</span>
-            </div>
-            <textarea id="interpretation" rows="4" placeholder="Your interpretation of ordered tests…"
-              class="cb-field" oninput="updateInterpCount(this)" style="resize:vertical;width:100%"></textarea>
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:6px;gap:8px">
-              <ul id="interpList" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:3px;flex:1;font-size:11.5px;color:var(--ink-700)"></ul>
-              <button id="interpBtn" onclick="submitInterpretation()"
-                style="background:var(--ink-900);color:white;border:0;font:inherit;font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:6px;cursor:pointer;flex-shrink:0"
-                onmouseover="this.style.background='var(--ink-800)'" onmouseout="this.style.background='var(--ink-900)'">
-                Save
-              </button>
-            </div>
+        <div class="wb-fp-body">
+          <div id="ecgContent" class="ecg-wrap"></div>
+          <div id="ecgMeta" hidden class="cb-ecg-meta">
+            <span id="ecgMetaLeft">—</span>
+            <span id="ecgMetaRight" style="text-align:right;max-width:60%"></span>
           </div>
+        </div>
+      </section>
 
-          <div class="cb-section-div">Working Diagnosis</div>
-
-          <!-- Working Diagnosis -->
-          <div>
-            <div style="display:flex;gap:6px">
-              <input id="diagnosisGuess" placeholder="Your working diagnosis…"
-                class="cb-field" style="flex:1;min-width:0"
-                onkeydown="if(event.key==='Enter')submitDiagnosis()"/>
-              <button id="diagnosisBtn" onclick="submitDiagnosis()"
-                style="background:var(--teal-600);color:white;border:0;font:inherit;font-size:11.5px;font-weight:600;padding:8px 12px;border-radius:6px;cursor:pointer;flex-shrink:0;white-space:nowrap;display:inline-flex;align-items:center;gap:5px"
-                onmouseover="this.style.background='var(--teal-500)'" onmouseout="this.style.background='var(--teal-600)'">
-                Submit
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M3 8l3 3 7-7"/></svg>
-              </button>
-            </div>
-            <div id="diagnosisResult" hidden style="margin-top:8px;background:var(--teal-50);border:1px solid oklch(0.85 0.06 195);border-radius:7px;padding:8px 10px;font-size:12px;color:var(--teal-700)" class="fade-in"></div>
+      <section class="wb-float-panel wide" id="panel-perf">
+        <div class="wb-fp-head">
+          <div class="wb-fp-title-group">
+            <span class="wb-fp-title">Performance Report</span>
+            <span class="wb-fp-sub" id="perfScoreSub">—</span>
           </div>
-
-          <div class="cb-section-div">Senior Doctor</div>
-
-          <!-- Doctor Consult (inline card) -->
-          <div style="border:1px solid var(--ink-100);border-radius:8px;overflow:hidden">
-            <div class="cb-doctor-head">
-              <div class="cb-doctor-avatar"></div>
-              <div>
-                <div class="cb-doctor-name">Dr. Hamza</div>
-                <div class="cb-doctor-role">Senior ER Physician</div>
+          <div class="wb-fp-actions">
+            
+            <button class="wb-pin-btn" onclick="wbTogglePin('panel-perf')" data-pin-id="panel-perf" title="Pin panel"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></button>
+            <button class="wb-fp-close" onclick="wbClosePanel('panel-perf')" title="Collapse">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="wb-fp-body">
+          <div id="evalResults" class="cb-panel-body">
+            <div id="perfStatusBadge" class="cb-perf-status in-progress" hidden>
+              <svg width="7" height="7" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="currentColor"/></svg>
+              In Progress · partial report
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:12px">
+              <div id="scoreCircle" class="cb-score-ring">
+                <svg viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="36" stroke="var(--ink-100)" stroke-width="8" fill="none"/>
+                  <circle id="scoreArc" cx="50" cy="50" r="36" stroke="var(--teal-500)" stroke-width="8" fill="none"
+                    stroke-dasharray="226.2" stroke-dashoffset="226.2" stroke-linecap="round" style="transition:stroke-dashoffset .6s ease,stroke .4s"/>
+                </svg>
+                <div class="cb-score-num">
+                  <div class="cb-score-val" id="scoreVal">—</div>
+                  <div class="cb-score-of">/ 100</div>
+                </div>
               </div>
-              <div class="cb-doctor-status">On call</div>
-            </div>
-            <div id="doctorConsults"></div>
-            <div style="display:flex;gap:6px;padding:8px 10px;align-items:flex-end">
-              <textarea id="doctorQuestion" rows="2" placeholder="Ask Dr. Hamza for guidance…"
-                class="cb-field" style="flex:1;resize:none"></textarea>
-              <button id="doctorBtn" onclick="callDoctor()"
-                style="background:var(--ink-900);color:white;border:0;font:inherit;font-size:11.5px;font-weight:600;padding:8px 12px;border-radius:6px;cursor:pointer;flex-shrink:0;white-space:nowrap"
-                onmouseover="this.style.background='var(--ink-800)'" onmouseout="this.style.background='var(--ink-900)'">
-                Ask
-              </button>
-            </div>
-          </div>
-
-          <div class="cb-section-div" style="margin-top:2px">Final Evaluation</div>
-
-          <!-- Evaluate button -->
-          <button id="evaluateBtn" onclick="evaluateCase()"
-            style="width:100%;background:var(--ink-900);color:white;border:0;font:inherit;font-size:12px;font-weight:600;padding:9px;border-radius:7px;cursor:pointer;letter-spacing:0.02em;display:inline-flex;align-items:center;justify-content:center;gap:6px"
-            onmouseover="this.style.background='var(--ink-800)'" onmouseout="this.style.background='var(--ink-900)'">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M3 8l3 3 7-7"/>
-            </svg>
-            Evaluate Final Performance
-          </button>
-
-        </div>
-      </div>
-
-      <!-- Evaluation Results -->
-      <div id="evalResults" hidden class="cb-panel fade-in">
-        <div class="cb-panel-head">
-          <span class="cb-panel-num">★</span>
-          <span class="cb-panel-title">Performance Report</span>
-        </div>
-        <div class="cb-panel-body">
-          <div id="perfStatusBadge" class="cb-perf-status in-progress" hidden>
-            <svg width="7" height="7" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="currentColor"/></svg>
-            In Progress · partial report
-          </div>
-          <!-- Score donut + brief feedback -->
-          <div style="display:flex;align-items:flex-start;gap:12px">
-            <div id="scoreCircle" class="cb-score-ring">
-              <svg viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="36" stroke="var(--ink-100)" stroke-width="8" fill="none"/>
-                <circle id="scoreArc" cx="50" cy="50" r="36" stroke="var(--teal-500)" stroke-width="8" fill="none"
-                  stroke-dasharray="226.2" stroke-dashoffset="226.2" stroke-linecap="round" style="transition:stroke-dashoffset .6s ease,stroke .4s"/>
-              </svg>
-              <div class="cb-score-num">
-                <div class="cb-score-val" id="scoreVal">—</div>
-                <div class="cb-score-of">/ 100</div>
+              <div style="flex:1;min-width:0;padding-top:4px">
+                <div class="cb-ps-label">Overall Score</div>
+                <p id="scoreFeedback" style="font-size:12px;line-height:1.55;color:var(--ink-700);margin:0"></p>
               </div>
             </div>
-            <div style="flex:1;min-width:0;padding-top:4px">
-              <div class="cb-ps-label">Overall Score</div>
-              <p id="scoreFeedback" style="font-size:12px;line-height:1.55;color:var(--ink-700);margin:0"></p>
+            <div class="cb-perf-metrics">
+              <div class="cb-perf-metric"><div class="cb-perf-label">Diagnosis</div><div id="evalDx" style="font-size:12px;margin-top:3px;color:var(--ink-900)">—</div></div>
+              <div class="cb-perf-metric"><div class="cb-perf-label">Symptoms</div><div id="evalSymptoms" style="font-size:12px;margin-top:3px">—</div></div>
+              <div class="cb-perf-metric"><div class="cb-perf-label">Investigations</div><div id="evalInvestigations" style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600;color:var(--ink-900);margin-top:2px;display:flex;align-items:baseline;gap:3px">—</div><div class="cb-perf-bar"><div id="evalInvBar" class="cb-perf-bar-fill" style="width:0%;background:var(--teal-500)"></div></div></div>
+              <div class="cb-perf-metric"><div class="cb-perf-label">Time on Task</div><div id="evalTimeOnTask" style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600;color:var(--ink-900);margin-top:2px">—</div><div class="cb-perf-bar"><div id="evalTimeBar" class="cb-perf-bar-fill" style="width:0%;background:var(--ink-400)"></div></div></div>
+              <div class="cb-perf-metric" style="grid-column:1/-1"><div class="cb-perf-label">Question Quality</div><div id="evalQuality" style="font-size:12px;margin-top:3px;color:var(--ink-700)">—</div><div class="cb-perf-bar"><div id="evalQualityBar" class="cb-perf-bar-fill" style="width:0%;background:var(--teal-500)"></div></div></div>
             </div>
-          </div>
-          <!-- Metrics grid -->
-          <div class="cb-perf-metrics">
-            <div class="cb-perf-metric">
-              <div class="cb-perf-label">Diagnosis</div>
-              <div id="evalDx" style="font-size:12px;margin-top:3px;color:var(--ink-900)">—</div>
-            </div>
-            <div class="cb-perf-metric">
-              <div class="cb-perf-label">Symptoms</div>
-              <div id="evalSymptoms" style="font-size:12px;margin-top:3px">—</div>
-            </div>
-            <div class="cb-perf-metric">
-              <div class="cb-perf-label">Investigations</div>
-              <div id="evalInvestigations" style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600;color:var(--ink-900);margin-top:2px;display:flex;align-items:baseline;gap:3px">—</div>
-              <div class="cb-perf-bar"><div id="evalInvBar" class="cb-perf-bar-fill" style="width:0%;background:var(--teal-500)"></div></div>
-            </div>
-            <div class="cb-perf-metric">
-              <div class="cb-perf-label">Time on Task</div>
-              <div id="evalTimeOnTask" style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600;color:var(--ink-900);margin-top:2px">—</div>
-              <div class="cb-perf-bar"><div id="evalTimeBar" class="cb-perf-bar-fill" style="width:0%;background:var(--ink-400)"></div></div>
-            </div>
-            <div class="cb-perf-metric" style="grid-column:1/-1">
-              <div class="cb-perf-label">Question Quality</div>
-              <div id="evalQuality" style="font-size:12px;margin-top:3px;color:var(--ink-700)">—</div>
-              <div class="cb-perf-bar"><div id="evalQualityBar" class="cb-perf-bar-fill" style="width:0%;background:var(--teal-500)"></div></div>
-            </div>
-          </div>
-          <!-- Reasoning -->
-          <div>
-            <div class="cb-section-div">Reasoning</div>
-            <div id="evalReasoning" style="display:flex;flex-direction:column;gap:6px"></div>
-          </div>
-          <!-- Learning -->
-          <div>
-            <div class="cb-section-div">Learning</div>
-            <div id="evalLearning" style="display:flex;flex-direction:column;gap:6px"></div>
+            <div><div class="cb-section-div">Reasoning</div><div id="evalReasoning" style="display:flex;flex-direction:column;gap:6px"></div></div>
+            <div><div class="cb-section-div">Learning</div><div id="evalLearning" style="display:flex;flex-direction:column;gap:6px"></div></div>
           </div>
         </div>
-      </div>
-
+      </section>
     </div>
+
+    <!-- ══════════ GRID AREA ══════════ -->
+    <div id="gs-area">
+      <div class="grid-stack" id="panelGrid"></div>
+      <div class="gs-empty-tip" id="wbEmptyTip">Tap a tab to open a panel &nbsp;·&nbsp; Esc closes all &nbsp;·&nbsp; Generate a case to begin</div>
+    </div>
+
+    <!-- ══════════ RIGHT RAIL ══════════ -->
+    <aside class="wb-rail wb-rail-right" aria-label="Outputs and references">
+      <div class="wb-rail-label">DATA</div>
+
+      <button class="wb-rail-tab" data-panel="panel-imaging" title="Imaging">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="4" width="18" height="14" rx="2"/><circle cx="12" cy="11" r="3"/><path d="M3 8h3M18 8h3"/></svg>
+        <span class="wb-rt-label">Imaging</span>
+        <span class="wb-rt-meta" id="imagingRailMeta">0/2</span>
+
+        <span class="wb-tab-pin-dot" data-pin-tab="panel-imaging" title="Pin panel" onclick="event.stopPropagation();wbTogglePin('panel-imaging')"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></span>
+      </button>
+
+      <button class="wb-rail-tab" data-panel="panel-consults" title="Consults">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M5 4h11l3 3v9a2 2 0 0 1-2 2H8l-3 3z"/><path d="M9 10h6M9 13h4"/></svg>
+        <span class="wb-rt-label">Consults</span>
+        <span class="wb-rt-meta" id="consultsRailMeta">0/3</span>
+
+        <span class="wb-tab-pin-dot" data-pin-tab="panel-consults" title="Pin panel" onclick="event.stopPropagation();wbTogglePin('panel-consults')"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h6l-1 4.5 2 2H4l2-2z"/><line x1="8" y1="14" x2="8" y2="8.5"/></svg></span>
+      </button>
+
+      <div class="wb-rail-spacer"></div>
+      <div class="wb-rail-foot">RESULTS<br/>&amp; OUTPUTS</div>
+    </aside>
+
   </div>
-
 </main>
 
 <!-- STATUS BAR -->
@@ -1835,8 +3087,40 @@ HTML_PAGE = """
   <span id="sbDiag"><strong>Dx</strong> —</span>
   <span id="sbAutosave" hidden><span class="cb-sb-dot"></span><span id="sbSaveTime">—</span></span>
   <span id="sbTimer" hidden><strong>TIME</strong> <span id="sbTimerVal">00:00</span></span>
-  <span style="margin-left:auto">CasesBasis · clinical simulation</span>
+  <div class="cb-sb-tabs">
+    <button class="cb-sb-tab" data-panel="panel-perf" title="Performance Report" onclick="wbTogglePanel('panel-perf')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 9 9h-9z" fill="currentColor" opacity="0.18" stroke="none"/><path d="M12 12V6M12 12l5 3"/></svg>
+      <span>Performance</span>
+      <span class="cb-sb-tab-meta" id="perfRailMeta">—</span>
+    </button>
+    <button class="cb-sb-tab" data-panel="panel-kg" title="Knowledge Graph" onclick="wbTogglePanel('panel-kg')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="12" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M8 7l3 4M16 7l-3 4M10 13l-3 3M14 13l3 3"/></svg>
+      <span>Knowledge Graph</span>
+      <span class="cb-sb-tab-meta" id="kgNodeCountBadge">—</span>
+    </button>
+    <span class="cb-sb-brand">CasesBasis · clinical simulation</span>
+  </div>
 </footer>
+
+<!-- SUBMIT CONFIRMATION MODAL -->
+<div id="submitBackdrop" class="cb-submit-backdrop" role="dialog" aria-modal="true" onclick="if(event.target===this)hideSubmitConfirm()">
+  <div class="cb-submit-card">
+    <div class="cb-submit-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>
+      </svg>
+    </div>
+    <div class="cb-submit-title">Submit Case?</div>
+    <div class="cb-submit-body">Once submitted, you won't be able to make any further changes.<br>Your performance will be evaluated and saved.</div>
+    <div class="cb-submit-actions">
+      <button class="cb-submit-cancel" onclick="hideSubmitConfirm()">Cancel</button>
+      <button class="cb-submit-confirm" id="submitConfirmBtn" onclick="confirmSubmitCase()">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>
+        Yes, submit
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- PAUSE MODAL -->
 <div id="pauseBackdrop" class="cb-pause-backdrop" role="dialog" aria-modal="true" aria-labelledby="pauseModalTitle">
@@ -1901,7 +3185,7 @@ HTML_PAGE = """
         All progress and notes saved
       </div>
       <div class="cb-pause-actions">
-        <button class="cb-pause-btn cb-pause-ghost" onclick="location.href='/dashboard'">
+        <button class="cb-pause-btn cb-pause-ghost" onclick="location.href='/home'">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7.5L8 2.5l6 5"/><path d="M3.5 7v6.5h9V7"/></svg>
           Back to dashboard
         </button>
@@ -1981,6 +3265,33 @@ HTML_PAGE = """
       _sessionStart = Date.now();
       _startTimer();
     }
+  }
+
+  /* ── Submit confirmation ── */
+  function showSubmitConfirm() {
+    if (!sessionId) { toast('Generate a case first', 'err'); return; }
+    // Reasoning panel no longer has a rail tab — Submit is its entry point.
+    // If the resident hasn't filled in a working diagnosis yet, open the panel
+    // so they can do so before the confirm modal appears.
+    const dx = (document.getElementById('diagnosisGuess')?.value || '').trim();
+    if (!dx) {
+      wbOpenPanel('panel-reasoning');
+      toast('Enter your working diagnosis to submit', 'err');
+      setTimeout(() => document.getElementById('diagnosisGuess')?.focus(), 200);
+      return;
+    }
+    document.getElementById('submitBackdrop').classList.add('on');
+  }
+  function hideSubmitConfirm() {
+    document.getElementById('submitBackdrop').classList.remove('on');
+  }
+  async function confirmSubmitCase() {
+    await evaluateCase();
+  }
+  async function saveAndExit() {
+    // Session is already saved as 'evaluated' by evaluateCase() — don't call pause
+    // (which would overwrite status back to 'paused')
+    location.href = '/home';
   }
 
   async function pauseSession() {
@@ -2066,32 +3377,13 @@ HTML_PAGE = """
     try {
       const data = await postJson(`/api/sessions/${sid}/resume`, {});
       sessionId = data.session_id;
-      const cp = data.case_preview || {};
-      _patientGender = (cp.gender||'female').toLowerCase();
       _ttsEnabled = true;
       document.getElementById('sessionBadge').hidden = false;
       document.getElementById('pauseBtn').hidden = false;
+      document.getElementById('submitCaseBtn').hidden = false;
 
       // Case preview panels
-      document.getElementById('pvCC').textContent = cp.chief_complaint||'—';
-      document.getElementById('pvAge').textContent = cp.age||'—';
-      document.getElementById('pvGender').textContent = cp.gender||'—';
-      const race = cp.race||''; document.getElementById('pvRace').textContent = race;
-      document.getElementById('pvRaceChip').hidden = !race;
-      const occ = cp.occupation||''; document.getElementById('pvOccupation').textContent = occ;
-      document.getElementById('pvOccChip').hidden = !occ;
-      const v = cp.vitals||{};
-      document.getElementById('pvHR').textContent = v.heart_rate||'—';
-      document.getElementById('pvBP').textContent = v.blood_pressure||'—';
-      document.getElementById('pvSPO2').textContent = v.oxygen_saturation||'—';
-      document.getElementById('pvRR').textContent = v.respiratory_rate||'—';
-      const gender = _patientGender;
-      document.getElementById('pvPersonaAvatar').textContent = gender.startsWith('f')?'F':gender.startsWith('m')?'M':'?';
-      const nameEl = document.getElementById('pvPersonaName');
-      nameEl.textContent = occ||(gender.startsWith('f')?'Female patient':'Male patient');
-      document.getElementById('pvPersona').textContent = cp.persona_description||'';
-      _patientInitials = occ.trim().split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()||'PT';
-      document.getElementById('vitalsStrip').hidden = false;
+      populateCasePreview(data.case_preview || {});
 
       // Stepper
       const qa = data.qa_pairs||[], invs = data.investigations||[], dx = data.diagnosis_guess;
@@ -2180,6 +3472,8 @@ HTML_PAGE = """
   let _ttsEnabled = true;
   let _patientGender = 'female';
   let _patientInitials = 'PT';
+  let _patientAge = '';
+  let _patientHR = null;
   let _studentInitials = 'HF';
   let _chatTurnCount = 0;
   let _sessionStart = null;
@@ -2317,6 +3611,84 @@ HTML_PAGE = """
     orderInvestigation();
   }
 
+  /* ── Imaging panel state machine ──────────────────────────────────────
+   * Cards hold their state in `data-state`: idle | pending | available |
+   * disabled. The CSS reacts to that attribute; this helper updates the
+   * card body text and the right-rail meta count.
+   */
+  const IMG_ACTIVE = ['cxr', 'ecg'];
+  const IMG_LABELS = {
+    cxr: { name: 'CXR',  order: 'Order',     pending: 'Acquiring…', available: 'Click to view', viewerId: 'panel-cxr' },
+    ecg: { name: 'ECG',  order: 'Order',     pending: 'Acquiring…', available: 'Click to view', viewerId: 'panel-ecg' },
+  };
+  const IMG_STATUS_SUB = {
+    idle: 'Not ordered',
+    pending: 'Acquiring…',
+    available: 'Available · click to view',
+  };
+  function _imgCard(modality) {
+    return document.querySelector('.img-card[data-modality="' + modality + '"]');
+  }
+  function setImagingCardState(modality, state) {
+    const card = _imgCard(modality);
+    if (!card) return;
+    card.dataset.state = state;
+    const sub = card.querySelector('[data-role="status"]');
+    const cta = card.querySelector('[data-role="cta"]');
+    if (sub && IMG_STATUS_SUB[state]) sub.textContent = IMG_STATUS_SUB[state];
+    if (cta) {
+      const meta = IMG_LABELS[modality];
+      if (meta) {
+        cta.textContent = state === 'idle' ? meta.order
+                        : state === 'pending' ? meta.pending
+                        : state === 'available' ? meta.available
+                        : cta.textContent;
+      }
+    }
+    _refreshImagingRailMeta();
+  }
+  function _refreshImagingRailMeta() {
+    let ready = 0;
+    IMG_ACTIVE.forEach(m => {
+      const c = _imgCard(m);
+      if (c && c.dataset.state === 'available') ready++;
+    });
+    const meta = document.getElementById('imagingRailMeta');
+    if (meta) meta.textContent = ready + '/' + IMG_ACTIVE.length;
+    const sub = document.getElementById('imagingPanelSub');
+    if (sub) sub.textContent = ready === 0
+      ? 'Order studies · open results'
+      : ready + ' of ' + IMG_ACTIVE.length + ' available';
+  }
+  function resetImagingPanel() {
+    IMG_ACTIVE.forEach(m => setImagingCardState(m, 'idle'));
+    _imagingPanelAutoOpenedThisCase = false;
+  }
+  let _imagingPanelAutoOpenedThisCase = false;
+  function _maybeAutoOpenImagingPanel() {
+    if (_imagingPanelAutoOpenedThisCase) return;
+    _imagingPanelAutoOpenedThisCase = true;
+    if (typeof wbOpenPanelKeepInvestigations === 'function') {
+      wbOpenPanelKeepInvestigations('panel-imaging');
+    }
+  }
+  function onImagingCardClick(modality) {
+    const card = _imgCard(modality);
+    if (!card) return;
+    const state = card.dataset.state;
+    if (state === 'disabled' || state === 'pending') return;
+    if (state === 'available') {
+      const meta = IMG_LABELS[modality];
+      if (meta && meta.viewerId) wbOpenPanelKeepInvestigations(meta.viewerId);
+      return;
+    }
+    // idle → fire the order
+    if (!sessionId) { toast('Generate a case first.'); return; }
+    setImagingCardState(modality, 'pending');
+    const orderName = modality === 'cxr' ? 'CXR' : modality === 'ecg' ? 'ECG' : '';
+    if (orderName) quickOrder(orderName);
+  }
+
   function tickAutosave() {
     const el = document.getElementById('sbSaveTime');
     if(el) el.textContent = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -2340,6 +3712,133 @@ HTML_PAGE = """
     }
   }
 
+  /* ── populateCasePreview — shared between generateCase and resumeCase ── */
+  function populateCasePreview(cp) {
+    const occ = cp.occupation||'';
+    const gender = (cp.gender||'').toLowerCase();
+    const patientName = cp.name||'';
+    const v = cp.vitals||{};
+
+    // Identity, persona, chips
+    const race = cp.race||'';
+    document.getElementById('ppCC').textContent = cp.chief_complaint||'—';
+    document.getElementById('ppAge').textContent = cp.age||'—';
+    document.getElementById('ppSex').textContent = cp.gender||'—';
+    document.getElementById('ppRace').textContent = race;
+    document.getElementById('ppRaceChip').hidden = !race;
+    document.getElementById('ppOcc').textContent = occ;
+    document.getElementById('ppOccChip').hidden = !occ;
+
+    // Vitals — status-driven, two visual states (warn vs ok)
+    function vitalTile(tileId, arrowId, flagId, okId, value, {critLow, cautLow, cautHigh, critHigh}={}, flagFn) {
+      const tile = document.getElementById(tileId);
+      const arrow = document.getElementById(arrowId);
+      const flag = document.getElementById(flagId);
+      const ok = document.getElementById(okId);
+      if (!tile) return 'normal';
+      let status = 'normal', dir = null;
+      if (value == null) {
+        tile.classList.remove('warn');
+        if (arrow) arrow.hidden = true;
+        if (flag) { flag.hidden = true; flag.textContent = ''; }
+        if (ok) { ok.hidden = false; ok.textContent = '—'; }
+        return 'unknown';
+      }
+      if (critHigh != null && value >= critHigh)      { status='critical'; dir='up'; }
+      else if (critLow != null && value <= critLow)   { status='critical'; dir='down'; }
+      else if (cautHigh != null && value >= cautHigh) { status='caution';  dir='up'; }
+      else if (cautLow  != null && value <= cautLow)  { status='caution';  dir='down'; }
+      const isWarn = status !== 'normal';
+      tile.classList.toggle('warn', isWarn);
+      if (arrow) {
+        arrow.hidden = !isWarn;
+        // Swap arrow direction by rotating the svg path if needed (HR/RR/BP arrows are "up"
+        // in markup; SpO2 is "down" in markup — flip on the fly).
+        if (isWarn && dir) {
+          arrow.style.transform = dir==='down' ? 'rotate(180deg)' : '';
+        }
+      }
+      const flagTxt = isWarn && flagFn ? flagFn(value, status, dir) : '';
+      if (flag) { flag.textContent = flagTxt; flag.hidden = !flagTxt; }
+      if (ok)   { ok.hidden = isWarn; }
+      return status;
+    }
+    const hr = v.heart_rate, spo2 = v.oxygen_saturation, rr = v.respiratory_rate;
+    const sbp = parseInt((v.blood_pressure||'').split('/')[0])||null;
+    document.getElementById('ppHR').textContent   = hr   != null ? hr   : '—';
+    document.getElementById('ppBP').textContent   = v.blood_pressure || '—';
+    document.getElementById('ppSPO2').textContent = spo2 != null ? spo2 : '—';
+    document.getElementById('ppRR').textContent   = rr   != null ? rr   : '—';
+    const hrStatus = vitalTile('ppVitHR',  'ppArrowHR',  'ppFlagHR',  'ppOkHR',  hr,
+      {critLow:40, cautLow:50, cautHigh:100, critHigh:150},
+      (n) => n>=150?'marked tachycardia':n>=120?'sinus tachycardia':n>=100?'tachycardic':n<=40?'severe bradycardia':n<=50?'bradycardia':'');
+    vitalTile('ppVitBP',  'ppArrowBP',  'ppFlagBP',  'ppOkBP',  sbp,
+      {critLow:80, cautLow:100, cautHigh:160, critHigh:180},
+      (n) => n>=180?'hypertensive crisis':n>=160?'hypertensive':n<=80?'hypotensive shock':n<=100?'borderline low':'');
+    vitalTile('ppVitSPO2','ppArrowSPO2','ppFlagSPO2','ppOkSPO2',spo2,
+      {critLow:88, cautLow:94},
+      (n) => n<=88?'critical hypoxia':n<=91?'hypoxemic · room air':n<=94?'mild hypoxia':'');
+    vitalTile('ppVitRR',  'ppArrowRR',  'ppFlagRR',  'ppOkRR',  rr,
+      {cautHigh:22, critHigh:30},
+      (n) => n>=30?'accessory muscle use':n>=22?'tachypneic':n<=10?'bradypneic':'');
+
+    // Rhythm caption (purely informational)
+    const rhythm = (hr == null) ? 'SINUS RHYTHM'
+                 : (hr >= 150) ? 'MARKED TACHYCARDIA'
+                 : (hr >= 100) ? 'SINUS TACHYCARDIA'
+                 : (hr <= 40)  ? 'MARKED BRADYCARDIA'
+                 : (hr <= 50)  ? 'SINUS BRADYCARDIA'
+                 : 'NORMAL SINUS RHYTHM';
+    const rhythmEl = document.getElementById('ppRhythm');
+    if (rhythmEl) rhythmEl.textContent = rhythm;
+
+    // Identity — name + descriptor + persona
+    const persona = cp.persona_description||'';
+    const statusMatch = persona.match(/^An?\s+(.+?)\s+who\s/i);
+    const descriptor = statusMatch ? '— ' + statusMatch[1] : '';
+    const fallbackName = patientName || (occ ? occ : (gender.startsWith('f') ? 'Female patient' : 'Male patient'));
+    document.getElementById('ppName').textContent = fallbackName;
+    document.getElementById('ppDesc').textContent = descriptor;
+    document.getElementById('ppPersona').textContent = persona;
+
+    // Avatar initials
+    let avi;
+    if (patientName) {
+      const p = patientName.trim().split(/\s+/);
+      avi = p.length>=2?(p[0][0]+p[p.length-1][0]).toUpperCase():p[0].substring(0,2).toUpperCase();
+    } else if (occ) {
+      const w = occ.trim().split(/\s+/).filter(Boolean);
+      avi = w.length>=2?(w[0][0]+w[w.length-1][0]).toUpperCase():w[0].substring(0,2).toUpperCase();
+    } else {
+      avi = gender.startsWith('m')?'M':gender.startsWith('f')?'F':'?';
+    }
+    document.getElementById('ppAvatar').textContent = avi;
+
+    // Chat bubble initials
+    if (patientName) {
+      const p = patientName.trim().split(/\s+/);
+      _patientInitials = p.length>=2?(p[0][0]+p[p.length-1][0]).toUpperCase():p[0].substring(0,2).toUpperCase();
+    } else {
+      const w = occ.trim().split(/\s+/).filter(Boolean);
+      _patientInitials = w.length>=2?(w[0][0]+w[w.length-1][0]).toUpperCase():w.length===1?w[0].substring(0,2).toUpperCase():(gender.startsWith('m')?'MP':'FP');
+    }
+
+    _patientGender = gender;
+    _patientAge = cp.age || '';
+    _patientHR = hr || null;
+
+    // Open + pin the patient panel. The live ECG monitor stays hidden until
+    // the resident orders an ECG investigation — see the ECG result handler.
+    setPatientPanelHR(hr);
+    _stopPatientEcg();
+    const ppEcgWrap = document.getElementById('ppEcgWrap');
+    if (ppEcgWrap) ppEcgWrap.hidden = true;
+    if (typeof wbOpenPanel === 'function') {
+      wbOpenPanel('panel-patient');
+      wbPinPanel('panel-patient');
+    }
+  }
+
   /* ── generateCase ── */
   async function generateCase() {
     spin('generateBtn',true);
@@ -2350,13 +3849,11 @@ HTML_PAGE = """
       });
       sessionId = data.session_id;
       document.getElementById('pauseBtn').hidden = false;
-      _patientGender = (data.case_preview.gender||'female').toLowerCase();
+      document.getElementById('submitCaseBtn').hidden = false;
       window.speechSynthesis && window.speechSynthesis.cancel();
       _ttsEnabled = true;
       const track = document.getElementById('ttsTrack');
       if (track) track.classList.remove('off');
-      const voiceLbl = document.getElementById('ttsVoiceLabel');
-      if (voiceLbl) voiceLbl.textContent = 'EN-US · ' + (_patientGender==='male'?'Adult Male':_patientGender==='female'?'Adult Female':'Auto');
       document.getElementById('sessionBadge').hidden = false;
       setStepperStep(2);
 
@@ -2369,68 +3866,12 @@ HTML_PAGE = """
       sbAuto.hidden = false;
       document.getElementById('sbSaveTime').textContent = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 
-      const v = data.case_preview.vitals||{};
-      const cp = data.case_preview;
-
-      // Chief complaint + chips
-      document.getElementById('pvCC').textContent = cp.chief_complaint||'—';
-      document.getElementById('pvAge').textContent = cp.age||'—';
-      document.getElementById('pvGender').textContent = (cp.gender||'—');
-      const race = cp.race||'';
-      document.getElementById('pvRace').textContent = race;
-      document.getElementById('pvRaceChip').hidden = !race;
-      const occ = cp.occupation||'';
-      document.getElementById('pvOccupation').textContent = occ;
-      document.getElementById('pvOccChip').hidden = !occ;
-
-      // Vital tiles with color-coding
-      function vitalTile(tileId, flagId, value, {critLow, cautLow, cautHigh, critHigh} = {}) {
-        const tile = document.getElementById(tileId);
-        const flag = document.getElementById(flagId);
-        if (!tile || value == null) return;
-        let cls = 'normal', flagTxt = '', flagCls = '';
-        if (critHigh != null && value >= critHigh) { cls='critical'; flagTxt='HIGH'; flagCls='high'; }
-        else if (critLow != null && value <= critLow) { cls='critical'; flagTxt='LOW'; flagCls='low'; }
-        else if (cautHigh != null && value >= cautHigh) { cls='caution'; flagTxt='↑'; flagCls='warn'; }
-        else if (cautLow != null && value <= cautLow) { cls='caution'; flagTxt='↓'; flagCls='warn'; }
-        tile.className = 'cb-vital ' + cls;
-        if (flag) { flag.textContent = flagTxt; flag.className = 'cb-v-flag ' + flagCls; flag.hidden = !flagTxt; }
-      }
-      const hr = v.heart_rate, spo2 = v.oxygen_saturation, rr = v.respiratory_rate;
-      const bpParts = (v.blood_pressure||'').split('/');
-      const sbp = parseInt(bpParts[0])||null;
-      document.getElementById('pvHR').textContent  = hr||'—';
-      document.getElementById('pvBP').textContent  = v.blood_pressure||'—';
-      document.getElementById('pvSPO2').textContent= spo2||'—';
-      document.getElementById('pvRR').textContent  = rr||'—';
-      vitalTile('vtHR',   'vfHR',   hr,   {critLow:40, cautLow:50, cautHigh:100, critHigh:140});
-      vitalTile('vtBP',   'vfBP',   sbp,  {critLow:80, cautLow:100, cautHigh:160, critHigh:180});
-      vitalTile('vtSPO2', 'vfSPO2', spo2, {critLow:88, cautLow:94});
-      vitalTile('vtRR',   'vfRR',   rr,   {cautHigh:22, critHigh:35});
-
-      // Persona card
-      const persona = cp.persona_description||'';
-      document.getElementById('pvPersona').textContent = persona;
-      const gender = (cp.gender||'').toLowerCase();
-      const initials = gender.startsWith('f') ? 'F' : gender.startsWith('m') ? 'M' : '?';
-      document.getElementById('pvPersonaAvatar').textContent = initials;
-      const nameEl = document.getElementById('pvPersonaName');
-      nameEl.textContent = occ ? occ : (gender.startsWith('f') ? 'Female patient' : gender.startsWith('m') ? 'Male patient' : 'Patient');
-
-      // Derive patient initials from occupation words (e.g. "College Student" → "CS")
-      const occWords = occ.trim().split(/\s+/).filter(Boolean);
-      if (occWords.length >= 2) {
-        _patientInitials = (occWords[0][0] + occWords[occWords.length-1][0]).toUpperCase();
-      } else if (occWords.length === 1) {
-        _patientInitials = occWords[0].substring(0,2).toUpperCase();
-      } else {
-        _patientInitials = gender.startsWith('m') ? 'MP' : 'FP';
-      }
+      populateCasePreview(data.case_preview);
+      const voiceLbl = document.getElementById('ttsVoiceLabel');
+      if (voiceLbl) voiceLbl.textContent = 'EN-US · ' + (_patientGender==='male'?'Adult Male':_patientGender==='female'?'Adult Female':'Auto');
       _chatTurnCount = 0;
       const turnBadge = document.getElementById('chatTurnBadge');
       if (turnBadge) turnBadge.hidden = true;
-
-      document.getElementById('vitalsStrip').hidden = false;
 
       document.getElementById('chatArea').innerHTML = '<div class="cb-chat-divider">Session started · begin your assessment</div>';
       _orderedSet = new Set();
@@ -2443,18 +3884,19 @@ HTML_PAGE = """
       _examSelected = new Set(); _examDone = new Set(); _examResultMap = {};
       document.getElementById('examResults').innerHTML = '';
       document.querySelectorAll('.cb-exam-pin').forEach(p => p.remove());
-      document.querySelectorAll('.cb-exam-sys-row').forEach(r => {
-        r.classList.remove('done');
-        r.style.borderLeftColor = 'transparent';
-        const cb = r.querySelector('.cb-exam-sys-cb');
-        cb.classList.remove('checked');
+      document.querySelectorAll('#examSystems .pe-sys').forEach(r => {
+        r.classList.remove('done', 'on');
       });
       const examBadge = document.getElementById('examDoneBadge');
       if (examBadge) examBadge.hidden = true;
+      if (typeof peRender === 'function') peRender();
       document.getElementById('ecgContent').innerHTML = '';
-      document.getElementById('ecgPanel').hidden = true;
+      wbClosePanel('panel-ecg');
       document.getElementById('cxrImage').src = '';
-      document.getElementById('cxrPanel').hidden = true;
+      wbClosePanel('panel-cxr');
+      // Imaging launchpad → reset every active card to idle, close the panel.
+      if (typeof resetImagingPanel === 'function') resetImagingPanel();
+      wbClosePanel('panel-imaging');
       document.getElementById('interpList').innerHTML = '';
       document.getElementById('interpretation').value = '';
       const interpCounter = document.getElementById('interpCharCount');
@@ -2466,9 +3908,8 @@ HTML_PAGE = """
       _elapsedCarry = 0;
       _sessionStart = Date.now();
       _startTimer();
-      // Show eval panel in "In Progress" state immediately
-      const evalRes = document.getElementById('evalResults');
-      evalRes.hidden = false;
+      // Prime the performance panel in the "In Progress" state but don't
+      // auto-open it — the user opens it via its rail tab when they want.
       document.getElementById('perfStatusBadge').hidden = false;
       document.getElementById('perfStatusBadge').className = 'cb-perf-status in-progress';
       document.getElementById('perfStatusBadge').innerHTML = '<svg width="7" height="7" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="currentColor"/></svg> In Progress · partial report';
@@ -2590,16 +4031,31 @@ HTML_PAGE = """
       renderInv(data);
       tickAutosave();
       setTimeout(refreshGraph, 12000);
-    } catch(e){ toast(e.message); } finally { spin('invBtn',false); }
+    } catch(e){
+      // Order failed — roll any pending Imaging cards back to idle.
+      IMG_ACTIVE.forEach(m => {
+        const c = _imgCard(m);
+        if (c && c.dataset.state === 'pending') setImagingCardState(m, 'idle');
+      });
+      toast(e.message);
+    } finally { spin('invBtn',false); }
   }
   function renderInv(result) {
     if(result.investigations){result.investigations.forEach(renderInv);return;}
 
-    // ECG with SVG → render in the ECG panel
-    if(result.visual_payload&&result.visual_payload.svg){
-      const panel = document.getElementById('ecgPanel');
-      document.getElementById('ecgContent').innerHTML = result.visual_payload.svg;
-      const hr = document.getElementById('pvHR').textContent.replace(' bpm','').trim();
+    const vp = result.visual_payload;
+    const isEcgImage = vp && vp.type === 'image' && Array.isArray(vp.leads) && vp.leads.length > 0;
+    const isEcgSvg = vp && vp.svg;
+
+    // ECG (either paper-image from PTB-XL or legacy SVG) → render in the ECG panel
+    if(isEcgImage || isEcgSvg){
+      if(isEcgImage){
+        document.getElementById('ecgContent').innerHTML =
+          `<img src="data:image/png;base64,${vp.data}" style="width:100%;display:block" alt="12-lead ECG"/>`;
+      } else {
+        document.getElementById('ecgContent').innerHTML = vp.svg;
+      }
+      const hr = _patientHR != null ? String(_patientHR) : '';
       const meta = document.getElementById('ecgMeta');
       const ecgNow = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
       document.getElementById('ecgMetaLeft').innerHTML = hr
@@ -2608,7 +4064,32 @@ HTML_PAGE = """
       document.getElementById('ecgMetaRight').innerHTML =
         `${(result.summary||'REVIEW TRACING FOR ABNORMALITIES').replace(/\.\s*$/, '').toUpperCase()} &nbsp;·&nbsp; ${ecgNow}`;
       meta.hidden = false;
-      panel.hidden = false;
+      // Show the 100/500 Hz toggle only when the ECG came from PTB-XL
+      // (the only path where re-rendering at a different rate is meaningful).
+      const rateToggle = document.getElementById('ecgRateToggle');
+      if (rateToggle) {
+        const isPtbxl = vp.source_record && vp.source_record.includes('@');
+        rateToggle.hidden = !isPtbxl;
+        // Default selection = 500 Hz (matches the server's default render).
+        rateToggle.querySelectorAll('.cb-rate-btn').forEach(b => {
+          b.classList.toggle('active', parseInt(b.dataset.rate, 10) === 500);
+        });
+      }
+      // The ECG viewer is no longer auto-opened — the user opens it by
+      // clicking the (now green-bordered) ECG card in the Imaging panel.
+      setImagingCardState('ecg', 'available');
+      _maybeAutoOpenImagingPanel();
+
+      // Bring the live Lead II monitor up in the Patient panel, driven by the
+      // same morphology + rate the synthesizer used for the 12-lead.
+      const morph = vp.lead_ii_morphology || null;
+      if (morph) {
+        setPatientPanelHR(morph.hr);
+        setPatientPanelEcgMorphology(morph);
+      }
+      const ppEcgWrap = document.getElementById('ppEcgWrap');
+      if (ppEcgWrap) ppEcgWrap.hidden = false;
+      _initPatientEcg();
 
       const c = document.getElementById('invResults');
       const badge = document.createElement('div');
@@ -2628,14 +4109,13 @@ HTML_PAGE = """
 
     // CXR with base64 → render in CXR panel
     if(result.visual_payload&&result.visual_payload.data){
-      const panel = document.getElementById('cxrPanel');
       document.getElementById('cxrImage').src = `data:image/jpeg;base64,${result.visual_payload.data}`;
 
       const finding = result.visual_payload.finding||'';
       document.getElementById('cxrFindingLabel').textContent = finding ? `Finding: ${finding}` : 'RoentGen-v2 · synth';
 
-      const age = document.getElementById('pvAge').textContent;
-      const gender = (document.getElementById('pvGender').textContent||'').charAt(0).toUpperCase();
+      const age = _patientAge || '—';
+      const gender = (_patientGender || '').charAt(0).toUpperCase() || '—';
       const ovEl = document.getElementById('cxrOverlayPatient');
       if(ovEl) ovEl.innerHTML = `PATIENT<br/>MRN ----<br/>${gender} · ${age}`;
 
@@ -2644,7 +4124,10 @@ HTML_PAGE = """
       if(textEl) textEl.textContent = result.summary || (finding ? `Radiograph consistent with ${finding} pattern.` : '');
       if(banner) banner.hidden = !result.summary && !finding;
 
-      panel.hidden = false;
+      // CXR viewer is no longer auto-opened — the user opens it via the
+      // (now green-bordered) CXR card in the Imaging panel.
+      setImagingCardState('cxr', 'available');
+      _maybeAutoOpenImagingPanel();
 
       const c = document.getElementById('invResults');
       const badge = document.createElement('div');
@@ -2745,9 +4228,33 @@ HTML_PAGE = """
   function toggleInvCard(headEl) {
     headEl.closest('.cb-result').classList.toggle('open');
   }
+
+  /* ── ECG sample-rate toggle (100 Hz ⇄ 500 Hz) ── */
+  async function setEcgRate(rate) {
+    const toggle = document.getElementById('ecgRateToggle');
+    if (!toggle || toggle.hidden) return;
+    const buttons = toggle.querySelectorAll('.cb-rate-btn');
+    const current = toggle.querySelector('.cb-rate-btn.active');
+    if (current && parseInt(current.dataset.rate, 10) === rate) return;
+    buttons.forEach(b => { b.disabled = true; });
+    try {
+      const data = await postJson('/api/investigations/ecg-rerender', {
+        session_id: sessionId,
+        sample_rate_hz: rate,
+      });
+      document.getElementById('ecgContent').innerHTML = data.svg;
+      buttons.forEach(b => {
+        b.classList.toggle('active', parseInt(b.dataset.rate, 10) === rate);
+      });
+    } catch (e) {
+      toast(e.message || 'Failed to re-render ECG');
+    } finally {
+      buttons.forEach(b => { b.disabled = false; });
+    }
+  }
   function togglePanel(id) {
     document.getElementById(id).classList.toggle('collapsed');
-    if (id === 'graphPanel') setTimeout(graphFit, 300);
+    if (id === 'panel-kg') setTimeout(graphFit, 300);
   }
 
   let _kgExpanded = false;
@@ -2761,8 +4268,8 @@ HTML_PAGE = """
   }
   function expandKg() {
     _kgExpanded = true;
-    document.getElementById('graphPanel').classList.remove('collapsed');
-    document.getElementById('graphPanel').classList.add('kg-expanded');
+    if (!document.getElementById('panel-kg').closest('.grid-stack-item')) wbOpenPanel('panel-kg');
+    document.getElementById('panel-kg').classList.add('kg-expanded');
     document.getElementById('kgBackdrop').classList.add('on');
     const btn = document.getElementById('kgExpandBtn');
     btn.title = 'Collapse';
@@ -2771,7 +4278,7 @@ HTML_PAGE = """
   }
   function collapseKg() {
     _kgExpanded = false;
-    document.getElementById('graphPanel').classList.remove('kg-expanded');
+    document.getElementById('panel-kg').classList.remove('kg-expanded');
     document.getElementById('kgBackdrop').classList.remove('on');
     const btn = document.getElementById('kgExpandBtn');
     btn.title = 'Expand';
@@ -2822,16 +4329,65 @@ HTML_PAGE = """
 
   function toggleExamSys(row, system) {
     if (row.classList.contains('done')) return;
-    const cb = row.querySelector('.cb-exam-sys-cb');
-    const color = EXAM_COLORS[system] || 'var(--teal-600)';
     if (_examSelected.has(system)) {
       _examSelected.delete(system);
-      cb.classList.remove('checked');
-      row.style.borderLeftColor = 'transparent';
+      row.classList.remove('on');
     } else {
       _examSelected.add(system);
-      cb.classList.add('checked');
-      row.style.borderLeftColor = color;
+      row.classList.add('on');
+    }
+    peRender();
+  }
+
+  function peSelectableRows() {
+    return [...document.querySelectorAll('#examSystems .pe-sys')].filter(r => !r.classList.contains('done'));
+  }
+
+  function peToggleAll() {
+    const rows = peSelectableRows();
+    if (!rows.length) return;
+    const allOn = rows.every(r => r.classList.contains('on'));
+    rows.forEach(r => {
+      const sys = r.getAttribute('data-name');
+      if (allOn) { _examSelected.delete(sys); r.classList.remove('on'); }
+      else       { _examSelected.add(sys);    r.classList.add('on'); }
+    });
+    peRender();
+  }
+  window.peToggleAll = peToggleAll;
+
+  function peRender() {
+    const rows = peSelectableRows();
+    const allRowsCount = document.querySelectorAll('#examSystems .pe-sys').length || 9;
+    const selected = [...document.querySelectorAll('#examSystems .pe-sys.on')];
+    const n = selected.length;
+    const countEl = document.getElementById('peCount');
+    const badgeEl = document.getElementById('peBadge');
+    const metaEl = document.getElementById('peMeta');
+    const btn = document.getElementById('examBtn');
+    const toggleAll = document.getElementById('peToggleAll');
+    if (countEl) countEl.textContent = n;
+    if (badgeEl) badgeEl.textContent = n;
+    if (btn) btn.disabled = n === 0;
+    if (metaEl) {
+      if (n === 0) {
+        metaEl.textContent = 'No systems selected yet.';
+      } else {
+        const names = selected.map(r => r.getAttribute('data-name'));
+        const shown = names.slice(0, 2).join(', ').replace('&amp;', '&');
+        const extra = n > 2 ? ` +${n - 2} more` : '';
+        metaEl.innerHTML = `Examining <b>${n}</b> system${n > 1 ? 's' : ''} · ${shown}${extra}`;
+      }
+    }
+    if (toggleAll) {
+      // "Clear all" only when every still-selectable row is on; nothing left → disable
+      if (!rows.length) {
+        toggleAll.textContent = 'Select all';
+        toggleAll.disabled = true;
+      } else {
+        toggleAll.disabled = false;
+        toggleAll.textContent = rows.every(r => r.classList.contains('on')) ? 'Clear all' : 'Select all';
+      }
     }
   }
 
@@ -2843,9 +4399,9 @@ HTML_PAGE = """
     try {
       const data = await postJson('/api/physical-exam', {session_id: sessionId, systems});
       data.results.forEach(r => renderExamResult(r));
-      // clear checkboxes
       _examSelected.clear();
-      document.querySelectorAll('.cb-exam-sys-cb.checked').forEach(el => el.classList.remove('checked'));
+      document.querySelectorAll('#examSystems .pe-sys.on').forEach(el => el.classList.remove('on'));
+      peRender();
     } catch(e) { toast(e.message); } finally { spin('examBtn', false); }
   }
 
@@ -2853,25 +4409,27 @@ HTML_PAGE = """
     const system = result.system;
     _examDone.add(system);
     _examResultMap[system] = result;
-
-    // Mark row as done with system color
+    // Per-system accent colour used by the result card icon below. Falls back
+    // to teal if the system isn't in EXAM_COLORS for some reason.
     const sysColor = EXAM_COLORS[system] || 'var(--teal-600)';
-    document.querySelectorAll('.cb-exam-sys-row').forEach(row => {
-      if (row.getAttribute('onclick') && row.getAttribute('onclick').includes(`'${system}'`)) {
+
+    // Mark the matching .pe-sys card as done (still selected-looking, but locked).
+    document.querySelectorAll('#examSystems .pe-sys').forEach(row => {
+      if (row.getAttribute('data-name') === system) {
         row.classList.add('done');
-        row.style.borderLeftColor = sysColor;
-        const cb = row.querySelector('.cb-exam-sys-cb');
-        cb.classList.add('checked');
+        row.classList.remove('on');
       }
     });
 
-    // Update done badge
+    // Update done badge (rail-tab "X examined" pill)
     const badge = document.getElementById('examDoneBadge');
     badge.textContent = _examDone.size + ' examined';
     badge.hidden = false;
 
-    // Add pin to body SVG
+    // Add pin to body SVG if a body image is in the panel (legacy; safe no-op)
     addExamPin(system, result.abnormal);
+    // Refresh the count pill / meta / button state since this row is no longer toggle-able
+    peRender();
 
     // Add result card
     const container = document.getElementById('examResults');
@@ -2968,7 +4526,12 @@ HTML_PAGE = """
       spin('diagnosisBtn',true);
       const data = await postJson('/api/diagnosis', {session_id:sessionId, diagnosis:dx});
       const el = document.getElementById('diagnosisResult');
-      el.innerHTML=`<strong style="font-weight:600">Submitted:</strong> ${data.diagnosis_guess}`;
+      el.textContent = '';
+      const lbl = document.createElement('strong');
+      lbl.style.fontWeight = '600';
+      lbl.textContent = 'Submitted: ';
+      el.appendChild(lbl);
+      el.appendChild(document.createTextNode(data.diagnosis_guess));
       el.hidden=false;
     } catch(e){ toast(e.message); } finally { spin('diagnosisBtn',false); }
   }
@@ -3268,7 +4831,8 @@ HTML_PAGE = """
   }
 
   function startGraphPolling() {
-    document.getElementById('graphPanel').hidden = false;
+    // Don't auto-open the panel — polling runs in the background, the panel
+    // opens only when the user clicks its rail-tab icon.
     document.getElementById('graphEmpty').style.display = 'flex';
     document.getElementById('graphStatus').textContent = 'Waiting for interactions…';
     document.getElementById('graphStatus').className = 'text-xs text-indigo-300 italic';
@@ -3287,7 +4851,7 @@ HTML_PAGE = """
   async function evaluateCase() {
     try {
       req();
-      spin('evaluateBtn',true);
+      spin('submitConfirmBtn',true);
       const _segSecs = _sessionStart ? Math.round((Date.now() - _sessionStart) / 1000) : 0;
       const data = await postJson('/api/evaluate', {session_id:sessionId, elapsed_seconds:_segSecs});
       const score = data.overall_score||0;
@@ -3349,12 +4913,143 @@ HTML_PAGE = """
         statusBadge.innerHTML = '<svg width="7" height="7" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="currentColor"/></svg> Final · complete report';
       }
 
-      const res=document.getElementById('evalResults'); res.hidden=false;
-      res.scrollIntoView({behavior:'smooth',block:'start'});
-    } catch(e){ toast(e.message); } finally { spin('evaluateBtn',false); }
+      wbOpenPanel('panel-perf');
+      // Swap topbar: hide Pause + Submit, show Save & Exit
+      hideSubmitConfirm();
+      _stopTimer();
+      document.getElementById('pauseBtn').hidden = true;
+      document.getElementById('submitCaseBtn').hidden = true;
+      document.getElementById('saveExitBtn').hidden = false;
+      // Lock inputs
+      document.querySelectorAll('#panel-reasoning input, #panel-reasoning textarea, #panel-reasoning button:not(.wb-pin-btn):not(.wb-fp-close)').forEach(el => { el.disabled = true; });
+    } catch(e){ toast(e.message); } finally { spin('submitConfirmBtn',false); }
   }
 
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && _kgExpanded) collapseKg(); });
+  /* ── Workbench v3 — GridStack panel management ── */
+  const WB_PANELS = {
+    'panel-patient':   { x:9, y:0, w:3, h:14, minW:3, minH:8 },
+    'panel-interview': { w:4, h:10, minW:3, minH:5 },
+    'panel-phys-exam': { w:4, h:9,  minW:3, minH:5 },
+    'panel-invest':    { w:4, h:8,  minW:3, minH:4 },
+    'panel-reasoning': { w:4, h:10, minW:3, minH:5 },
+    'panel-imaging':   { w:4, h:9,  minW:3, minH:5 },
+    'panel-consults':  { w:4, h:8,  minW:3, minH:4 },
+    'panel-kg':        { w:5, h:9,  minW:3, minH:5 },
+    'panel-cxr':       { w:5, h:9,  minW:3, minH:5 },
+    'panel-ecg':       { w:6, h:7,  minW:4, minH:4 },
+    'panel-perf':      { w:4, h:11, minW:3, minH:5 },
+  };
+  let _gsGrid = null;
+  const _pinnedPanels = new Set();
+
+  function _initGrid() {
+    _gsGrid = GridStack.init({
+      column: 12,
+      float: true,
+      animate: true,
+      cellHeight: 70,
+      minRow: 1,
+      resizable: { handles: 'se,s,e,sw,w' },
+      draggable: { handle: '.wb-fp-head' },
+    }, '#panelGrid');
+  }
+
+  /* ── Pin/unpin ── */
+  function wbPinPanel(id) {
+    _pinnedPanels.add(id);
+    const panelEl = document.getElementById(id);
+    if (panelEl) panelEl.classList.add('pinned');
+    const btn = document.querySelector('.wb-pin-btn[data-pin-id="' + id + '"]');
+    if (btn) { btn.classList.add('pinned'); btn.title = 'Unpin panel'; }
+    const tab = document.querySelector('[data-panel="' + id + '"]');
+    if (tab) tab.classList.add('pinned');
+    const tabPinBtn = document.querySelector('.wb-tab-pin-dot[data-pin-tab="' + id + '"]');
+    if (tabPinBtn) { tabPinBtn.classList.add('pinned'); tabPinBtn.title = 'Unpin panel'; }
+  }
+  function wbUnpinPanel(id) {
+    _pinnedPanels.delete(id);
+    const panelEl = document.getElementById(id);
+    if (panelEl) panelEl.classList.remove('pinned');
+    const btn = document.querySelector('.wb-pin-btn[data-pin-id="' + id + '"]');
+    if (btn) { btn.classList.remove('pinned'); btn.title = 'Pin panel'; }
+    const tab = document.querySelector('[data-panel="' + id + '"]');
+    if (tab) tab.classList.remove('pinned');
+    const tabPinBtn = document.querySelector('.wb-tab-pin-dot[data-pin-tab="' + id + '"]');
+    if (tabPinBtn) { tabPinBtn.classList.remove('pinned'); tabPinBtn.title = 'Pin panel'; }
+  }
+  function wbTogglePin(id) {
+    _pinnedPanels.has(id) ? wbUnpinPanel(id) : wbPinPanel(id);
+  }
+
+  /* ── Open / close ── */
+  function wbOpenPanel(id) {
+    // Close any open panel that is not pinned (single-panel mode)
+    document.querySelectorAll('#panelGrid .grid-stack-item').forEach(gsi => {
+      const pid = gsi.dataset.gsId;
+      if (pid && pid !== id && !_pinnedPanels.has(pid)) wbClosePanel(pid);
+    });
+    const panelEl = document.getElementById(id);
+    if (!panelEl || panelEl.closest('.grid-stack-item')) return;
+    const cfg = WB_PANELS[id] || { w:4, h:8, minW:3, minH:4 };
+    const wrapper = document.createElement('div');
+    wrapper.className = 'grid-stack-item';
+    wrapper.dataset.gsId = id;
+    const inner = document.createElement('div');
+    inner.className = 'grid-stack-item-content';
+    inner.appendChild(panelEl);
+    wrapper.appendChild(inner);
+    _gsGrid.addWidget(wrapper, cfg);
+    const tip = document.getElementById('wbEmptyTip');
+    if (tip) tip.hidden = true;
+    const tab = document.querySelector('[data-panel="' + id + '"]');
+    if (tab) { tab.classList.add('active'); tab.classList.remove('has-update','has-alert'); }
+    if (id === 'panel-kg') setTimeout(graphFit, 300);
+  }
+  function wbClosePanel(id) {
+    const panelEl = document.getElementById(id);
+    if (!panelEl) return;
+    const gsiEl = panelEl.closest('.grid-stack-item');
+    if (!gsiEl) return;
+    // Also unpin on manual close
+    wbUnpinPanel(id);
+    if (id === 'panel-patient') _stopPatientEcg();
+    document.getElementById('gs-store').appendChild(panelEl);
+    _gsGrid.removeWidget(gsiEl);
+    if (!document.querySelector('#panelGrid .grid-stack-item')) {
+      const tip = document.getElementById('wbEmptyTip');
+      if (tip) tip.hidden = false;
+    }
+    const tab = document.querySelector('[data-panel="' + id + '"]');
+    if (tab) tab.classList.remove('active');
+  }
+  function wbTogglePanel(id) {
+    const panelEl = document.getElementById(id);
+    if (!panelEl) return;
+    panelEl.closest('.grid-stack-item') ? wbClosePanel(id) : wbOpenPanel(id);
+  }
+  function wbOpenPanelKeepInvestigations(id) {
+    // When a visual result (ECG/CXR) opens, keep panel-invest visible alongside it.
+    // Temporarily pin it so wbOpenPanel's non-pinned sweep doesn't close it, then
+    // unpin (same tick — no repaint) so the user can still close it manually.
+    const invPanel = document.getElementById('panel-invest');
+    const invOpen = !!(invPanel && invPanel.closest('.grid-stack-item'));
+    const invWasPinned = _pinnedPanels.has('panel-invest');
+    if (invOpen && !invWasPinned) wbPinPanel('panel-invest');
+    wbOpenPanel(id);
+    if (invOpen && !invWasPinned) wbUnpinPanel('panel-invest');
+  }
+  document.querySelectorAll('.wb-rail-tab').forEach(tab => {
+    tab.addEventListener('click', () => wbTogglePanel(tab.dataset.panel));
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (_kgExpanded) collapseKg();
+      document.querySelectorAll('#panelGrid .grid-stack-item').forEach(gsi => {
+        const pid = gsi.dataset.gsId;
+        if (pid) wbClosePanel(pid);
+      });
+    }
+  });
 
   setupSpeechRecognition();
 
@@ -3444,18 +5139,270 @@ HTML_PAGE = """
 
   /* ── Pause modal keyboard shortcuts ── */
   document.addEventListener('keydown', (e) => {
+    if (document.getElementById('submitBackdrop').classList.contains('on')) {
+      if (e.key === 'Escape') { e.preventDefault(); hideSubmitConfirm(); }
+      if (e.key === 'Enter')  { e.preventDefault(); confirmSubmitCase(); }
+      return;
+    }
     if (!document.getElementById('pauseBackdrop').classList.contains('on')) return;
     if (e.key === 'Enter')  { e.preventDefault(); resumeFromPause(); }
-    if (e.key === 'Escape') { e.preventDefault(); location.href = '/dashboard'; }
+    if (e.key === 'Escape') { e.preventDefault(); location.href = '/home'; }
   });
 
+  /* ── Patient panel: live Lead II ECG monitor ── */
+  // Sweep-monitor canvas with a Lead II morphology derived from a 0..1 cardiac
+  // phase. Rate-driven (beat interval = 60 / _ppBPM), resize-aware via
+  // ResizeObserver, respects prefers-reduced-motion. Morphology mirrors the
+  // synthesizer's per-lead findings — see backend/ecg_synthesizer._beat_template.
+  let _ppBPM = 75;
+  let _ppRAF = null;
+  let _ppRO = null;
+  let _ppCtx = null, _ppDPR = 1, _ppCssW = 0, _ppCssH = 0;
+  let _ppVals = [];
+  let _ppHeadF = 0, _ppLast = 0, _ppLastBeatIdx = -1;
+  let _ppInited = false;
+  const _ppReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Default Lead II morphology — overwritten by setPatientPanelEcgMorphology
+  // once a real ECG is generated. Phase fractions follow the design prototype.
+  let _ppMorph = {
+    pr_frac: 0.18, qrs_frac: 0.10, qt_frac: 0.40,  // fractions of one beat phase
+    p_absent: false, q_path: false, t_inv: false,
+    qrs: 'normal', st_mv: 0.0, amp: 1.0,
+  };
+
+  function _ppEcg(phase) {
+    // Map phase 0..1 → time within the beat, with intervals scaled like the
+    // synthesizer's _beat_template. Centers are derived so that the R wave
+    // lands near phase ~0.27 — matching the design's monitor pacing.
+    const m = _ppMorph;
+    const pr = m.pr_frac, qrs = m.qrs_frac, qt = m.qt_frac;
+    const p_mu = pr * 0.50;
+    const q_mu = pr;
+    const r_mu = pr + qrs * 0.35;
+    const s_mu = pr + qrs * 0.72;
+    const t_mu = pr + qt * 0.65;
+    const wide = (m.qrs === 'lbbb' || m.qrs === 'rbbb' || m.qrs === 'wide');
+    const r_sig = wide ? qrs * 0.10 : qrs * 0.06;
+    const s_sig = wide ? qrs * 0.08 : qrs * 0.055;
+    const g = (mu, sig, amp) => amp * Math.exp(-0.5 * Math.pow((phase - mu) / Math.max(sig, 1e-4), 2));
+
+    const sc = m.amp;
+    let v = 0;
+    // P wave
+    if (!m.p_absent) v += g(p_mu, pr * 0.12, 0.15 * sc);
+    // Q
+    const q_amp = m.q_path ? -0.25 * sc : -0.08 * sc;
+    v += g(q_mu, qrs * 0.06, q_amp);
+    // R
+    v += g(r_mu, r_sig, 0.90 * sc);
+    // S
+    v += g(s_mu, s_sig, -0.15 * sc);
+    // LBBB notched R
+    if (m.qrs === 'lbbb') v += g(r_mu + qrs * 0.30, r_sig * 0.8, 0.40 * sc);
+    // RBBB RSR'
+    if (m.qrs === 'rbbb') v += g(s_mu + qrs * 0.35, r_sig * 0.7, 0.45 * sc);
+    // WPW delta
+    if (m.qrs === 'delta') v += g(q_mu - qrs * 0.15, qrs * 0.12, 0.30 * sc);
+    // ST offset between QRS end and T peak
+    if (Math.abs(m.st_mv) > 0.005) {
+      const st_start = s_mu + qrs * 0.08;
+      const st_end = t_mu - (qt - qrs) * 0.25;
+      if (phase >= st_start && phase <= st_end) v += m.st_mv * 0.30;
+    }
+    // T wave
+    const t_amp = m.t_inv ? -0.20 * sc : (0.35 * sc + m.st_mv * 0.06);
+    v += g(t_mu, (qt - qrs) * 0.18, t_amp);
+    return v;
+  }
+
+  function setPatientPanelEcgMorphology(m) {
+    if (!m) return;
+    const hr  = Math.max(20, Math.min(300, parseInt(m.hr, 10) || _ppBPM));
+    const beat_ms = 60000 / hr;
+    const pr_ms  = Math.max(0,  Math.min(beat_ms * 0.6, +m.pr_ms  || 160));
+    const qrs_ms = Math.max(40, Math.min(beat_ms * 0.4, +m.qrs_ms || 90));
+    const qt_ms  = Math.max(qrs_ms + 40, Math.min(beat_ms * 0.95, +m.qt_ms || 420));
+    _ppMorph = {
+      pr_frac:  pr_ms  / beat_ms,
+      qrs_frac: qrs_ms / beat_ms,
+      qt_frac:  qt_ms  / beat_ms,
+      p_absent: !!m.p_absent,
+      q_path:   !!m.q_path,
+      t_inv:    !!m.t_inv,
+      qrs:      m.qrs || 'normal',
+      st_mv:    +m.st_mv || 0,
+      amp:      Math.max(0.1, Math.min(2, +m.amp_scale || 1)),
+    };
+    if (m.rhythm_label) {
+      const r = document.getElementById('ppRhythm');
+      if (r) r.textContent = String(m.rhythm_label).toUpperCase();
+    }
+    // If we're already streaming, redraw the static reference cycle so reduced-
+    // motion users see the new morphology immediately.
+    if (_ppReduced) { _ppDrawGrid(); _ppRenderStatic(); }
+  }
+
+  function _ppResizeCanvas() {
+    const canvas = document.getElementById('ppEcg');
+    if (!canvas) return;
+    const wrap = canvas.parentElement;
+    if (!wrap) return;
+    _ppDPR = Math.min(window.devicePixelRatio || 1, 2);
+    _ppCssW = Math.max(1, wrap.clientWidth);
+    _ppCssH = Math.max(1, wrap.clientHeight);
+    canvas.width  = Math.round(_ppCssW * _ppDPR);
+    canvas.height = Math.round(_ppCssH * _ppDPR);
+    _ppCtx = canvas.getContext('2d');
+    _ppCtx.setTransform(_ppDPR, 0, 0, _ppDPR, 0, 0);
+    _ppVals = new Array(Math.ceil(_ppCssW)).fill(NaN);
+    _ppHeadF = 0; _ppLastBeatIdx = -1;
+    _ppDrawGrid();
+    if (_ppReduced) _ppRenderStatic();
+  }
+
+  function _ppDrawGrid() {
+    if (!_ppCtx) return;
+    _ppCtx.clearRect(0, 0, _ppCssW, _ppCssH);
+    _ppCtx.lineWidth = 1;
+    _ppCtx.strokeStyle = 'rgba(52,231,182,0.06)';
+    _ppCtx.beginPath();
+    for (let x = 0; x <= _ppCssW; x += 11) { _ppCtx.moveTo(x, 0); _ppCtx.lineTo(x, _ppCssH); }
+    for (let y = 0; y <= _ppCssH; y += 11) { _ppCtx.moveTo(0, y); _ppCtx.lineTo(_ppCssW, y); }
+    _ppCtx.stroke();
+    _ppCtx.strokeStyle = 'rgba(52,231,182,0.11)';
+    _ppCtx.beginPath();
+    for (let x = 0; x <= _ppCssW; x += 55) { _ppCtx.moveTo(x, 0); _ppCtx.lineTo(x, _ppCssH); }
+    for (let y = 0; y <= _ppCssH; y += 55) { _ppCtx.moveTo(0, y); _ppCtx.lineTo(_ppCssW, y); }
+    _ppCtx.stroke();
+  }
+
+  function _ppRenderStatic() {
+    // Reduced-motion: render a single representative cycle across the strip.
+    if (!_ppCtx) return;
+    const sweepSec = 4.2;
+    const beat = 60 / Math.max(20, _ppBPM);
+    const speed = _ppCssW / sweepSec;
+    const mid = _ppCssH * 0.52, scale = _ppCssH * 0.34;
+    _ppCtx.lineJoin = 'round'; _ppCtx.lineCap = 'round';
+    _ppCtx.lineWidth = 2.1;
+    _ppCtx.strokeStyle = '#34e7b6';
+    _ppCtx.shadowColor = 'rgba(52,231,182,0.55)';
+    _ppCtx.shadowBlur = 7;
+    _ppCtx.beginPath();
+    for (let x = 0; x < _ppCssW; x++) {
+      const t = x / speed;
+      const phase = ((t / beat) % 1 + 1) % 1;
+      const y = mid - _ppEcg(phase) * scale;
+      if (x === 0) _ppCtx.moveTo(x, y); else _ppCtx.lineTo(x, y);
+    }
+    _ppCtx.stroke();
+    _ppCtx.shadowBlur = 0;
+  }
+
+  function _ppFrame(now) {
+    let dt = (now - _ppLast) / 1000; _ppLast = now;
+    if (dt > 0.05) dt = 0.05;
+    const sweepSec = 4.2;
+    const speed = _ppCssW / sweepSec;
+    const beat = 60 / Math.max(20, _ppBPM);
+    const cols = _ppVals.length;
+    const newHeadF = _ppHeadF + speed * dt;
+    for (let c = Math.ceil(_ppHeadF); c < newHeadF; c++) {
+      const col = ((c % cols) + cols) % cols;
+      const time = c / speed;
+      const phase = (((time / beat) % 1) + 1) % 1;
+      _ppVals[col] = _ppEcg(phase);
+      for (let e = 1; e <= 9; e++) _ppVals[(col + e) % cols] = NaN;
+    }
+    _ppHeadF = newHeadF;
+    const headCol = ((Math.floor(_ppHeadF) % cols) + cols) % cols;
+
+    const beatIdx = Math.floor((_ppHeadF / speed) / beat);
+    const phaseNow = ((((_ppHeadF / speed) / beat) % 1) + 1) % 1;
+    if (phaseNow > 0.24 && phaseNow < 0.30 && beatIdx !== _ppLastBeatIdx) {
+      _ppLastBeatIdx = beatIdx;
+      const heart = document.getElementById('ppHeart');
+      if (heart) {
+        heart.classList.add('beat');
+        setTimeout(() => heart.classList.remove('beat'), 90);
+      }
+    }
+
+    _ppDrawGrid();
+    const mid = _ppCssH * 0.52, scale = _ppCssH * 0.34;
+    _ppCtx.lineJoin = 'round'; _ppCtx.lineCap = 'round';
+    _ppCtx.lineWidth = 2.1;
+    _ppCtx.strokeStyle = '#34e7b6';
+    _ppCtx.shadowColor = 'rgba(52,231,182,0.55)';
+    _ppCtx.shadowBlur = 7;
+    _ppCtx.beginPath();
+    let pen = false;
+    for (let x = 0; x < cols; x++) {
+      const v = _ppVals[x];
+      if (v == null || isNaN(v)) { pen = false; continue; }
+      const y = mid - v * scale;
+      if (!pen) { _ppCtx.moveTo(x, y); pen = true; } else _ppCtx.lineTo(x, y);
+    }
+    _ppCtx.stroke();
+    _ppCtx.shadowBlur = 0;
+
+    const hv = _ppVals[(headCol - 1 + cols) % cols];
+    if (hv != null && !isNaN(hv)) {
+      const y = mid - hv * scale;
+      _ppCtx.fillStyle = '#bafff0';
+      _ppCtx.shadowColor = 'rgba(52,231,182,0.9)';
+      _ppCtx.shadowBlur = 10;
+      _ppCtx.beginPath(); _ppCtx.arc(headCol, y, 2.6, 0, Math.PI * 2); _ppCtx.fill();
+      _ppCtx.shadowBlur = 0;
+    }
+
+    _ppRAF = requestAnimationFrame(_ppFrame);
+  }
+
+  function _initPatientEcg() {
+    const canvas = document.getElementById('ppEcg');
+    if (!canvas) return;
+    // Lazy first-time setup
+    if (!_ppInited) {
+      _ppResizeCanvas();
+      if (typeof ResizeObserver !== 'undefined') {
+        _ppRO = new ResizeObserver(() => _ppResizeCanvas());
+        _ppRO.observe(canvas.parentElement);
+      } else {
+        window.addEventListener('resize', _ppResizeCanvas);
+      }
+      _ppInited = true;
+    } else {
+      // Re-open after close: rebuild buffer at current size
+      _ppResizeCanvas();
+    }
+    if (_ppReduced) return; // static cycle already rendered in resize
+    if (_ppRAF) cancelAnimationFrame(_ppRAF);
+    _ppLast = performance.now();
+    _ppRAF = requestAnimationFrame(_ppFrame);
+  }
+
+  function _stopPatientEcg() {
+    if (_ppRAF) { cancelAnimationFrame(_ppRAF); _ppRAF = null; }
+  }
+
+  function setPatientPanelHR(hr) {
+    const n = parseInt(hr, 10);
+    if (!isNaN(n) && n > 0) _ppBPM = n;
+    const numEl = document.getElementById('ppHRMon');
+    if (numEl) numEl.textContent = (!isNaN(n) && n > 0) ? n : '—';
+  }
+
   /* ── Startup ── */
+  _initGrid();
   (async function() {
     await checkAuth();
     const _resumeId = new URLSearchParams(window.location.search).get('resume');
     if (_resumeId) resumeCase(_resumeId);
   })();
 </script>
+<!--DRAWER-->
 </body>
 </html>
 """

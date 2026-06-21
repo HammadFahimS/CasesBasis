@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from tests.helpers import make_request
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -196,7 +197,7 @@ def test_request_magic_link_endpoint_rejects_invalid_email(db_path):
     import backend.web_app as web_app
 
     with pytest.raises(HTTPException) as exc_info:
-        web_app.request_magic_link(web_app.RequestLinkRequest(email="not-an-email"))
+        web_app.request_magic_link(make_request(), web_app.RequestLinkRequest(email="not-an-email"))
     assert exc_info.value.status_code == 422
 
 
@@ -204,7 +205,7 @@ def test_request_magic_link_endpoint_creates_resident_and_link(db_path):
     import backend.web_app as web_app
     from backend.persistence import get_or_create_resident, get_resident
 
-    result = web_app.request_magic_link(web_app.RequestLinkRequest(email="ivan@example.com"))
+    result = web_app.request_magic_link(make_request(), web_app.RequestLinkRequest(email="ivan@example.com"))
     assert "message" in result
     assert "dev_link" in result
     assert "/api/auth/verify?token=" in result["dev_link"]
@@ -214,7 +215,7 @@ def test_verify_magic_link_endpoint_sets_cookie_and_redirects(db_path):
     import backend.web_app as web_app
     from fastapi.responses import RedirectResponse
 
-    link_result = web_app.request_magic_link(web_app.RequestLinkRequest(email="julia@example.com"))
+    link_result = web_app.request_magic_link(make_request(), web_app.RequestLinkRequest(email="julia@example.com"))
     token = link_result["dev_link"].split("token=")[1]
 
     response = web_app.verify_magic_link(token)
@@ -238,7 +239,7 @@ def test_verify_magic_link_already_used_raises_400(db_path):
     from fastapi import HTTPException
     import backend.web_app as web_app
 
-    link_result = web_app.request_magic_link(web_app.RequestLinkRequest(email="kim@example.com"))
+    link_result = web_app.request_magic_link(make_request(), web_app.RequestLinkRequest(email="kim@example.com"))
     token = link_result["dev_link"].split("token=")[1]
 
     web_app.verify_magic_link(token)

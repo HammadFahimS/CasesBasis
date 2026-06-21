@@ -158,7 +158,12 @@ def _get_ecg_service() -> ECGService:
 
 
 def build_ecg_result(case: ClinicalCase) -> InvestigationResult:
-    visual_payload = _get_ecg_service().build_visual_payload(case.diagnosis, heart_rate=case.vitals.heart_rate)
+    visual_payload = _get_ecg_service().build_visual_payload(
+        case.diagnosis,
+        heart_rate=case.vitals.heart_rate,
+        age=case.patient.age,
+        sex=case.patient.gender,
+    )
     ischemic = has_ischemic_features(case)
     if ischemic:
         findings = [

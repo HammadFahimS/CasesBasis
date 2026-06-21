@@ -17,6 +17,7 @@ JSON STRUCTURE:
   "patient": {
     "age": number,
     "gender": "male or female",
+    "name": "First L. (first name + last initial only, e.g. 'Maria C.' or 'James T.')",
     "race": "one of: White, Black, Asian, Hispanic, Other",
     "occupation": "string or null",
     "persona_description": "string",
@@ -57,6 +58,7 @@ PERSONA GUIDELINES:
 - Choose an age that is clinically realistic for the diagnosis and varies across cases (do not always default to middle-aged adults — use teenagers, young adults, elderly patients too)
 - Set race to one of: White, Black, Asian, Hispanic, Other — vary it realistically across cases
 - Set occupation consistent with age: omit (null) for patients under 14; use student, retired, or specific careers otherwise
+- Set name as first name + last initial (e.g. "Maria C.", "James T.") — must match the patient's gender and race realistically
 - Write persona_description as exactly ONE sentence describing communication style and emotional state only
   Examples: "A shy 16-year-old who answers reluctantly and avoids detail."
             "A stoic retired farmer who minimises pain and resists fuss."

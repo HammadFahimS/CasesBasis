@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CasesBasis — Simulated Cases</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink-950:#0a0f17; --ink-900:#111824; --ink-800:#1a2332;
+    --ink-700:#273347; --ink-600:#3b4a63; --ink-500:#5b6b85;
+    --ink-400:#8696b0; --ink-300:#b3becf; --ink-200:#d6dde7;
+    --ink-100:#e9edf2; --ink-50:#f4f6f9; --paper:#fbfcfd;
+    --teal-800: oklch(0.40 0.09 195); --teal-700: oklch(0.45 0.10 195);
+    --teal-600: oklch(0.55 0.10 195); --teal-500: oklch(0.65 0.10 195);
+    --teal-100: oklch(0.93 0.04 195); --teal-50: oklch(0.97 0.02 195);
+    --gold-700:#9a6b00; --gold-bg:#fdf6e3; --gold-bd:#ecd9a6;
+    --critical:#c43a2c; --critical-bg:#fdecea;
+    --shadow-sm:0 1px 2px rgba(15,23,42,.04);
+    --shadow-md:0 2px 4px rgba(15,23,42,.05),0 4px 12px rgba(15,23,42,.05);
+    --shadow-lg:0 12px 32px rgba(15,23,42,.10),0 2px 4px rgba(15,23,42,.04);
+    --shadow-xl:0 24px 60px rgba(10,15,23,.18),0 4px 12px rgba(10,15,23,.08);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:1.5;color:var(--ink-900);background:var(--ink-50);-webkit-font-smoothing:antialiased;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;}
+
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 64px;}
+  .head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:wrap;}
+  .head h1{margin:0 0 4px;font-size:24px;font-weight:700;letter-spacing:-.02em;}
+  .head p{margin:0;color:var(--ink-500);font-size:13.5px;max-width:560px;}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;font-family:inherit;
+    padding:10px 16px;border-radius:10px;cursor:pointer;border:1.5px solid transparent;transition:all .14s;text-decoration:none;}
+  .btn-pri{background:var(--teal-700);color:#fff;box-shadow:var(--shadow-sm);}
+  .btn-pri:hover{background:var(--teal-800);}
+  .btn-ghost{background:#fff;color:var(--ink-700);border-color:var(--ink-200);}
+  .btn-ghost:hover{border-color:var(--ink-300);background:var(--ink-50);}
+
+  .card{background:var(--paper);border:1px solid var(--ink-100);border-radius:16px;box-shadow:var(--shadow-md);overflow:hidden;}
+  table{width:100%;border-collapse:collapse;}
+  thead th{text-align:left;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-400);
+    padding:13px 18px;border-bottom:1px solid var(--ink-100);background:#fff;}
+  tbody td{padding:15px 18px;border-bottom:1px solid var(--ink-50);vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:var(--teal-50);}
+  .c-title{font-weight:600;color:var(--ink-900);}
+  .c-sub{font-size:12px;color:var(--ink-500);margin-top:2px;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;text-transform:capitalize;}
+  .pill-gold{background:var(--gold-bg);color:var(--gold-700);border:1px solid var(--gold-bd);}
+  .pill-easy{background:#e6f4ec;color:#1f7a55;}
+  .pill-medium{background:var(--teal-50);color:var(--teal-700);}
+  .pill-hard{background:var(--critical-bg);color:var(--critical);}
+  .meta-num{font-variant-numeric:tabular-nums;color:var(--ink-600);}
+  .acts{display:flex;gap:6px;justify-content:flex-end;}
+  .ibtn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;cursor:pointer;
+    border:1px solid var(--ink-200);background:#fff;color:var(--ink-600);transition:all .12s;}
+  .ibtn:hover{border-color:var(--teal-500);color:var(--teal-700);background:var(--teal-50);}
+  .ibtn.danger:hover{border-color:var(--critical);color:var(--critical);background:var(--critical-bg);}
+  .ibtn:disabled{opacity:.35;cursor:not-allowed;}
+  .ibtn:disabled:hover{border-color:var(--ink-200);color:var(--ink-600);background:#fff;}
+  .empty{padding:48px 24px;text-align:center;color:var(--ink-500);}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink-900);color:#fff;
+    padding:11px 18px;border-radius:10px;font-size:13px;box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;transition:opacity .2s;z-index:2000;}
+  .toast.show{opacity:1;}
+  .toast.err{background:var(--critical);}
+</style>
+</head>
+<body>
+
+<!--CHROME-->
+
+<main class="wrap">
+  <div class="head">
+    <div>
+      <h1>Simulated case library</h1>
+      <p>Author and manage dynamic state-machine cases. The gold seed case is protected — duplicate it to make your own editable version.</p>
+    </div>
+    <button class="btn btn-pri" id="newBtn">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+      New case
+    </button>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Case</th><th>Specialty</th><th>Difficulty</th><th>States</th><th>Updated</th><th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        <tr><td colspan="6" class="empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const rowsEl = document.getElementById('toast');
+  function toast(msg, isErr) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = 'toast show' + (isErr ? ' err' : '');
+    setTimeout(() => t.className = 'toast', 2600);
+  }
+  function timeAgo(iso) {
+    if (!iso) return '—';
+    const s = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s/60) + 'm ago';
+    if (s < 86400) return Math.floor(s/3600) + 'h ago';
+    return Math.floor(s/86400) + 'd ago';
+  }
+  function esc(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  async function load() {
+    const tbody = document.getElementById('rows');
+    let cases = [];
+    try {
+      const res = await fetch('/api/simulated-cases');
+      if (res.status === 401) { location.href = '/'; return; }
+      cases = (await res.json()).cases || [];
+    } catch (e) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Failed to load cases.</td></tr>'; return; }
+
+    if (!cases.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">No cases yet. Click “New case” to author one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = cases.map(c => {
+      const diff = (c.difficulty || 'medium').toLowerCase();
+      const goldPill = c.is_gold ? `<span class="pill pill-gold">★ Gold</span>` : '';
+      const editTitle = c.is_gold ? 'Gold case — open read-only' : 'Edit';
+      return `
+      <tr>
+        <td>
+          <div class="c-title">${esc(c.title)} ${goldPill}</div>
+          <div class="c-sub">${esc(c.summary)}</div>
+        </td>
+        <td style="color:var(--ink-600)">${esc(c.specialty || '—')}</td>
+        <td><span class="pill pill-${diff}">${diff}</span></td>
+        <td class="meta-num">${c.state_count}</td>
+        <td style="color:var(--ink-500)">${timeAgo(c.updated_at)}</td>
+        <td>
+          <div class="acts">
+            <a class="ibtn" title="Run in Voice Room" href="/simulator/voice-room?case=${encodeURIComponent(c.id)}">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 3.5l7 4.5-7 4.5z" fill="currentColor"/></svg>
+            </a>
+            <a class="ibtn" title="${editTitle}" href="/crud-simulations/edit?id=${encodeURIComponent(c.id)}">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+                ${c.is_gold
+                  ? '<path d="M8 3C4 3 1.5 8 1.5 8S4 13 8 13s6.5-5 6.5-5S12 3 8 3z"/><circle cx="8" cy="8" r="2"/>'
+                  : '<path d="M11 2l3 3-8 8H3v-3z"/><path d="M9.5 3.5l3 3"/>'}
+              </svg>
+            </a>
+            <button class="ibtn" title="Duplicate" onclick="dup('${c.id}')">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2"/></svg>
+            </button>
+            <button class="ibtn danger" title="${c.is_gold ? 'Gold case — protected' : 'Delete'}" ${c.is_gold ? 'disabled' : ''} onclick="del('${c.id}','${esc(c.title).replace(/'/g,"\\'")}')">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4h10M6 4V2.5h4V4M5 4l.5 9h5L11 4"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function dup(id) {
+    try {
+      const res = await fetch(`/api/simulated-cases/${encodeURIComponent(id)}/duplicate`, { method: 'POST' });
+      if (!res.ok) throw new Error();
+      const copy = await res.json();
+      toast('Copy created — opening editor…');
+      setTimeout(() => location.href = `/crud-simulations/edit?id=${encodeURIComponent(copy.id)}`, 600);
+    } catch (e) { toast('Could not duplicate case.', true); }
+  }
+
+  async function del(id, title) {
+    if (!confirm(`Delete “${title}”? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/simulated-cases/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      toast('Case deleted.');
+      load();
+    } catch (e) { toast('Could not delete case.', true); }
+  }
+
+  document.getElementById('newBtn').addEventListener('click', () => {
+    location.href = '/crud-simulations/edit?id=new';
+  });
+
+  load();
+</script>
+</body>
+</html>

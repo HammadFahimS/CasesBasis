@@ -106,6 +106,7 @@ def test_case_preview_does_not_expose_hidden_symptom_list() -> None:
     assert preview == {
         "age": 58,
         "gender": "male",
+        "name": None,
         "race": None,
         "occupation": None,
         "persona_description": "",
@@ -143,7 +144,8 @@ def test_web_evaluation_preserves_exact_diagnosis_guess(monkeypatch: object) -> 
     web_app.SESSIONS[session_id].diagnosis_guess = "Heart Attack"
     monkeypatch.setattr(web_app, "EVALUATOR", evaluator)
 
-    web_app.evaluate(web_app.EvaluateRequest(session_id=session_id))
+    from tests.helpers import make_request
+    web_app.evaluate(web_app.EvaluateRequest(session_id=session_id), make_request())
 
     assert evaluator.questions is not None
     assert "Diagnosis guess: Heart Attack" in evaluator.questions
@@ -159,7 +161,7 @@ def test_web_ui_includes_loading_states_for_async_actions() -> None:
     assert 'id="invBtn"' in html
     assert 'id="doctorBtn"' in html
     assert 'id="diagnosisBtn"' in html
-    assert 'id="evaluateBtn"' in html
+    assert 'id="submitCaseBtn"' in html
     assert "spin(" in html
     assert "toast(" in html
     assert "result.investigations.forEach" in html
@@ -176,7 +178,13 @@ def test_ecg_student_display_hides_decoded_findings() -> None:
     serialized = json.dumps(display).lower()
 
     assert display["summary"] == "ECG completed"
-    assert display["visual_payload"]["svg"].startswith("<svg")
+    vp = display["visual_payload"]
+    # ECG can be either a paper-style PNG (from PTB-XL) or legacy SVG.
+    assert vp["type"] in ("svg", "image")
+    if vp["type"] == "svg":
+        assert vp["svg"].startswith("<svg")
+    else:
+        assert vp["data"]  # base64 PNG
     assert "st elevation" not in serialized
     assert "reciprocal" not in serialized
     assert "territory" not in serialized
@@ -272,8 +280,10 @@ def test_investigation_endpoint_preserves_full_result_in_session(monkeypatch: ob
     web_app.SESSIONS[session_id] = web_app.WebSession(case=case)
     monkeypatch.setattr(web_app, "INVESTIGATION_SERVICE", FakeInvestigationService())
 
+    from tests.helpers import make_request
     display = web_app.order_investigation(
-        web_app.InvestigationRequest(session_id=session_id, investigation="ECG")
+        web_app.InvestigationRequest(session_id=session_id, investigation="ECG"),
+        make_request(),
     )
 
     assert "st_segments" not in json.dumps(display).lower()
@@ -299,8 +309,10 @@ def test_investigation_endpoint_returns_multiple_sanitized_displays(monkeypatch:
     web_app.SESSIONS[session_id] = web_app.WebSession(case=case)
     monkeypatch.setattr(web_app, "INVESTIGATION_SERVICE", FakeInvestigationService())
 
+    from tests.helpers import make_request as _make_request
     display = web_app.order_investigation(
-        web_app.InvestigationRequest(session_id=session_id, investigation="ECG and troponin")
+        web_app.InvestigationRequest(session_id=session_id, investigation="ECG and troponin"),
+        _make_request(),
     )
 
     assert "investigations" in display

@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>CasesBasis — ECG Algorithm Diagnosis</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+:root {
+  --ink-950:#0a0f17; --ink-900:#111824; --ink-800:#1a2332;
+  --ink-700:#273347; --ink-600:#3b4a63; --ink-500:#5b6b85;
+  --ink-400:#8696b0; --ink-300:#b3becf; --ink-200:#d6dde7;
+  --ink-100:#e9edf2; --ink-50:#f4f6f9; --paper:#fbfcfd;
+  --teal-700: oklch(0.45 0.10 195);
+  --teal-600: oklch(0.55 0.10 195);
+  --teal-500: oklch(0.65 0.10 195);
+  --teal-100: oklch(0.93 0.04 195);
+  --critical:#c43a2c; --critical-bg:#fdecea;
+  --shadow-sm: 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-md: 0 2px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.05);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 14px; line-height: 1.5;
+  color: var(--ink-900); background: var(--ink-50);
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.app { max-width: 1300px; margin: 0 auto; padding: 0 24px 80px; }
+
+/* ── Topbar ───────────────────────────────────────────────────────────────── */
+header.topbar {
+  background: linear-gradient(180deg, var(--ink-950), var(--ink-900));
+  color: var(--ink-100); padding: 12px 24px;
+  display: flex; align-items: center; gap: 18px;
+  border-bottom: 1px solid #000;
+}
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.brand-mark {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--teal-500), var(--teal-700));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18); position: relative;
+}
+.brand-mark::before, .brand-mark::after {
+  content: ''; position: absolute; background: white; border-radius: 1px;
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+}
+.brand-mark::before { width: 13px; height: 2px; }
+.brand-mark::after { width: 2px; height: 13px; }
+.brand-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: white; }
+.brand-name .lc { color: var(--teal-500); font-weight: 500; }
+.crumb { color: var(--ink-400); font-size: 13px; padding-left: 14px; border-left: 1px solid var(--ink-700); margin-left: 4px; }
+.topbar-spacer { flex: 1; }
+.nav-link { color: var(--ink-300); text-decoration: none; font-size: 13px; padding: 6px 10px; border-radius: 6px; }
+.nav-link:hover { color: white; background: var(--ink-800); }
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+.hero {
+  margin: 24px 0 18px;
+  padding: 24px 28px;
+  background: linear-gradient(180deg, white, var(--ink-50));
+  border: 1px solid var(--ink-100);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.hero-title { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink-900); margin: 0 0 4px; }
+.hero-sub { font-size: 13px; color: var(--ink-500); line-height: 1.55; max-width: 720px; }
+.hero-badge { display: inline-block; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--teal-700); background: var(--teal-100); padding: 4px 9px; border-radius: 999px; margin-bottom: 10px; }
+
+/* ── Card ─────────────────────────────────────────────────────────────────── */
+.card {
+  background: white;
+  border: 1px solid var(--ink-100);
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 18px;
+}
+.card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-500); margin: 0 0 14px; }
+.card-h { font-size: 17px; font-weight: 700; color: var(--ink-900); margin: 0 0 4px; letter-spacing: -0.01em; }
+.card-sub { font-size: 12.5px; color: var(--ink-500); margin: 0 0 16px; line-height: 1.55; }
+
+/* ── Form ─────────────────────────────────────────────────────────────────── */
+.row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-500); }
+.field input, .field select {
+  font: inherit; font-size: 13px;
+  padding: 9px 11px; border: 1.5px solid var(--ink-200); border-radius: 7px;
+  outline: 0; color: var(--ink-900); background: white;
+  transition: border-color .15s, box-shadow .15s;
+}
+.field input:focus, .field select:focus { border-color: var(--teal-500); box-shadow: 0 0 0 3px rgba(70,166,167,0.12); }
+.field.grow { flex: 1; min-width: 240px; }
+
+.suggestion-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.chip-sug {
+  font: inherit; font-size: 11.5px; padding: 4px 10px;
+  background: var(--ink-50); color: var(--ink-700);
+  border: 1px solid var(--ink-200); border-radius: 999px;
+  cursor: pointer; transition: background .12s, color .12s;
+}
+.chip-sug:hover { background: var(--teal-100); color: var(--teal-700); border-color: var(--teal-500); }
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: inherit; font-size: 13px; font-weight: 600;
+  padding: 10px 16px; border-radius: 8px; cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: background .15s, opacity .15s;
+}
+.btn-pri { background: linear-gradient(135deg, var(--teal-600), var(--teal-500)); color: white; border-color: var(--teal-700); }
+.btn-pri:hover { opacity: 0.92; }
+.btn-pri:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-ghost { background: white; color: var(--ink-700); border-color: var(--ink-200); }
+.btn-ghost:hover { background: var(--ink-50); }
+
+.btn .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.4); border-top-color: white; animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Case preview ─────────────────────────────────────────────────────────── */
+.case-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.case-cell { padding: 14px 16px; background: var(--ink-50); border-radius: 9px; border: 1px solid var(--ink-100); }
+.case-cell-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-500); margin-bottom: 6px; }
+.case-cell-val { font-size: 14px; font-weight: 500; color: var(--ink-900); line-height: 1.5; }
+.case-chip { display: inline-block; font-size: 11.5px; padding: 3px 8px; background: white; border: 1px solid var(--ink-200); border-radius: 999px; margin: 2px 4px 2px 0; }
+.vital-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.vital-tile { padding: 9px 11px; background: white; border: 1px solid var(--ink-200); border-radius: 7px; }
+.vital-tile-l { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-500); }
+.vital-tile-v { font-size: 16px; font-weight: 600; color: var(--ink-900); font-family: 'JetBrains Mono', monospace; }
+.vital-tile-u { font-size: 11px; color: var(--ink-400); margin-left: 3px; }
+
+/* ── ECG display ──────────────────────────────────────────────────────────── */
+.ecg-wrap { background: #fff9f9; border: 1px solid #f0d6d6; border-radius: 10px; padding: 8px; overflow-x: auto; }
+.ecg-meta-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--ink-500); padding: 4px 8px 10px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* ── Algorithm markdown ──────────────────────────────────────────────────── */
+.md-body { font-size: 14px; line-height: 1.65; color: var(--ink-800); }
+.md-body h1 { font-size: 22px; margin: 0 0 12px; letter-spacing: -0.02em; color: var(--ink-900); border-bottom: 2px solid var(--ink-100); padding-bottom: 10px; }
+.md-body h2 { font-size: 16px; margin: 24px 0 8px; color: var(--ink-900); letter-spacing: -0.01em; padding-top: 6px; }
+.md-body h3 { font-size: 13.5px; margin: 14px 0 6px; color: var(--ink-700); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.md-body p { margin: 6px 0 10px; }
+.md-body em { color: var(--ink-500); }
+.md-body strong { color: var(--ink-900); }
+.md-body code { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; background: var(--ink-50); border: 1px solid var(--ink-100); border-radius: 4px; padding: 1px 5px; color: var(--teal-700); }
+.md-body pre { background: var(--ink-950); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 8px 0 14px; }
+.md-body pre code { background: transparent; border: 0; color: #e3e8ef; font-size: 12px; padding: 0; }
+.md-body ul, .md-body ol { padding-left: 22px; margin: 6px 0 12px; }
+.md-body li { margin: 3px 0; }
+.md-body table { border-collapse: collapse; width: 100%; margin: 8px 0 14px; font-size: 12.5px; }
+.md-body th { background: var(--ink-50); padding: 7px 10px; text-align: left; border: 1px solid var(--ink-200); font-weight: 600; color: var(--ink-700); }
+.md-body td { padding: 6px 10px; border: 1px solid var(--ink-100); font-family: 'JetBrains Mono', monospace; }
+.md-body hr { border: 0; border-top: 1px solid var(--ink-100); margin: 18px 0; }
+.md-body blockquote { border-left: 3px solid var(--teal-500); padding: 4px 14px; color: var(--ink-600); margin: 8px 0; background: var(--ink-50); border-radius: 0 6px 6px 0; }
+
+/* ── Toast ────────────────────────────────────────────────────────────────── */
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--ink-900); color: white; padding: 11px 16px; border-radius: 8px; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); transform: translateY(80px); opacity: 0; transition: transform .25s, opacity .25s; z-index: 100; }
+.toast.on { transform: translateY(0); opacity: 1; }
+.toast.err { background: var(--critical); }
+
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <button class="cb-burger" data-cb-burger type="button" aria-label="Open menu" title="Menu" style="margin-right:6px">
+    <span class="lines"><span></span><span></span><span></span></span>
+  </button>
+  <a href="/home" class="brand">
+    <div class="brand-mark"></div>
+    <div class="brand-name">Cases<span class="lc">Basis</span></div>
+  </a>
+  <div class="crumb">ECG Algorithm Diagnosis</div>
+  <div class="topbar-spacer"></div>
+  <a href="/home" class="nav-link">← Home</a>
+  <a href="/simulator" class="nav-link">Simulator</a>
+</header>
+
+<div class="app">
+
+  <!-- ── Hero ─────────────────────────────────────────────────────────────── -->
+  <div class="hero">
+    <div class="hero-badge">For clinician review</div>
+    <h1 class="hero-title">Synthetic ECG Generation — Algorithm Audit</h1>
+    <div class="hero-sub">
+      Generate a clinical case, then synthesize a 12-lead ECG using the legacy
+      LLM&nbsp;+&nbsp;numpy pipeline (no PTB-XL retrieval). The right panel shows
+      every step of the algorithm — the LLM prompt, its parameter response,
+      Gaussian beat templates, rhythm-specific logic, and rendering choices —
+      so you can audit each decision.
+    </div>
+  </div>
+
+  <!-- ── Step 1: Generate the case ────────────────────────────────────────── -->
+  <section class="card">
+    <p class="card-title">Step 1 · Set up the case</p>
+    <h2 class="card-h">Pick a diagnosis (and an optional patient profile)</h2>
+    <p class="card-sub">
+      You can type any diagnosis text or click a suggestion below. Age, sex,
+      and heart rate are optional but feed into the ECG generator if provided.
+    </p>
+
+    <div class="row">
+      <div class="field grow">
+        <label for="diag">Diagnosis</label>
+        <input id="diag" type="text" placeholder="e.g. anterior STEMI" />
+      </div>
+      <div class="field">
+        <label for="hr">Heart rate (bpm)</label>
+        <input id="hr" type="number" min="20" max="280" placeholder="auto" style="width:120px"/>
+      </div>
+      <div class="field">
+        <label for="age">Age</label>
+        <input id="age" type="number" min="0" max="120" placeholder="—" style="width:90px"/>
+      </div>
+      <div class="field">
+        <label for="sex">Sex</label>
+        <select id="sex" style="width:110px">
+          <option value="">—</option>
+          <option value="male">male</option>
+          <option value="female">female</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="suggestion-chips" id="sugChips"></div>
+  </section>
+
+  <!-- ── Step 2: Generate the ECG ─────────────────────────────────────────── -->
+  <section class="card">
+    <p class="card-title">Step 2 · Generate ECG &amp; algorithm trace</p>
+    <h2 class="card-h">Run the synthetic pipeline</h2>
+    <p class="card-sub">
+      Click below to send the diagnosis to the LLM, build ECGParameters,
+      synthesize the SVG, and emit a step-by-step markdown trace.
+    </p>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button id="goBtn" class="btn btn-pri" onclick="generateEcg()">
+        <span id="goSpin" class="hidden spin"></span>
+        <span id="goLabel">Generate synthetic ECG</span>
+      </button>
+      <span id="goMeta" style="font-size:11px;color:var(--ink-400);font-family:'JetBrains Mono',monospace"></span>
+    </div>
+  </section>
+
+  <!-- ── Output: ECG ──────────────────────────────────────────────────────── -->
+  <section class="card hidden" id="ecgCard">
+    <p class="card-title">Output · 12-lead ECG</p>
+    <div class="ecg-meta-row">
+      <span id="ecgMetaLeft">—</span>
+      <span id="ecgMetaRight">—</span>
+    </div>
+    <div class="ecg-wrap" id="ecgWrap"></div>
+  </section>
+
+  <!-- ── Output: Algorithm trace ──────────────────────────────────────────── -->
+  <section class="card hidden" id="mdCard">
+    <p class="card-title">Output · Algorithm trace</p>
+    <div class="md-body" id="mdBody"></div>
+  </section>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const SUGGESTIONS = [
+  'anterior STEMI', 'inferior STEMI', 'lateral STEMI', 'posterior STEMI',
+  'NSTEMI', 'atrial fibrillation', 'atrial flutter', 'SVT',
+  'ventricular tachycardia', 'ventricular fibrillation',
+  'complete heart block', 'first-degree AV block',
+  'LBBB', 'RBBB', 'WPW syndrome',
+  'LVH', 'pericarditis', 'hyperkalemia',
+  'pulmonary embolism', 'normal'
+];
+
+function renderChips() {
+  const c = document.getElementById('sugChips');
+  c.innerHTML = SUGGESTIONS.map(s =>
+    `<button class="chip-sug" onclick="document.getElementById('diag').value='${s.replace(/'/g, "\\'")}'">${s}</button>`
+  ).join('');
+}
+renderChips();
+
+function toast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.toggle('err', !!isErr);
+  t.classList.add('on');
+  clearTimeout(window._toastT);
+  window._toastT = setTimeout(() => t.classList.remove('on'), 3500);
+}
+
+async function generateEcg() {
+  const diag = document.getElementById('diag').value.trim();
+  if (!diag) { toast('Enter a diagnosis first', true); return; }
+
+  const hr  = parseInt(document.getElementById('hr').value) || null;
+  const age = parseInt(document.getElementById('age').value) || null;
+  const sex = document.getElementById('sex').value || null;
+
+  const btn = document.getElementById('goBtn');
+  const spin = document.getElementById('goSpin');
+  const label = document.getElementById('goLabel');
+  const meta = document.getElementById('goMeta');
+  btn.disabled = true; spin.classList.remove('hidden');
+  label.textContent = 'Running pipeline…';
+  meta.textContent = '';
+
+  const t0 = performance.now();
+  try {
+    const r = await fetch('/api/ecg-algorithm/render', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        diagnosis: diag,
+        heart_rate: hr,
+        age: age,
+        gender: sex,
+      }),
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      throw new Error('Server returned ' + r.status + ': ' + err.slice(0, 240));
+    }
+    const data = await r.json();
+    const dt = ((performance.now() - t0) / 1000).toFixed(1);
+
+    document.getElementById('ecgWrap').innerHTML = data.svg;
+    const p = data.parameters || {};
+    document.getElementById('ecgMetaLeft').textContent =
+      `RATE ${p.heart_rate||'—'} bpm · ${p.rhythm||'—'} · PR ${p.pr_interval_ms||'—'} ms · QRS ${p.qrs_duration_ms||'—'} ms · QTc ${p.qtc_ms||'—'} ms · AXIS ${p.axis_degrees||'—'}°`;
+    document.getElementById('ecgMetaRight').textContent =
+      `25 mm/s · 10 mm/mV · ${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}`;
+    document.getElementById('ecgCard').classList.remove('hidden');
+
+    document.getElementById('mdBody').innerHTML = marked.parse(data.markdown);
+    document.getElementById('mdCard').classList.remove('hidden');
+
+    meta.textContent = `${data.provider}/${data.model} · ${dt}s`;
+    toast('ECG and algorithm trace generated', false);
+  } catch (e) {
+    toast(e.message || 'Generation failed', true);
+  } finally {
+    btn.disabled = false; spin.classList.add('hidden');
+    label.textContent = 'Generate synthetic ECG';
+  }
+}
+
+// Enter key in the diagnosis field triggers generation
+document.getElementById('diag').addEventListener('keydown', e => {
+  if (e.key === 'Enter') generateEcg();
+});
+</script>
+<!--DRAWER-->
+</body>
+</html>

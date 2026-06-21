@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=1440" />
-<title>CasesBasis — Resident Dashboard</title>
+<title>CasesBasis — Analytics &amp; Performance</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -422,6 +422,92 @@ table.lib tr:hover td { background: var(--paper); }
 .drawer-btn.teal:hover { background: var(--teal-500); }
 .drawer-btn.danger { background: transparent; border-color: transparent; color: #a83a2c; }
 .drawer-btn.danger:hover { background: #fdecea; color: var(--critical); border-color: #f4c8c2; }
+/* ── Delete confirmation modal ── */
+.del-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:400;backdrop-filter:blur(4px);align-items:center;justify-content:center}
+.del-backdrop.on{display:flex;animation:delFadeIn .18s ease}
+@keyframes delFadeIn{from{opacity:0}to{opacity:1}}
+.del-card{width:400px;max-width:calc(100vw - 32px);background:#fff;border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,0.20),0 2px 8px rgba(0,0,0,0.07);padding:32px 28px;animation:delRise .28s cubic-bezier(.2,.7,.1,1) both}
+@keyframes delRise{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+.del-icon{width:52px;height:52px;border-radius:14px;background:#fdecea;border:1px solid #f4c8c2;display:grid;place-items:center;margin:0 auto 18px;color:var(--critical)}
+.del-title{font-size:19px;font-weight:700;text-align:center;color:var(--ink-900);margin-bottom:8px;letter-spacing:-0.02em}
+.del-body{font-size:13px;color:var(--ink-500);text-align:center;line-height:1.55;margin-bottom:24px}
+.del-actions{display:flex;gap:10px}
+.del-cancel{flex:1;background:var(--ink-50);color:var(--ink-700);border:1px solid var(--ink-200);font:inherit;font-size:13px;font-weight:500;padding:11px;border-radius:9px;cursor:pointer;transition:background .15s}
+.del-cancel:hover{background:var(--ink-100)}
+.del-confirm{flex:1;background:var(--critical);color:#fff;border:0;font:inherit;font-size:13px;font-weight:700;padding:11px;border-radius:9px;cursor:pointer;transition:opacity .15s}
+.del-confirm:hover{opacity:0.88}
+
+/* ── New shared chrome (top bar + drawer) ───────────────────────────────── */
+header.topbar { position: sticky; top: 0; z-index: 30; padding: 12px 22px; gap: 16px; }
+.burger {
+  width: 40px; height: 40px; border-radius: 9px;
+  background: var(--ink-800); border: 1px solid var(--ink-700);
+  cursor: pointer; display: grid; place-items: center;
+  color: var(--ink-200); position: relative;
+  transition: background .14s, border-color .14s;
+}
+.burger:hover { background: var(--ink-700); border-color: var(--ink-600); color: white; }
+.burger .lines { width: 17px; height: 12px; position: relative; }
+.burger .lines span {
+  position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px;
+  background: currentColor; transition: transform .22s ease, opacity .18s ease;
+}
+.burger .lines span:nth-child(1) { top: 0; }
+.burger .lines span:nth-child(2) { top: 5px; }
+.burger .lines span:nth-child(3) { top: 10px; }
+body.drawer-open .burger .lines span:nth-child(1) { transform: translateY(5px) rotate(45deg); }
+body.drawer-open .burger .lines span:nth-child(2) { opacity: 0; }
+body.drawer-open .burger .lines span:nth-child(3) { transform: translateY(-5px) rotate(-45deg); }
+.burger .menu-word {
+  position: absolute; bottom: -15px; left: 50%; transform: translateX(-50%);
+  font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-500); font-weight: 700;
+}
+.crumb { color: var(--ink-400); font-size: 13px; padding-left: 14px; border-left: 1px solid var(--ink-700); margin-left: 4px; }
+.topbar-spacer { flex: 1; }
+.resident-chip { display: flex; align-items: center; gap: 9px; padding: 4px 12px 4px 4px; background: var(--ink-800); border: 1px solid var(--ink-700); border-radius: 999px; }
+.resident-chip .av { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, #4a5a78, #2d3a52); color: white; font-size: 11px; font-weight: 600; display: grid; place-items: center; }
+.resident-chip .meta { line-height: 1.2; }
+.resident-chip .name { font-size: 12.5px; font-weight: 600; color: white; }
+.resident-chip .role { font-size: 10px; color: var(--ink-400); font-family: 'JetBrains Mono', monospace; }
+
+.scrim { position: fixed; inset: 0; background: rgba(10,15,23,0.45); opacity: 0; pointer-events: none; transition: opacity .22s ease; z-index: 40; backdrop-filter: blur(1.5px); }
+body.drawer-open .scrim { opacity: 1; pointer-events: auto; }
+.drawer { position: fixed; top: 0; left: 0; bottom: 0; width: 360px; max-width: 90vw; background: var(--paper); box-shadow: 0 24px 60px rgba(10,15,23,0.18), 0 4px 12px rgba(10,15,23,0.08); z-index: 50; transform: translateX(-100%); transition: transform .26s cubic-bezier(.4,0,.2,1); display: flex; flex-direction: column; border-right: 1px solid var(--ink-100); }
+body.drawer-open .drawer { transform: translateX(0); }
+.drawer-head { padding: 18px 20px 16px; background: linear-gradient(155deg, var(--ink-900), var(--ink-800)); color: white; display: flex; flex-direction: column; gap: 14px; }
+.drawer-head-top { display: flex; align-items: center; gap: 11px; }
+.drawer-head-top .av { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #4a5a78, #2d3a52); color: white; font-size: 14px; font-weight: 600; display: grid; place-items: center; flex-shrink: 0; }
+.drawer-head-top .who { line-height: 1.25; }
+.drawer-head-top .who .n { font-size: 14px; font-weight: 600; }
+.drawer-head-top .who .e { font-size: 11px; color: var(--ink-400); font-family: 'JetBrains Mono', monospace; }
+.drawer-close { margin-left: auto; width: 30px; height: 30px; border-radius: 7px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: var(--ink-300); cursor: pointer; display: grid; place-items: center; }
+.drawer-close:hover { background: rgba(255,255,255,0.12); color: white; }
+.drawer-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.dm { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px 9px; }
+.dm .v { font-family: 'JetBrains Mono', monospace; font-size: 17px; font-weight: 600; color: white; line-height: 1; }
+.dm .v .u { font-size: 10px; color: var(--ink-400); font-weight: 500; }
+.dm .k { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--teal-500); font-weight: 700; margin-top: 5px; }
+.drawer-body { flex: 1; overflow-y: auto; padding: 14px 12px 20px; }
+.nav-group { margin-bottom: 8px; }
+.nav-group-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-400); font-weight: 700; padding: 12px 12px 6px; }
+.nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 9px; cursor: pointer; color: var(--ink-700); font-size: 13.5px; font-weight: 500; border: 1px solid transparent; text-decoration: none; }
+.nav-item:hover { background: var(--ink-50); color: var(--ink-900); }
+.nav-item.active { background: var(--teal-50); color: var(--teal-800); border-color: var(--teal-100); font-weight: 600; }
+.nav-item .ni-ico { width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; display: grid; place-items: center; background: white; border: 1px solid var(--ink-100); color: var(--ink-600); }
+.nav-item.active .ni-ico { background: white; border-color: var(--teal-100); color: var(--teal-700); }
+.nav-item .ni-txt { display: flex; flex-direction: column; line-height: 1.2; }
+.nav-item .ni-sub { font-size: 11px; color: var(--ink-400); font-weight: 400; }
+.nav-item .ni-arrow { margin-left: auto; color: var(--ink-300); }
+.nav-item.danger:hover { background: var(--critical-bg); color: var(--critical); }
+.nav-item.danger:hover .ni-ico { border-color: #f4c8c2; color: var(--critical); }
+.nav-sep { height: 1px; background: var(--ink-100); margin: 8px 12px; }
+
+.analytics-bar { padding: 22px 24px 6px; display: flex; align-items: center; gap: 14px; max-width: 1480px; margin: 0 auto; }
+.back-btn { display: inline-flex; align-items: center; gap: 8px; background: white; border: 1px solid var(--ink-200); border-radius: 9px; padding: 9px 14px; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink-800); cursor: pointer; box-shadow: var(--shadow-sm); text-decoration: none; }
+.back-btn:hover { border-color: var(--ink-400); }
+.analytics-bar h2 { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 30px; margin: 0; font-weight: 400; }
+.analytics-bar .sub { font-size: 13px; color: var(--ink-500); }
 </style>
 </head>
 <body>
@@ -431,34 +517,22 @@ table.lib tr:hover td { background: var(--paper); }
 
 <div class="app" id="appContent" style="display:none">
 
-  <!-- TOP BAR -->
-  <header class="topbar">
-    <a href="/simulator" class="brand">
-      <div class="brand-mark"></div>
-      <div class="brand-name">Cases<span class="lc">Basis</span></div>
-    </a>
-    <div class="crumb">Resident Workspace</div>
-    <div class="topbar-spacer"></div>
-    <a href="/simulator" class="nav-link">← Simulator</a>
-    <a class="nav-link active">Dashboard</a>
-    <div style="width:1px;height:18px;background:var(--ink-700)"></div>
-    <button class="logout-btn" onclick="doLogout()">Log out</button>
-    <div class="resident-chip">
-      <div class="av" id="residentAv">??</div>
-      <div class="meta">
-        <div class="rname" id="residentName">—</div>
-        <div class="role" id="residentRole">—</div>
-      </div>
-    </div>
-  </header>
+  <!--CHROME-->
 
-  <!-- HERO -->
+  <div class="analytics-bar">
+    <a class="back-btn" href="/home">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+      Home
+    </a>
+    <div>
+      <h2>Analytics &amp; Performance</h2>
+      <div class="sub">Trends, skills, coverage and your full case library</div>
+    </div>
+  </div>
+
+  <!-- Quick stats — the four stat cards from the redesign -->
   <section class="hero">
     <div class="greet">
-      <div>
-        <div class="greet-title" id="greetTitle">Good evening, <span class="accent" id="greetName">Resident</span></div>
-        <div class="greet-sub" id="greetSub">Loading your progress…</div>
-      </div>
       <div class="quick-stats">
         <div class="qs">
           <span class="qs-label">Avg score</span>
@@ -495,7 +569,6 @@ table.lib tr:hover td { background: var(--paper); }
         </div>
       </div>
     </div>
-    <div id="resumeCardWrap"></div>
   </section>
 
   <!-- COACHING STRIP -->
@@ -509,7 +582,7 @@ table.lib tr:hover td { background: var(--paper); }
       <div class="body" id="insightBody" style="color:var(--ink-400);font-style:italic">Generating coaching insight…</div>
       <div class="actions" id="insightActions" style="display:none">
         <button onclick="document.getElementById('insightRow').style.display='none'">Dismiss</button>
-        <button class="pri" onclick="location.href='/simulator'">Start a case →</button>
+        <button class="pri" onclick="openNewCaseModal()">Start a case →</button>
       </div>
     </div>
   </section>
@@ -546,51 +619,22 @@ table.lib tr:hover td { background: var(--paper); }
     </div>
   </section>
 
-  <!-- CASE LIBRARY -->
+  <!-- RECENT CASES (full library lives on /home) -->
   <section class="row r-full">
     <div class="panel">
       <div class="panel-head">
         <div>
-          <div class="panel-title">Case library</div>
-          <div class="panel-sub" id="libCount">All cases</div>
+          <div class="panel-title">Recent cases</div>
+          <div class="panel-sub">Your last 5 cases at a glance</div>
         </div>
         <div class="panel-actions">
-          <button class="btn-pri" style="padding:7px 14px;font-size:12.5px" onclick="location.href='/simulator'">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
-            New case
-          </button>
+          <a class="back-btn" href="/home" style="padding:6px 12px;font-size:12px">
+            Open the case library
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>
+          </a>
         </div>
       </div>
-      <div class="library-toolbar">
-        <div class="chips" id="libChips">
-          <button class="chip on" data-filter="all">All <span class="ct" id="ctAll">0</span></button>
-          <button class="chip" data-filter="active">In progress <span class="ct" id="ctProg">0</span></button>
-          <button class="chip" data-filter="evaluated">Evaluated <span class="ct" id="ctEval">0</span></button>
-          <button class="chip" data-filter="paused">Paused <span class="ct" id="ctPaused">0</span></button>
-        </div>
-        <div class="lib-search">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="7" cy="7" r="4"/><path d="M10 10l3 3"/></svg>
-          <input id="libSearch" placeholder="Search diagnosis…" oninput="filterLib()"/>
-        </div>
-      </div>
-      <table class="lib">
-        <thead>
-          <tr>
-            <th style="width:28%">Case</th>
-            <th>System</th>
-            <th>Difficulty</th>
-            <th>Status</th>
-            <th>Score</th>
-            <th>Elapsed</th>
-            <th>Date</th>
-            <th style="text-align:right">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="libBody"></tbody>
-      </table>
-      <div style="padding:11px 18px;border-top:1px solid var(--ink-50);display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--ink-500)">
-        <span id="libShowing">—</span>
-      </div>
+      <div id="recentList" style="padding:6px 10px 12px"></div>
     </div>
   </section>
 
@@ -812,12 +856,9 @@ let _libFilter = 'all';
 
 // ── Render: Topbar ───────────────────────────────────────────────────────────
 function renderTopbar(me) {
-  const av = initials(me.display_name);
-  document.getElementById('residentAv').textContent = av;
-  document.getElementById('residentName').textContent = me.display_name || '—';
-  const role = me.resident_code ? (me.resident_code + ' · MS-3') : (me.email || '');
-  document.getElementById('residentRole').textContent = role;
-  document.title = (me.display_name || 'Resident') + ' — CasesBasis Dashboard';
+  // Topbar + resident chip are now rendered by the shared chrome script (_chrome.html).
+  // Just refresh the document title here so the tab reflects who's signed in.
+  document.title = (me.display_name || 'Resident') + ' — Analytics · CasesBasis';
 }
 
 // ── Render: Quick stats ──────────────────────────────────────────────────────
@@ -884,45 +925,21 @@ function renderQuickStats(stats, sessions) {
 }
 
 // ── Render: Greeting ─────────────────────────────────────────────────────────
-function renderGreeting(me, stats, sessions) {
-  const firstName = (me.display_name || 'Resident').split(' ')[0];
-  document.getElementById('greetName').textContent = firstName;
-  document.getElementById('greetTitle').innerHTML =
-    greetTime() + ', <span class="accent">' + firstName + '</span>';
-
-  const streak = computeStreak(sessions);
-  const paused = sessions.filter(s => s.status === 'paused' || s.status === 'active');
-  const avg = stats.avg_score != null ? Math.round(stats.avg_score) : null;
-
-  let sub = '';
-  if (streak > 1) sub += `<strong>${streak}-day streak</strong> — `;
-  if (avg != null) {
-    sub += `your average score is <strong>${avg}/100</strong>`;
-    if (stats.cases_completed > 0) sub += ` across ${stats.cases_completed} case${stats.cases_completed !== 1 ? 's' : ''}`;
-    sub += '. ';
-  } else {
-    sub += 'Welcome to your dashboard. ';
-  }
-  if (paused.length > 0) {
-    sub += `You have <strong>${paused.length} case${paused.length !== 1 ? 's' : ''}</strong> waiting to resume.`;
-  } else if (stats.cases_completed === 0) {
-    sub += 'Generate your first case to get started.';
-  } else {
-    sub += 'Ready for your next case?';
-  }
-  document.getElementById('greetSub').innerHTML = sub;
-}
+// Greeting moved to /home; on Analytics this is a no-op so the existing call site
+// in loadDashboard() still works without throwing.
+function renderGreeting(_me, _stats, _sessions) { /* no-op on analytics */ }
 
 // ── Render: Resume card ──────────────────────────────────────────────────────
 function renderResumeCard(sessions) {
   const wrap = document.getElementById('resumeCardWrap');
+  if (!wrap) return;  // Removed from Analytics — Focus card lives on /home now.
   const candidate = sessions.find(s => s.status === 'paused' || s.status === 'active');
 
   if (!candidate) {
     wrap.innerHTML = `<div class="no-resume-card">
       <div class="nr-title">No case in progress</div>
       <div class="nr-sub">Start a new case to begin your session</div>
-      <button class="btn-pri" onclick="location.href='/simulator'" style="margin-top:8px">
+      <button class="btn-pri" onclick="openNewCaseModal()" style="margin-top:8px">
         Start a case
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 3l9 5-9 5z" fill="currentColor"/></svg>
       </button>
@@ -1222,7 +1239,7 @@ function renderRecommended(stats, sessions) {
   });
 
   el.innerHTML = recs.slice(0, 3).map(r => `
-    <div class="rec" onclick="location.href='/simulator'">
+    <div class="rec" onclick="openNewCaseModal()">
       <span class="rec-tag ${r.tagCls}">${r.tag}</span>
       <div class="rec-name">${r.name}</div>
       <div class="rec-why">${r.why}</div>
@@ -1354,6 +1371,48 @@ function renderLibTable(sessions) {
     sessions.length + ' case' + (sessions.length !== 1 ? 's' : '');
 }
 
+// Compact "Recent cases" panel that replaced the in-page library on Analytics.
+function renderRecent(sessions) {
+  const el = document.getElementById('recentList');
+  if (!el) return;
+  const items = sessions.slice(0, 5);
+  if (!items.length) {
+    el.innerHTML = `<div style="padding:24px;text-align:center;color:var(--ink-400);font-size:13px">
+      No cases yet. <a href="/simulator" data-new-case style="color:var(--teal-700);font-weight:600">Start one →</a>
+    </div>`;
+    return;
+  }
+  el.innerHTML = items.map(s => {
+    const sys = inferSystem(s.diagnosis);
+    const diff = (s.difficulty || 'medium');
+    const diffLabel = diff[0].toUpperCase() + diff.slice(1);
+    const meta = `${sys.name} · ${diffLabel} · ${fmtElapsed(s.duration_seconds)}`;
+    let right;
+    if (s.status === 'paused') {
+      right = `<span class="pill paused" style="background:var(--teal-50);color:var(--teal-700)">PAUSED</span>`;
+    } else if (s.overall_score != null) {
+      const cls = s.overall_score >= 70 ? 'pass' : s.overall_score >= 50 ? 'mid' : 'low';
+      const color = cls === 'pass' ? 'var(--normal)' : cls === 'mid' ? 'var(--caution)' : 'var(--critical)';
+      right = `<span style="font-family:'JetBrains Mono',monospace;font-weight:600;font-size:15px;color:${color}">${Math.round(s.overall_score)}</span>`;
+    } else {
+      right = `<span style="font-size:11px;color:var(--ink-500);text-transform:uppercase;letter-spacing:0.05em">In progress</span>`;
+    }
+    const href = s.status === 'paused' ? `/simulator?resume=${s.id}` : '/home';
+    return `<a href="${href}" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;text-decoration:none;color:inherit;transition:background .12s">
+      <div class="case-ico ${sys.cls}" style="width:30px;height:30px;border-radius:7px;display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:white;flex-shrink:0">${sys.abbr}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13.5px;font-weight:600;color:var(--ink-900);text-transform:capitalize">${s.diagnosis || 'Untitled'}</div>
+        <div style="font-size:11.5px;color:var(--ink-500)">${meta}</div>
+      </div>
+      ${right}
+    </a>`;
+  }).join('');
+  el.querySelectorAll('a').forEach(a => {
+    a.addEventListener('mouseenter', () => a.style.background = 'var(--paper)');
+    a.addEventListener('mouseleave', () => a.style.background = '');
+  });
+}
+
 function renderLibrary(sessions) {
   _allSessions = sessions;
   const evalCt = sessions.filter(s => s.status === 'evaluated').length;
@@ -1379,11 +1438,30 @@ async function doLogout() {
   location.href = '/';
 }
 
-async function deleteSession(sid) {
-  if (!confirm('Delete this session? This cannot be undone.')) return;
+let _pendingDeleteSid = null;
+
+function deleteSession(sid) {
+  _pendingDeleteSid = sid;
+  document.getElementById('deleteBackdrop').classList.add('on');
+}
+
+function hideDeleteConfirm() {
+  document.getElementById('deleteBackdrop').classList.remove('on');
+  _pendingDeleteSid = null;
+}
+
+async function confirmDeleteSession() {
+  const sid = _pendingDeleteSid;
+  hideDeleteConfirm();
   const r = await fetch('/api/dashboard/session/' + sid, {method:'DELETE'});
-  if (r.ok) { showToast('Session deleted', 'ok'); loadDashboard(); }
-  else showToast('Could not delete session');
+  if (r.ok) {
+    _allSessions = _allSessions.filter(s => s.id !== sid);
+    renderLibrary(_allSessions);
+    renderResumeCard(_allSessions);
+    showToast('Session deleted', 'ok');
+  } else {
+    showToast('Could not delete session');
+  }
 }
 
 // ── Load ─────────────────────────────────────────────────────────────────────
@@ -1411,7 +1489,7 @@ async function loadDashboard() {
     renderCoverage(sessions);
     renderRecommended(stats, sessions);
     renderHeatmap(sessions);
-    renderLibrary(sessions);
+    renderRecent(sessions);
 
     const now = new Date();
     document.getElementById('footLine').textContent =
@@ -1444,7 +1522,7 @@ function closeDrawer() {
   document.body.style.overflow = '';
 }
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeDrawer(); hideDeleteConfirm(); } });
 
 function scoreColor2(s) { return s >= 75 ? '#1f7a55' : s >= 50 ? '#b76e00' : '#c43a2c'; }
 function scoreBg2(s) { return s >= 75 ? '#e6f4ec' : s >= 50 ? '#fdf3e2' : '#fdecea'; }
@@ -1595,5 +1673,23 @@ async function loadDrawerSession(sid) {
 
 loadDashboard();
 </script>
+
+<!-- Delete confirmation modal -->
+<div id="deleteBackdrop" class="del-backdrop" role="dialog" aria-modal="true" onclick="if(event.target===this)hideDeleteConfirm()">
+  <div class="del-card">
+    <div class="del-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+        <path d="M10 11v6M14 11v6"/>
+      </svg>
+    </div>
+    <div class="del-title">Delete this session?</div>
+    <div class="del-body">This action cannot be undone. All progress and evaluation data will be permanently removed.</div>
+    <div class="del-actions">
+      <button class="del-cancel" onclick="hideDeleteConfirm()">Cancel</button>
+      <button class="del-confirm" onclick="confirmDeleteSession()">Delete session</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

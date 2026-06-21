@@ -115,6 +115,15 @@ class _FaissIndex:
             logger.info("  Loaded %d metadata rows", len(self._meta_dict["image_id"]))
 
             logger.info("Loading embedding model: %s ...", EMBED_MODEL_NAME)
+            # Constrain the thread pool before the model is created.
+            # OMP_NUM_THREADS (set in lifespan) handles the pre-import case;
+            # set_num_threads handles the case where torch was already imported.
+            try:
+                import torch
+                torch.set_num_threads(1)
+                torch.set_num_interop_threads(1)
+            except Exception:
+                pass
             self._model = SentenceTransformer(EMBED_MODEL_NAME)
             logger.info("  Model ready")
             return True

@@ -20,9 +20,8 @@ DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_TOGETHER_MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
 DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
-DEFAULT_CEREBRAS_MODEL = "qwen-3-235b-a22b-instruct-2507"
+DEFAULT_CEREBRAS_MODEL = "gpt-oss-120b"
 CEREBRAS_FALLBACK_MODELS = [
-    "qwen-3-235b-a22b-instruct-2507",
     "gpt-oss-120b",
     "zai-glm-4.7",
     "llama3.1-8b",
@@ -288,7 +287,11 @@ class CerebrasClient:
 
     def _is_retryable(self, exc: Exception) -> bool:
         msg = str(exc).lower()
-        return "503" in msg or "502" in msg or "no server" in msg or "unavailable" in msg or "overloaded" in msg
+        return (
+            "503" in msg or "502" in msg or "404" in msg
+            or "no server" in msg or "unavailable" in msg or "overloaded" in msg
+            or "not_found" in msg or "does not exist" in msg or "model not found" in msg
+        )
 
     def parse_response(
         self,

@@ -676,7 +676,7 @@
   (async () => {
     try {
       const r = await fetch('/api/auth/me');
-      if (r.ok) location.href = '/dashboard';
+      if (r.ok) location.href = '/home';
     } catch(e) {}
   })();
 
@@ -726,7 +726,7 @@
         (mode === 'signup' && !data.existed) ? 'Account created. Taking you to your dashboard…'
         : 'Signed in. Taking you to your dashboard…';
       msg.classList.add('show');
-      setTimeout(() => location.href = '/dashboard', 600);
+      setTimeout(() => location.href = '/home', 600);
     } catch(e) {
       btn.disabled = false;
     }
@@ -736,7 +736,7 @@
     try {
       const r = await fetch('/api/auth/test-login', {method: 'POST'});
       if (!r.ok) throw new Error('Failed');
-      location.href = '/dashboard';
+      location.href = '/home';
     } catch(e) {}
   }
 

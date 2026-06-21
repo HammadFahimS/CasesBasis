@@ -13,11 +13,20 @@ _SESSION_SALT = "session"
 _SESSION_MAX_AGE = 30 * 24 * 3600  # 30 days
 
 
+_DEV_SECRET = "dev-insecure-secret-do-not-use-in-production"
+
+
 def _secret() -> str:
     secret = os.getenv("APP_SECRET", "")
     if not secret:
-        logger.warning("APP_SECRET is not set — using insecure development default")
-        return "dev-insecure-secret-do-not-use-in-production"
+        env = os.getenv("ENV", "development").lower()
+        if env == "production":
+            raise RuntimeError(
+                "APP_SECRET must be set in production. "
+                "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        logger.warning("APP_SECRET is not set — using insecure dev default (set ENV=production to enforce)")
+        return _DEV_SECRET
     return secret
 
 

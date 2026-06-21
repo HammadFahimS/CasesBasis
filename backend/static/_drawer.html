@@ -1,0 +1,198 @@
+<!-- Drawer-only partial: scrim + drawer + all chrome JS + styles -->
+<style>
+  .cb-burger {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: var(--ink-800, #1a2332); border: 1px solid var(--ink-700, #273347);
+    cursor: pointer; display: grid; place-items: center;
+    color: var(--ink-200, #d6dde7); position: relative;
+    transition: background .14s, border-color .14s;
+    flex-shrink: 0;
+  }
+  .cb-burger:hover { background: var(--ink-700, #273347); border-color: var(--ink-600, #3b4a63); color: white; }
+  .cb-burger .lines { width: 15px; height: 11px; position: relative; }
+  .cb-burger .lines span {
+    position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px;
+    background: currentColor; transition: transform .22s ease, opacity .18s ease;
+  }
+  .cb-burger .lines span:nth-child(1) { top: 0; }
+  .cb-burger .lines span:nth-child(2) { top: 4.5px; }
+  .cb-burger .lines span:nth-child(3) { top: 9px; }
+  body.drawer-open .cb-burger .lines span:nth-child(1) { transform: translateY(4.5px) rotate(45deg); }
+  body.drawer-open .cb-burger .lines span:nth-child(2) { opacity: 0; }
+  body.drawer-open .cb-burger .lines span:nth-child(3) { transform: translateY(-4.5px) rotate(-45deg); }
+
+  .cb-scrim { position: fixed; inset: 0; background: rgba(10,15,23,0.45); opacity: 0; pointer-events: none; transition: opacity .22s ease; z-index: 9998; backdrop-filter: blur(1.5px); }
+  body.drawer-open .cb-scrim { opacity: 1; pointer-events: auto; }
+  .cb-drawer { position: fixed; top: 0; left: 0; bottom: 0; width: 360px; max-width: 90vw; background: var(--paper, #fbfcfd); box-shadow: 0 24px 60px rgba(10,15,23,0.18), 0 4px 12px rgba(10,15,23,0.08); z-index: 9999; transform: translateX(-100%); transition: transform .26s cubic-bezier(.4,0,.2,1); display: flex; flex-direction: column; border-right: 1px solid var(--ink-100, #e9edf2); color: var(--ink-800, #1a2332); font-family: 'Inter', system-ui, sans-serif; font-size: 14px; }
+  body.drawer-open .cb-drawer { transform: translateX(0); }
+  .cb-drawer-head { padding: 18px 20px 16px; background: linear-gradient(155deg, var(--ink-900, #111824), var(--ink-800, #1a2332)); color: white; display: flex; flex-direction: column; gap: 14px; }
+  .cb-dh-top { display: flex; align-items: center; gap: 11px; }
+  .cb-dh-top .av { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #4a5a78, #2d3a52); color: white; font-size: 14px; font-weight: 600; display: grid; place-items: center; flex-shrink: 0; }
+  .cb-dh-top .who { line-height: 1.25; }
+  .cb-dh-top .who .n { font-size: 14px; font-weight: 600; }
+  .cb-dh-top .who .e { font-size: 11px; color: var(--ink-400, #8696b0); font-family: 'JetBrains Mono', monospace; }
+  .cb-dh-close { margin-left: auto; width: 30px; height: 30px; border-radius: 7px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: var(--ink-300, #b3becf); cursor: pointer; display: grid; place-items: center; }
+  .cb-dh-close:hover { background: rgba(255,255,255,0.12); color: white; }
+  .cb-dh-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .cb-dh-mini .dm { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px 9px; }
+  .cb-dh-mini .v { font-family: 'JetBrains Mono', monospace; font-size: 17px; font-weight: 600; color: white; line-height: 1; }
+  .cb-dh-mini .v .u { font-size: 10px; color: var(--ink-400, #8696b0); font-weight: 500; }
+  .cb-dh-mini .k { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--teal-500, #5fa9b1); font-weight: 700; margin-top: 5px; }
+  .cb-drawer-body { flex: 1; overflow-y: auto; padding: 14px 12px 20px; }
+  .cb-ng { margin-bottom: 8px; }
+  .cb-ng-lbl { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-400, #8696b0); font-weight: 700; padding: 12px 12px 6px; }
+  .cb-ni { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 9px; cursor: pointer; color: var(--ink-700, #273347); font-size: 13.5px; font-weight: 500; border: 1px solid transparent; text-decoration: none; }
+  .cb-ni:hover { background: var(--ink-50, #f4f6f9); color: var(--ink-900, #111824); }
+  .cb-ni.active { background: var(--teal-50, #e6f4f6); color: var(--teal-800, #356b73); border-color: var(--teal-100, #c8e6ea); font-weight: 600; }
+  .cb-ni .ico { width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; display: grid; place-items: center; background: white; border: 1px solid var(--ink-100, #e9edf2); color: var(--ink-600, #3b4a63); }
+  .cb-ni.active .ico { background: white; border-color: var(--teal-100, #c8e6ea); color: var(--teal-700, #487a82); }
+  .cb-ni .txt { display: flex; flex-direction: column; line-height: 1.2; }
+  .cb-ni .sub { font-size: 11px; color: var(--ink-400, #8696b0); font-weight: 400; }
+  .cb-ni .arr { margin-left: auto; color: var(--ink-300, #b3becf); }
+  .cb-ni.danger:hover { background: var(--critical-bg, #fdecea); color: var(--critical, #c43a2c); }
+  .cb-ni.danger:hover .ico { border-color: #f4c8c2; color: var(--critical, #c43a2c); }
+  .cb-nsep { height: 1px; background: var(--ink-100, #e9edf2); margin: 8px 12px; }
+</style>
+
+<div class="cb-scrim" id="cbScrim"></div>
+<aside class="cb-drawer" id="cbDrawer" aria-hidden="true">
+  <div class="cb-drawer-head">
+    <div class="cb-dh-top">
+      <div class="av" id="cbDrawerAv">—</div>
+      <div class="who"><div class="n" id="cbDrawerName">—</div><div class="e" id="cbDrawerEmail">—</div></div>
+      <button class="cb-dh-close" id="cbDrawerClose" type="button" aria-label="Close menu">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="cb-dh-mini">
+      <div class="dm"><div class="v" id="cbDmAvg">—</div><div class="k">Avg score</div></div>
+      <div class="dm"><div class="v" id="cbDmStreak">—</div><div class="k">Streak</div></div>
+      <div class="dm"><div class="v" id="cbDmEval">—</div><div class="k">Evaluated</div></div>
+    </div>
+  </div>
+  <div class="cb-drawer-body">
+    <div class="cb-ng">
+      <div class="cb-ng-lbl">Workspace</div>
+      <a class="cb-ni" href="/home" data-view="home">
+        <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 7l6-5 6 5"/><path d="M3.5 6v7h9V6"/></svg></span>
+        <span class="txt">Home<span class="sub">Resume &amp; start cases</span></span>
+      </a>
+      <a class="cb-ni" href="/analytics" data-view="analytics">
+        <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 13V3M2 13h12"/><path d="M5 11V8M8 11V5M11 11V7"/></svg></span>
+        <span class="txt">Analytics &amp; Performance<span class="sub">Trends, skills, coverage, activity</span></span>
+        <span class="arr"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span>
+      </a>
+    </div>
+    <div class="cb-nsep"></div>
+    <div class="cb-ng">
+      <div class="cb-ng-lbl">Tools</div>
+      <a class="cb-ni" href="/simulator" data-view="simulator">
+        <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></svg></span>
+        <span class="txt">Simulator<span class="sub">Live patient encounter</span></span>
+      </a>
+      <a class="cb-ni" href="/ecg-algorithm" data-view="ecg">
+        <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1.5 8h2l1.5-4 2.5 9 2-5 1 2.5h3.5"/></svg></span>
+        <span class="txt">ECG Algorithm Diagnosis<span class="sub">Rhythm strip trainer</span></span>
+      </a>
+      <a class="cb-ni" href="/analytics#rubric">
+        <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h7l3 3v9H3z"/><path d="M9.5 2v3.5H13"/></svg></span>
+        <span class="txt">Marking rubric<span class="sub">How cases are scored</span></span>
+      </a>
+    </div>
+    <div class="cb-nsep"></div>
+    <div class="cb-ng">
+      <div class="cb-ng-lbl">Account</div>
+      <a class="cb-ni" href="#">
+        <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></span>
+        <span class="txt">Settings<span class="sub">Difficulty, specialty focus</span></span>
+      </a>
+      <a class="cb-ni danger" href="#" id="cbDrawerLogout">
+        <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 2H3v12h3"/><path d="M10 11l3-3-3-3M13 8H6"/></svg></span>
+        <span class="txt">Log out</span>
+      </a>
+    </div>
+  </div>
+</aside>
+
+<script>
+  (function() {
+    if (window.__cbDrawerWired) return;
+    window.__cbDrawerWired = true;
+    const body = document.body;
+    const scrim = document.getElementById('cbScrim');
+    const drawer = document.getElementById('cbDrawer');
+    const closeBtn = document.getElementById('cbDrawerClose');
+
+    function openDrawer() { body.classList.add('drawer-open'); drawer.setAttribute('aria-hidden','false'); }
+    function closeDrawer() { body.classList.remove('drawer-open'); drawer.setAttribute('aria-hidden','true'); }
+    function toggleDrawer() { body.classList.contains('drawer-open') ? closeDrawer() : openDrawer(); }
+
+    // Any element with [data-cb-burger] toggles the drawer
+    document.addEventListener('click', e => {
+      const btn = e.target.closest('[data-cb-burger]');
+      if (btn) { e.preventDefault(); toggleDrawer(); }
+    });
+    scrim.addEventListener('click', closeDrawer);
+    closeBtn.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+    // Highlight active nav
+    const path = (location.pathname || '/').replace(/\/$/, '') || '/home';
+    document.querySelectorAll('.cb-ni[data-view]').forEach(el => {
+      const v = el.getAttribute('data-view');
+      const match =
+        (v === 'home' && path === '/home') ||
+        (v === 'analytics' && path === '/analytics') ||
+        (v === 'simulator' && path.startsWith('/simulator')) ||
+        (v === 'ecg' && path.startsWith('/ecg-algorithm'));
+      if (match) el.classList.add('active');
+    });
+
+    document.getElementById('cbDrawerLogout').addEventListener('click', async e => {
+      e.preventDefault();
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
+      location.href = '/';
+    });
+
+    function initials(name, email) {
+      const src = (name && name.trim()) || (email || '').split('@')[0] || '?';
+      const parts = src.split(/[\s._-]+/).filter(Boolean).slice(0, 2);
+      return (parts.map(p => p[0]).join('') || src[0] || '?').toUpperCase();
+    }
+
+    async function fillDrawer() {
+      try {
+        const meRes = await fetch('/api/auth/me');
+        if (!meRes.ok) return;
+        const me = await meRes.json();
+        const name = me.display_name || me.email || 'Resident';
+        document.getElementById('cbDrawerAv').textContent = initials(me.display_name, me.email);
+        document.getElementById('cbDrawerName').textContent = name;
+        document.getElementById('cbDrawerEmail').textContent = me.email || '';
+      } catch {}
+      try {
+        const [sRes, statsRes] = await Promise.all([
+          fetch('/api/dashboard/sessions'),
+          fetch('/api/dashboard/stats'),
+        ]);
+        const sessions = (await sRes.json()).sessions || [];
+        const stats = await statsRes.json();
+        const evaluated = sessions.filter(s => s.status === 'evaluated').length;
+        document.getElementById('cbDmAvg').innerHTML =
+          (stats.avg_score == null ? '—' : `${Math.round(stats.avg_score)}<span class="u">/100</span>`);
+        // Streak
+        const days = new Set();
+        sessions.forEach(s => { if (s.created_at) days.add(s.created_at.slice(0,10)); });
+        let streak = 0; const today = new Date();
+        for (let i = 0; i < 365; i++) {
+          const d = new Date(today); d.setDate(today.getDate() - i);
+          if (days.has(d.toISOString().slice(0,10))) streak++;
+          else if (i > 0) break;
+        }
+        document.getElementById('cbDmStreak').innerHTML = `${streak}<span class="u">d</span>`;
+        document.getElementById('cbDmEval').innerHTML = `${evaluated}<span class="u">/${sessions.length}</span>`;
+      } catch {}
+    }
+    fillDrawer();
+  })();
+</script>
