@@ -548,6 +548,16 @@
   .db-stat { padding: 6px 11px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
     font-family:'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-200); }
   .db-stat b { color: var(--ink-100); font-weight: 600; }
+  .db-crits { display: flex; flex-direction: column; gap: 7px; }
+  .db-crit { display: flex; align-items: baseline; gap: 9px; padding: 9px 12px; border-radius: 8px;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); }
+  .db-crit-mark { font-size: 13px; flex-shrink: 0; width: 14px; text-align: center; }
+  .db-crit.met { border-color: rgba(45,212,191,0.3); }
+  .db-crit.met .db-crit-mark { color: var(--teal-glow); }
+  .db-crit.miss { border-color: rgba(224,108,95,0.28); }
+  .db-crit.miss .db-crit-mark { color: #e89a90; }
+  .db-crit-label { font-size: 13px; color: var(--ink-100); flex-shrink: 0; }
+  .db-crit-detail { font-size: 11.5px; color: var(--ink-500); margin-left: auto; text-align: right; }
   .db-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .db-chip { padding: 5px 10px; border-radius: 999px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); font-size: 11.5px; color: var(--ink-200); }
   .db-chip.none { color: var(--ink-500); font-style: italic; }
@@ -1362,6 +1372,15 @@
     const chips = arr => (arr && arr.length) ? arr.map(x => `<span class="db-chip">${escapeHtml(x)}</span>`).join('') : '<span class="db-chip none">none</span>';
     const list = (arr, cls) => (arr && arr.length) ? `<ul class="db-list ${cls || ''}">${arr.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : '';
     let html = '';
+    const assess = d.assessment || [];
+    if (assess.length){
+      const rows = assess.map(c =>
+        `<div class="db-crit ${c.met ? 'met' : 'miss'}"><span class="db-crit-mark">${c.met ? '✓' : '✕'}</span>` +
+        `<span class="db-crit-label">${escapeHtml(c.label)}</span>` +
+        `<span class="db-crit-detail">${escapeHtml(c.detail || '')}</span></div>`
+      ).join('');
+      html += sec('Assessment', `<div class="db-crits">${rows}</div>`);
+    }
     if (d.coaching_note) html += sec('Coaching', `<div class="db-coach">${escapeHtml(d.coaching_note)}</div>`);
     html += sec('Your run', `<div class="db-stats"><span class="db-stat">Time <b>${escapeHtml(s.elapsed_label || '—')}</b></span><span class="db-stat">Path <b>${(s.states_path || []).length} states</b></span></div>`);
     html += sec('Examined', `<div class="db-chips">${chips(s.exams)}</div>`);

@@ -50,6 +50,17 @@ def test_build_debrief_surfaces_teaching_and_coaching(monkeypatch):
     assert debrief["teaching"]["teaching_points"]      # the seed case has teaching points
 
 
+def test_build_debrief_includes_recognition_assessment(monkeypatch):
+    monkeypatch.setattr(voice_debrief, "_complete", lambda sys, usr: "note")
+    s = _session()
+    s.engine.diagnose("myasthenic crisis")
+
+    debrief = voice_debrief.build_debrief(s)
+    rec = next(c for c in debrief["assessment"] if c["id"] == "recognition")
+    assert rec["met"] is True
+    assert debrief["summary"]["working_diagnoses"] == ["myasthenic crisis"]
+
+
 def test_build_debrief_catches_up_idle_time(monkeypatch):
     """Manual End after idle/patient-only time should not undercount elapsed."""
     monkeypatch.setattr(voice_debrief, "_complete", lambda sys, usr: "note")

@@ -81,6 +81,7 @@ class RunState:
     vitals_override: dict[str, object] = field(default_factory=dict)
     visited_states: list[str] = field(default_factory=list)
     critical_errors: list[str] = field(default_factory=list)
+    working_diagnoses: list[str] = field(default_factory=list)
     log: list[dict[str, object]] = field(default_factory=list)
     ended: bool = False
 
@@ -166,12 +167,29 @@ class SimulationEngine:
         step.revealed = "\n".join(parts)
         return step
 
+    def diagnose(self, text: str) -> StepResult:
+        """Record the resident's working diagnosis.
+
+        Kept distinct from a generic intervention so the debrief can *score*
+        recognition against the case. Still runs through ``_after_action`` so a
+        case that wires a diagnosis to an action transition can use it; the engine
+        itself never judges correctness (the scorer does)."""
+        dx = (text or "").strip()
+        if dx and dx not in self.run.working_diagnoses:
+            self.run.working_diagnoses.append(dx)
+        self._log("diagnose", dx)
+        step = self._after_action(dx)
+        step.revealed = f"Working diagnosis noted: {dx}" if dx else None
+        return step
+
     def act(self, action: LearnerAction) -> StepResult:
         """Generic action (intervention/medication/diagnosis/consult/etc.)."""
         if action.kind == "ask" and action.target:
             return self.ask(action.target)
         if action.kind == "order" and action.target:
             return self.order_investigation(action.target)
+        if action.kind == "diagnose":
+            return self.diagnose(action.text or action.target or "")
         self._log(action.kind, action.text or action.target or "")
         return self._after_action(action.text or action.target or "")
 

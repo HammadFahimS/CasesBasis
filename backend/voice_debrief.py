@@ -65,6 +65,7 @@ def run_summary(session: VoiceSession) -> dict:
         "exams": _cards_by(session, "exam"),
         "consults": _cards_by(session, "consult"),
         "critical_errors": list(run.critical_errors),
+        "working_diagnoses": list(run.working_diagnoses),
     }
 
 
@@ -90,6 +91,7 @@ def _coaching_note(summary: dict, teaching: dict) -> str:
         f"Examined: {', '.join(summary['exams']) or 'nothing'}.\n"
         f"Investigations: {', '.join(summary['investigations']) or 'none'}.\n"
         f"Consults: {', '.join(summary['consults']) or 'none'}.\n"
+        f"Working diagnosis: {', '.join(summary.get('working_diagnoses') or []) or 'none stated'}.\n"
         f"Critical errors: {', '.join(summary['critical_errors']) or 'none'}."
     )
     points = "\n".join(f"- {p}" for p in teaching["teaching_points"]) or "(none provided)"
@@ -115,9 +117,12 @@ def build_debrief(session: VoiceSession) -> dict:
     advance_clock(session)
     summary = run_summary(session)
     teaching = _teaching(session.case)
+    from backend.sim_scoring import score_run
+    assessment = [c.to_dict() for c in score_run(session)]
     return {
         "case_title": session.case.meta.title,
         "summary": summary,
         "teaching": teaching,
+        "assessment": assessment,
         "coaching_note": _coaching_note(summary, teaching),
     }

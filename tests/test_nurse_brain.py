@@ -75,6 +75,14 @@ def test_dispatch_standard_succinylcholine_trips_critical_pea_arrest():
     assert engine.run.current_state_id == "pea_arrest"
 
 
+def test_dispatch_diagnose_records_working_diagnosis():
+    engine = _engine()
+    intent = NurseIntent(op="diagnose", action_text="myasthenic crisis")
+    result = dispatch(intent, engine, "I think this is myasthenic crisis")
+    assert result is not None
+    assert engine.run.working_diagnoses == ["myasthenic crisis"]
+
+
 def test_dispatch_read_vitals_does_not_mutate():
     engine = _engine()
     result = dispatch(NurseIntent(op="read_vitals"), engine, "what's her heart rate")

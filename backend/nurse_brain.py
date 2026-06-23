@@ -50,6 +50,7 @@ OPS = {
     "order_medication",
     "perform_action",
     "request_consult",
+    "diagnose",
     "chitchat",
 }
 
@@ -58,7 +59,7 @@ INTERPRET_SYSTEM = (
     "simulation. The physician (resident) speaks to you; classify their single "
     "utterance into ONE action the nurse would take. Reply with STRICT JSON only "
     "— no prose, no markdown — using exactly these keys:\n"
-    '  {"op": <one of read_vitals|ask_history|order_investigation|perform_exam|order_medication|perform_action|request_consult|chitchat>,\n'
+    '  {"op": <one of read_vitals|ask_history|order_investigation|perform_exam|order_medication|perform_action|request_consult|diagnose|chitchat>,\n'
     '   "target": <id/name from the lists below, or null>,\n'
     '   "action_text": <short paraphrase of the order, or "">}\n'
     "Rules: read_vitals for any request about current vital signs / how the "
@@ -71,7 +72,9 @@ INTERPRET_SYSTEM = (
     "set target to the drug name and action_text to the dose/route if stated. "
     "perform_action for any other treatment or intervention that is not a drug "
     "(e.g. intubate, CPR, defibrillate, position the patient) — set action_text. "
-    "chitchat for anything social or unclear. "
+    "diagnose when the resident commits a working or differential diagnosis "
+    "('I think this is …', 'my working diagnosis is …') — set action_text to the "
+    "diagnosis. chitchat for anything social or unclear. "
     "Only use an id/name that appears in the lists."
 )
 
@@ -202,6 +205,8 @@ def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> 
         med = parse_med(intent.target, intent.action_text or transcript)
         text = med.drug + (f" {med.dose}" if med.dose else "")
         return engine.act(LearnerAction(kind="medicate", text=text))
+    if intent.op == "diagnose":
+        return engine.diagnose(intent.action_text or transcript)
     if intent.op == "perform_action":
         return engine.act(LearnerAction(kind="intervene", text=intent.action_text or transcript))
     return None  # read_vitals / chitchat / malformed target
@@ -226,6 +231,15 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict)
         if result and result.critical_error:
             parts.append("This was a serious misstep with a bad outcome — convey concern.")
         return " ".join(parts)
+    if intent.op == "diagnose":
+        # The nurse acknowledges the working diagnosis neutrally — she records it,
+        # she does not grade it (the debrief scores recognition).
+        dx = (intent.action_text or "").strip()
+        return (
+            f"The resident's working diagnosis is '{dx}'. Acknowledge that you've "
+            "noted it, neutrally and without confirming or judging whether it's "
+            "right. Do not reveal the correct answer."
+        )
     if result is None:
         return "No specific result; respond conversationally and stay in role."
     parts = []

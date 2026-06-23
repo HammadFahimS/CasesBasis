@@ -88,6 +88,25 @@ def test_gated_history_and_investigation_timing():
     assert ready.revealed is not None
 
 
+def test_diagnose_records_working_diagnosis():
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    step = engine.diagnose("myasthenic crisis")
+    assert engine.run.working_diagnoses == ["myasthenic crisis"]
+    assert "myasthenic crisis" in (step.revealed or "")
+    # de-duplicates, and routes the same way via act(kind="diagnose")
+    engine.act(LearnerAction(kind="diagnose", text="myasthenic crisis"))
+    engine.diagnose("thymoma")
+    assert engine.run.working_diagnoses == ["myasthenic crisis", "thymoma"]
+
+
+def test_working_diagnoses_survive_snapshot_roundtrip():
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    engine.diagnose("myasthenic crisis")
+    restored = SimulationEngine(load_case("myasthenic_crisis"))
+    restored.restore(engine.snapshot())
+    assert restored.run.working_diagnoses == ["myasthenic crisis"]
+
+
 def test_snapshot_roundtrip():
     engine = SimulationEngine(load_case("myasthenic_crisis"))
     engine.act(LearnerAction(kind="exam", text="neuro exam"))
