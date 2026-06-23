@@ -399,6 +399,20 @@
   .dr-card-h .dot.exam { background: #d99a3c; }
   .dr-card-h .dot.consult { background: #c08cf0; }
   .dr-card-h .dot.report { background: #8aa0b8; }
+  .dr-card-h .dot.order { background: #4cc9f0; }
+  /* medication order card: confirm affordance + status tags */
+  .dr-card-b .ord-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 9px; }
+  .dr-card-b .ord-confirm input {
+    flex: 1; min-width: 110px; padding: 6px 9px; font-size: 12px; color: var(--ink-100);
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 7px;
+  }
+  .dr-card-b .ord-confirm input::placeholder { color: var(--ink-500); }
+  .dr-card-b .warn-tag {
+    font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: #e7b35a;
+    border: 1px solid rgba(231,179,90,0.4); background: rgba(231,179,90,0.08);
+    padding: 2px 7px; border-radius: 999px;
+  }
+  .dr-card-b .ok-tag { margin-top: 8px; font-size: 11px; color: #5ad6a0; }
   .dr-card-h .title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .dr-card-h .tag { margin-left: auto; font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-500); padding: 2px 6px; border:1px solid rgba(255,255,255,0.1); border-radius: 999px; flex-shrink:0; }
   .dr-card-h .chev { flex-shrink:0; transition: transform 0.3s ease; color: var(--ink-500); }
@@ -740,6 +754,7 @@
       <button class="dr-t" data-tab="investigations" title="Investigations — labs, ECG, bedside tests">Investigations <span class="dr-t-n"></span></button>
       <button class="dr-t" data-tab="imaging" title="Imaging — X-ray, CT">Imaging <span class="dr-t-n"></span></button>
       <button class="dr-t" data-tab="consults" title="Consults">Consults <span class="dr-t-n"></span></button>
+      <button class="dr-t" data-tab="orders" title="Orders — medications given">Orders <span class="dr-t-n"></span></button>
     </div>
     <div class="dr-stack" id="drStack">
       <div class="dr-cards" data-pane="exam">
@@ -757,6 +772,10 @@
       <div class="dr-cards" data-pane="consults" hidden>
         <div class="dr-ctl" data-ctl="consults"></div>
         <div class="dr-list"><div class="dr-empty">Tap a specialist above or say “call neurology” — advice collects here.</div></div>
+      </div>
+      <div class="dr-cards" data-pane="orders" hidden>
+        <div class="dr-ctl" data-ctl="orders"></div>
+        <div class="dr-list"><div class="dr-empty">Say “give rocuronium 0.6 mg/kg” or type a medication below — orders collect here.</div></div>
       </div>
     </div>
   </div>
@@ -1137,11 +1156,12 @@
   // ---------- diagnostics drawer (four functional panes) ----------
   const drawer = document.getElementById('drawer');
   document.getElementById('drTab').addEventListener('click', () => drawer.classList.toggle('collapsed'));
-  const KIND_LABEL = { ecg:'ECG', cxr:'X-ray', report:'Report', exam:'Exam', consult:'Consult' };
+  const KIND_LABEL = { ecg:'ECG', cxr:'X-ray', report:'Report', exam:'Exam', consult:'Consult', order:'Order' };
 
   // Route each result card to a pane by its category (set server-side).
   function cardPane(card){
     const cat = (card.category || '').toLowerCase();
+    if (card.kind === 'order' || cat === 'orders') return 'orders';
     if (card.kind === 'consult' || cat === 'consult') return 'consults';
     if (cat === 'exam') return 'exam';
     if (cat === 'imaging') return 'imaging';
@@ -1174,24 +1194,58 @@
     btn.classList.toggle('has', n > 0);
     btn.querySelector('.dr-t-n').textContent = n;
   }
+  // The body of a medication order card — dose, plus a confirm affordance for
+  // high-alert drugs the nurse is holding until the dose is stated.
+  function orderBody(card){
+    const head = card.dose
+      ? `<div class="rep"><b>${escapeHtml(card.title)}</b> — ${escapeHtml(card.dose)}</div>`
+      : `<div class="rep">${escapeHtml(card.summary || card.title || 'Medication')}</div>`;
+    if (card.confirm_required && card.status === 'confirm'){
+      return head +
+        `<div class="ord-confirm"><span class="warn-tag">⚠ confirm dose</span>` +
+        `<input type="text" class="ord-dose" placeholder="dose… e.g. 0.6 mg/kg">` +
+        `<button class="ord-go ord-confirm-go">Confirm</button></div>`;
+    }
+    return head + (card.status === 'given' ? '<div class="ok-tag">✓ given</div>' : '');
+  }
+
   function addDiagnostic(card){
     if (!card) return;
     const pane = cardPane(card);
     const paneEl = drPanes[pane] || drPanes.investigations;
     const host = paneEl.querySelector('.dr-list') || paneEl;
     const empty = host.querySelector('.dr-empty'); if (empty) empty.remove();
+    // Re-ordering the same drug upserts its card instead of stacking duplicates.
+    if (card.kind === 'order' && card.id){
+      const prev = host.querySelector(`.dr-card[data-card-id="${CSS.escape(card.id)}"]`);
+      if (prev) prev.remove();
+    }
     host.querySelectorAll('.dr-card').forEach(c => c.classList.add('collapsed'));  // newest stays open
     const el = document.createElement('div');
     el.className = 'dr-card';
+    if (card.id) el.dataset.cardId = card.id;
+    const body = card.kind === 'order' ? orderBody(card) : diagBody(card);
     el.innerHTML =
       `<div class="dr-card-h"><span class="dot ${card.kind}"></span>` +
       `<span class="title">${escapeHtml(card.title || 'Result')}</span>` +
       `<span class="tag">${KIND_LABEL[card.kind] || 'Result'}</span>${chevSvg()}</div>` +
-      `<div class="dr-card-b">${diagBody(card)}</div>`;
+      `<div class="dr-card-b">${body}</div>`;
     el.querySelector('.dr-card-h').addEventListener('click', () => el.classList.toggle('collapsed'));
     // click any tracing/film inside the card to read it full-size
     const visual = el.querySelector('.dr-img, img');
     if (visual) visual.addEventListener('click', e => { e.stopPropagation(); openLightbox(card); });
+    // confirm a held high-alert dose → re-order the drug with the stated dose
+    const confirmGo = el.querySelector('.ord-confirm-go');
+    if (confirmGo){
+      const fire = () => {
+        const dose = (el.querySelector('.ord-dose').value || '').trim();
+        if (dose) sendMedOrder(`${card.title} ${dose}`);
+      };
+      confirmGo.addEventListener('click', e => { e.stopPropagation(); fire(); });
+      el.querySelector('.ord-dose').addEventListener('keydown', e => {
+        if (e.key === 'Enter'){ e.preventDefault(); fire(); }
+      });
+    }
     host.insertBefore(el, host.firstChild);
     updateTabCount(pane);
     showPane(pane);                 // surface the pane the newest result landed in
@@ -1378,6 +1432,17 @@
     renderOrderCtl('investigations', invs.filter(i => i.category !== 'imaging'));
     renderOrderCtl('imaging', invs.filter(i => i.category === 'imaging'));
     renderConsultCtl(MENU.consultants || []);
+    renderMedCtl();
+  }
+
+  function renderMedCtl(){
+    const ctl = document.querySelector('.dr-ctl[data-ctl="orders"]'); if (!ctl) return;
+    ctl.innerHTML = '<div class="dr-ctl-h">Give a medication</div>' +
+      '<div class="ord-row"><input type="text" placeholder="e.g. rocuronium 0.6 mg/kg"><button class="ord-go">Give</button></div>';
+    const inp = ctl.querySelector('input'), go = ctl.querySelector('.ord-go');
+    const fire = () => { const t = inp.value.trim(); if (t){ inp.value = ''; sendMedOrder(t); } };
+    go.addEventListener('click', fire);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fire(); } });
   }
 
   function renderExamCtl(systems){
@@ -1491,6 +1556,10 @@
       NURSE_CH.root.classList.remove('collapsed');
     } finally { actionBusy = false; updateExamFoot(); }
   }
+
+  // A medication order rides the same free-text router path; the server classifies
+  // it as order_medication and returns an order card (which upserts by drug id).
+  function sendMedOrder(text){ return sendFreeOrder(text); }
 
   // Apply the full engine outcome of one turn to the room.
   const stageLabel = document.getElementById('stageLabel');

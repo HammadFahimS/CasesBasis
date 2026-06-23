@@ -52,6 +52,29 @@ def test_dispatch_perform_action_trips_transition():
     assert engine.run.current_state_id == "recognition"
 
 
+def test_dispatch_order_medication_rocuronium_advances_to_post_intubation():
+    # The case's crux: in MG, rocuronium (a non-depolariser) is the correct
+    # paralytic — ordering it must still trip the intended transition through the
+    # new order_medication path.
+    engine = _engine()
+    engine.goto("intubation_prep")
+    intent = NurseIntent(op="order_medication", target="rocuronium", action_text="0.6 mg/kg")
+    result = dispatch(intent, engine, "give rocuronium 0.6 mg/kg")
+    assert result is not None and result.transitioned
+    assert engine.run.current_state_id == "post_intubation"
+
+
+def test_dispatch_standard_succinylcholine_trips_critical_pea_arrest():
+    # A standard succinylcholine dose in MG is the authored critical error — the
+    # new medication path must still surface it as a critical transition.
+    engine = _engine()
+    engine.goto("intubation_prep")
+    intent = NurseIntent(op="order_medication", target="succinylcholine", action_text="standard dose 1.5 mg/kg")
+    result = dispatch(intent, engine, "give the usual succinylcholine")
+    assert result is not None and result.transitioned and result.critical_error
+    assert engine.run.current_state_id == "pea_arrest"
+
+
 def test_dispatch_read_vitals_does_not_mutate():
     engine = _engine()
     result = dispatch(NurseIntent(op="read_vitals"), engine, "what's her heart rate")
@@ -247,6 +270,34 @@ def test_run_action_consult_builds_card(db_path, monkeypatch):
     assert turn.diagnostic and turn.diagnostic["kind"] == "consult"
     assert turn.diagnostic["title"] == "Neurology consultant"
     assert session.history[-2]["text"] == "Call Neurology consultant."
+
+
+def test_run_action_medication_produces_order_card(db_path, monkeypatch):
+    from backend.voice_session import start_session
+
+    monkeypatch.setattr(nurse_brain, "_complete", lambda s, u: "Rocuronium 0.6 mg/kg, drawing it up.")
+    session = start_session("myasthenic_crisis", "resident-1")
+    turn = nurse_brain.run_action(session, "order_medication", "rocuronium", "rocuronium 0.6 mg/kg")
+
+    assert turn.intent.op == "order_medication"
+    assert turn.diagnostic and turn.diagnostic["kind"] == "order"
+    assert turn.diagnostic["category"] == "orders"          # routes to the Orders pane
+    assert turn.diagnostic["dose"] == "0.6 mg/kg"
+    assert turn.diagnostic["status"] == "given"
+    assert turn.diagnostic["id"] == "med-rocuronium"        # stable id → upserts on re-order
+
+
+def test_run_action_paralytic_without_dose_requests_confirmation(db_path, monkeypatch):
+    from backend.voice_session import start_session
+
+    monkeypatch.setattr(nurse_brain, "_complete", lambda s, u: "Confirm the rocuronium dose before I draw it up.")
+    session = start_session("myasthenic_crisis", "resident-1")
+    turn = nurse_brain.run_action(session, "order_medication", "rocuronium", "rocuronium")
+
+    # high-alert drug, no dose stated → the nurse holds it for confirmation
+    assert turn.diagnostic["status"] == "confirm"
+    assert turn.diagnostic["confirm_required"] is True
+    assert turn.diagnostic["dose"] is None
 
 
 def test_run_action_rejects_unknown_op(db_path):

@@ -104,6 +104,39 @@ def build_exam_card(system: str, revealed: str) -> dict:
     }
 
 
+def build_order_card(
+    drug: str,
+    dose: str | None,
+    detail: str = "",
+    *,
+    status: str = "given",
+    confirm_required: bool = False,
+    card_id: str = "",
+) -> dict:
+    """A drawer card for a medication order.
+
+    ``status`` is ``"confirm"`` while the nurse is awaiting a dose on a high-alert
+    agent, then ``"given"`` once it's administered. ``card_id`` is a stable slug so
+    re-ordering the same drug upserts the existing card rather than duplicating it.
+    """
+    summary = drug + (f" — {dose}" if dose else "")
+    if status == "confirm" and not dose:
+        summary = f"{drug} — confirm dose before administration"
+    elif detail and detail.lower() not in summary.lower():
+        summary += f" ({detail})"
+    return {
+        "kind": "order",
+        "id": card_id or drug,
+        "title": drug,
+        "category": "orders",
+        "summary": summary,
+        "dose": dose,
+        "status": status,
+        "confirm_required": confirm_required,
+        "visual_payload": None,
+    }
+
+
 def build_consult_card(consultant: str, advice: str, consult_id: str = "") -> dict:
     """A drawer card for a specialist consult (the consultant's recommendation)."""
     return {

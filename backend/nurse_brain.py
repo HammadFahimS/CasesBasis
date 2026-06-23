@@ -25,7 +25,12 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from backend.sim_diagnostics import build_exam_card, build_investigation_card
+from backend.medication import needs_dose_confirm, parse_med
+from backend.sim_diagnostics import (
+    build_exam_card,
+    build_investigation_card,
+    build_order_card,
+)
 from backend.simulation_engine import (
     IntentMatcher,
     LearnerAction,
@@ -42,6 +47,7 @@ OPS = {
     "ask_history",
     "order_investigation",
     "perform_exam",
+    "order_medication",
     "perform_action",
     "request_consult",
     "chitchat",
@@ -52,7 +58,7 @@ INTERPRET_SYSTEM = (
     "simulation. The physician (resident) speaks to you; classify their single "
     "utterance into ONE action the nurse would take. Reply with STRICT JSON only "
     "— no prose, no markdown — using exactly these keys:\n"
-    '  {"op": <one of read_vitals|ask_history|order_investigation|perform_exam|perform_action|request_consult|chitchat>,\n'
+    '  {"op": <one of read_vitals|ask_history|order_investigation|perform_exam|order_medication|perform_action|request_consult|chitchat>,\n'
     '   "target": <id/name from the lists below, or null>,\n'
     '   "action_text": <short paraphrase of the order, or "">}\n'
     "Rules: read_vitals for any request about current vital signs / how the "
@@ -61,8 +67,11 @@ INTERPRET_SYSTEM = (
     "imaging (pick the closest investigation id). perform_exam to physically "
     "examine the patient (pick the closest body-system name as target). "
     "request_consult to call, page or refer to a specialist (pick the closest "
-    "consultant id as target). perform_action for treatments, interventions and "
-    "medications — set action_text. chitchat for anything social or unclear. "
+    "consultant id as target). order_medication for giving a drug or medication — "
+    "set target to the drug name and action_text to the dose/route if stated. "
+    "perform_action for any other treatment or intervention that is not a drug "
+    "(e.g. intubate, CPR, defibrillate, position the patient) — set action_text. "
+    "chitchat for anything social or unclear. "
     "Only use an id/name that appears in the lists."
 )
 
@@ -189,6 +198,10 @@ def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> 
         return engine.order_investigation(intent.target)
     if intent.op == "perform_exam" and intent.target:
         return engine.examine(intent.target)
+    if intent.op == "order_medication":
+        med = parse_med(intent.target, intent.action_text or transcript)
+        text = med.drug + (f" {med.dose}" if med.dose else "")
+        return engine.act(LearnerAction(kind="medicate", text=text))
     if intent.op == "perform_action":
         return engine.act(LearnerAction(kind="intervene", text=intent.action_text or transcript))
     return None  # read_vitals / chitchat / malformed target
@@ -199,6 +212,20 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict)
     if intent.op == "read_vitals":
         keep = {k: v for k, v in vitals.items() if v not in (None, {}, "")}
         return "Current vitals: " + json.dumps(keep)
+    if intent.op == "order_medication":
+        med = parse_med(intent.target, intent.action_text)
+        if needs_dose_confirm(med) and not med.dose:
+            return (
+                f"The resident is ordering {med.drug} but stated no dose. This is a "
+                "high-alert drug — read the order back and ask them to confirm the "
+                "dose before it is drawn up. Do not give it yet."
+            )
+        parts = ["Giving " + med.drug + (f" {med.dose}" if med.dose else "") + "; read the order back to confirm."]
+        if result and result.transitioned:
+            parts.append(f"The patient's condition changed: {result.message}")
+        if result and result.critical_error:
+            parts.append("This was a serious misstep with a bad outcome — convey concern.")
+        return " ".join(parts)
     if result is None:
         return "No specific result; respond conversationally and stay in role."
     parts = []
@@ -330,6 +357,14 @@ def make_intent_matcher() -> IntentMatcher:
 
 def _build_card(intent: NurseIntent, engine: SimulationEngine, result: StepResult | None) -> dict | None:
     """Build a diagnostics-drawer card from an order/exam outcome (if any)."""
+    if intent.op == "order_medication":
+        med = parse_med(intent.target, intent.action_text)
+        confirm = needs_dose_confirm(med)
+        status = "confirm" if (confirm and not med.dose) else "given"
+        return build_order_card(
+            med.drug, med.dose, med.detail,
+            status=status, confirm_required=confirm, card_id=med.slug,
+        )
     if result is None or not result.revealed:
         return None
     if intent.op == "order_investigation":
@@ -402,6 +437,8 @@ def _action_label(session: VoiceSession, op: str, target: str | None) -> str:
     if op == "order_investigation" and target:
         inv = next((i for i in case.investigations if i.id == target), None)
         return f"Order {inv.name if inv else target}."
+    if op == "order_medication" and target:
+        return f"Give {target}."
     if op == "request_consult" and target:
         from backend.consult_voice import find_consultant
         actor = find_consultant(case, target)
