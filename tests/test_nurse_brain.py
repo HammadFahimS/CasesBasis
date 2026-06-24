@@ -332,6 +332,21 @@ def test_session_payload_menu_offers_only_case_items(db_path):
     assert "patient" not in cids and "nurse" not in cids
 
 
+def test_session_payload_roster_tags_each_voice_with_a_speaker_class(db_path):
+    from backend.voice_session import start_session
+    from backend.web_app import _voice_session_payload
+
+    session = start_session("myasthenic_crisis", "resident-1")
+    roster = {r["id"]: r["speaker"] for r in _voice_session_payload(session)["roster"]}
+
+    assert roster["patient"] == "patient"
+    assert roster["nurse"] == "nurse"
+    assert roster["ems"] == "ems"
+    assert roster["husband"] == "family"   # family bystander, not a consultant
+    assert roster["rt"] == "rt"
+    assert roster["neuro"] == "consult" and roster["icu"] == "consult"
+
+
 def test_run_turn_exam_produces_card(db_path, monkeypatch):
     from backend.voice_session import start_session
 

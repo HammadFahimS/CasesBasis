@@ -279,6 +279,8 @@
   .transcript.ch-nurse   { top: 4vh; }
   /* lifted clear of the bottom vitals strip + live ECG monitor (toward the nurse box) */
   .transcript.ch-patient { bottom: 122px; }
+  /* unified Room log: one tall panel spanning the right edge */
+  .transcript.ch-room { top: 4vh; bottom: 122px; }
   .transcript.collapsed { transform: translateX(calc(100% - 38px)); }
   .tr-tab {
     width: 38px; flex-shrink: 0;
@@ -309,6 +311,7 @@
     padding: 16px 16px 16px;
     margin-right: -1px;
   }
+  .ch-room .tr-panel { max-height: none; }   /* the room log fills the full right edge */
   .tr-head {
     display:flex; align-items:center; gap:8px; margin-bottom: 12px; flex-shrink: 0;
     font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-500);
@@ -324,10 +327,18 @@
   .turn.res .who { color: var(--ink-400); }
   .turn.nurse .who { color: var(--teal-glow); }
   .turn.patient .who { color: #e0a85f; }
+  .turn.ems .who { color: #8ab4f0; }
+  .turn.family .who { color: #e7b35a; }
+  .turn.rt .who { color: #6fd3c2; }
+  .turn.consult .who { color: #c08cf0; }
   .turn .who .ava { width:18px; height:18px; border-radius:50%; display:grid; place-items:center; font-size:8px; font-weight:700; color:#06222a; }
   .turn.res .who .ava { background: linear-gradient(140deg,#5b6b85,#3b4a63); color:#dde4ee; }
   .turn.nurse .who .ava { background: linear-gradient(140deg, var(--teal-glow), var(--teal-deep)); }
   .turn.patient .who .ava { background: linear-gradient(140deg,#e0a85f,#b9772f); }
+  .turn.ems .who .ava { background: linear-gradient(140deg,#8ab4f0,#4d6fb0); color:#0a1428; }
+  .turn.family .who .ava { background: linear-gradient(140deg,#e7b35a,#b9772f); }
+  .turn.rt .who .ava { background: linear-gradient(140deg,#6fd3c2,#2f8f7e); }
+  .turn.consult .who .ava { background: linear-gradient(140deg,#c08cf0,#7e4fb0); color:#f0e8fa; }
   .turn .line { font-size: 13.5px; line-height: 1.5; color: var(--ink-200); }
   .turn.nurse .line { color: #cfe9ee; }
   .turn.patient .line { color: #f0dcc0; }
@@ -728,30 +739,18 @@
 
 <!-- State switcher -->
 <div class="switcher" id="switcher"></div>
-<div class="switcher-note">Tap the mic, then just talk — “Nurse, …” for orders, anything else to the patient</div>
+<div class="switcher-note">Tap the mic, then talk — address staff by name (“Nurse, …”, “Husband, …”, “RT, …”); anything else goes to the patient</div>
 
-<!-- Transcript channels (right edge): Nurse (commands) + Patient (history) -->
-<div class="transcript ch-nurse collapsed" id="trNurse">
-  <div class="tr-tab" data-ch="trNurse">
+<!-- Unified Room log (right edge): every voice in the room, tagged by speaker -->
+<div class="transcript ch-room collapsed" id="trRoom">
+  <div class="tr-tab" data-ch="trRoom">
     <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 L5 8 L10 13"/></svg>
-    <span class="tr-tab-label">Nurse</span>
+    <span class="tr-tab-label">Room</span>
   </div>
   <div class="tr-panel">
-    <div class="tr-head"><span class="live">● Live</span> nurse channel</div>
+    <div class="tr-head"><span class="live">● Live</span> the room</div>
     <div class="tr-scroll">
-      <div class="tr-now"><span class="dots"><i></i><i></i><i></i></span> start an order with “Nurse, …”</div>
-    </div>
-  </div>
-</div>
-<div class="transcript ch-patient collapsed" id="trPatient">
-  <div class="tr-tab" data-ch="trPatient">
-    <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 L5 8 L10 13"/></svg>
-    <span class="tr-tab-label">Patient</span>
-  </div>
-  <div class="tr-panel">
-    <div class="tr-head"><span class="live">● Live</span> patient</div>
-    <div class="tr-scroll">
-      <div class="tr-now"><span class="dots"><i></i><i></i><i></i></span> speak to the patient to take a history</div>
+      <div class="tr-now"><span class="dots"><i></i><i></i><i></i></span> talk to the patient, or address staff by name</div>
     </div>
   </div>
 </div>
@@ -1097,21 +1096,47 @@
     const root = document.getElementById(rootId);
     return { root, scroll: root.querySelector('.tr-scroll'), now: root.querySelector('.tr-now') };
   }
-  const NURSE_CH = makeChannel('trNurse');
-  const PATIENT_CH = makeChannel('trPatient');
+  // One unified room log; the old per-speaker names alias to it so every call
+  // site keeps working while lines are now tagged by speaker.
+  const ROOM = makeChannel('trRoom');
+  const NURSE_CH = ROOM, PATIENT_CH = ROOM;
   document.querySelectorAll('.tr-tab[data-ch]').forEach(tab => {
     tab.addEventListener('click', () => document.getElementById(tab.dataset.ch).classList.toggle('collapsed'));
   });
-  const AVA = { res:'DR', nurse:'RN', patient:'PT' };
-  const WHO = { res:'Resident', nurse:'Nurse', patient:'Patient' };
+  // Speaker class → avatar + display name. Defaults; the case roster refines the
+  // single-occupant voices (family→“Husband”, rt→“Respiratory Therapist”, …).
+  const SPEAKER_BASE = {
+    res:    { ava:'DR',  who:'You' },
+    nurse:  { ava:'RN',  who:'Nurse' },
+    patient:{ ava:'PT',  who:'Patient' },
+    ems:    { ava:'EMS', who:'EMS' },
+    family: { ava:'FAM', who:'Family' },
+    rt:     { ava:'RT',  who:'Respiratory Therapist' },
+    consult:{ ava:'MD',  who:'Consultant' },
+  };
+  let SPEAKERS = Object.assign({}, SPEAKER_BASE);
+  let ROSTER = [];
+  function applyRoster(roster){
+    ROSTER = roster || [];
+    SPEAKERS = Object.assign({}, SPEAKER_BASE);
+    ROSTER.forEach(r => {
+      const base = SPEAKER_BASE[r.speaker]; if (!base) return;
+      // specialise the label for single-occupant classes (one person each)
+      if (r.speaker === 'family' || r.speaker === 'ems' || r.speaker === 'rt'){
+        SPEAKERS[r.speaker] = { ava: base.ava, who: r.role || base.who };
+      }
+    });
+    buildAddressIndex();
+  }
   function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function setNow(ch, text){ ch.now.innerHTML = `<span class="dots"><i></i><i></i><i></i></span> ${escapeHtml(text)}`; }
   function addTurn(ch, speaker, text){
+    const meta = SPEAKERS[speaker] || { ava:'··', who:'' };
     const t = new Date();
     const ts = String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0');
     const div = document.createElement('div');
     div.className = 'turn ' + speaker;
-    div.innerHTML = `<div class="who"><span class="ava">${AVA[speaker]||'··'}</span> ${WHO[speaker]||''}</div>` +
+    div.innerHTML = `<div class="who"><span class="ava">${escapeHtml(meta.ava)}</span> ${escapeHtml(meta.who)}</div>` +
                     `<div class="line">${escapeHtml(text)}</div><div class="tstamp">${ts}</div>`;
     ch.scroll.insertBefore(div, ch.now);
     ch.root.classList.remove('collapsed');
@@ -1629,6 +1654,7 @@
     document.getElementById('caseTag').innerHTML = `Session <b>${shortId(data.session_id)}</b> · ${titleCase(meta.difficulty || 'medium')}`;
     document.title = `CasesBasis — Voice Room · ${meta.title || ''}`;
     applyVitals(data.vitals);
+    applyRoster(data.roster);  // who's in the room → Room-log avatars/labels + addressing
     renderPanels(data.menu);   // dock the case's exam/order/consult controls into the tabs
     if (data.resumed){
       repaintResume(data);     // full visual rehydration of a parked run
@@ -1757,7 +1783,40 @@
   }
 
   // Commands to the nurse start with "Nurse, …"; everything else goes to the patient.
-  function routeToNurse(said){ return /^\s*nurse\b/i.test(said); }
+  // Addressee routing: a leading name ("Nurse, …", "Husband, …", "RT, …", a
+  // consultant) goes to the engine-grounded staff path and the server decides who
+  // answers; anything unaddressed is spoken to the patient.
+  function escapeRe(s){ return (s||'').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  const SPEAKER_SYNS = {
+    nurse: ['nurse'],
+    ems: ['ems', 'paramedic', 'medic', 'prehospital'],
+    family: ['husband', 'wife', 'family', 'partner', 'mother', 'father', 'dad', 'mom', 'son', 'daughter', 'relative'],
+    rt: ['rt', 'respiratory therapist', 'respiratory', 'therapist'],
+    patient: ['patient'],
+  };
+  let ADDRESS = [{ word:'nurse', speaker:'nurse', toStaff:true }];
+  function buildAddressIndex(){
+    const out = [];
+    ROSTER.forEach(r => {
+      const words = new Set(SPEAKER_SYNS[r.speaker] || []);
+      String(r.role || '').toLowerCase().split(/[^a-z]+/).filter(w => w.length > 2).forEach(w => words.add(w));
+      String(r.id || '').toLowerCase().split(/[^a-z]+/).filter(w => w.length > 1).forEach(w => words.add(w));
+      words.forEach(w => out.push({ word: w, speaker: r.speaker, toStaff: r.speaker !== 'patient' }));
+    });
+    if (!out.some(a => a.speaker === 'nurse')) out.push({ word:'nurse', speaker:'nurse', toStaff:true });
+    out.sort((a, b) => b.word.length - a.word.length);   // longest match wins
+    ADDRESS = out;
+  }
+  function detectAddressee(said){
+    const low = (said || '').replace(/^\s+/, '').toLowerCase();
+    for (const a of ADDRESS){
+      if (new RegExp('^' + escapeRe(a.word) + '\\b[\\s,:.\\-—]*', 'i').test(low)){
+        const stripped = said.replace(new RegExp('^\\s*' + escapeRe(a.word) + '\\b[\\s,:.\\-—]*', 'i'), '').trim();
+        return { toStaff: a.toStaff, speaker: a.speaker, text: stripped || said };
+      }
+    }
+    return { toStaff: false, speaker: 'patient', text: said };
+  }
 
   function stopAudio(){ // halt any playing reply (barge-in / stop) and release the await
     if (curAudio){ try { curAudio.pause(); } catch(e){} curAudio = null; }
@@ -1875,35 +1934,32 @@
       selectState(listening ? 'listening' : 'idle');
       return;
     }
-    let ch = NURSE_CH;
     try {
-      const toNurse = routeToNurse(said);
-      ch = toNurse ? NURSE_CH : PATIENT_CH;
-      addTurn(ch, 'res', said);
+      const route = detectAddressee(said);
+      addTurn(ROOM, 'res', said);
 
-      let reply = '', speaker = 'nurse';
-      if (toNurse){
-        const text = said.replace(/^\s*nurse[\s,:.\-—]*/i, '').trim() || said;
-        const data = await postJSON('/api/voice/llm', { session_id: SESSION_ID, text });
+      let reply = '', speaker = route.speaker;
+      if (route.toStaff){
+        const data = await postJSON('/api/voice/llm', { session_id: SESSION_ID, text: route.text });
         reply = (data.reply || '').trim();
-        speaker = data.speaker || 'nurse';   // a consult reply gets its own voice
-        addTurn(NURSE_CH, 'nurse', reply);
+        speaker = data.speaker || 'nurse';   // the server decides who answers (nurse/consult/family/ems/rt)
+        addTurn(ROOM, speaker, reply);
         applyEngine(data);
       } else {
         speaker = 'patient';
         const data = await postJSON('/api/voice/llm-patient', { session_id: SESSION_ID, text: said });
         reply = (data.reply || '').trim();
-        addTurn(PATIENT_CH, 'patient', reply);
+        addTurn(ROOM, 'patient', reply);
       }
 
       processing = false;
       if (!capturing) setMic(listening ? 'listen' : 'off');
       if (reply) await playTTS(reply, speaker);
-      setNow(ch, toNurse ? 'listening for your next order…' : 'listening…');
+      setNow(ROOM, route.toStaff ? 'listening for your next order…' : 'listening…');
       if (pendingEnd){ pendingEnd = false; concludeCase(); }   // terminal state → debrief
     } catch(e){
-      setNow(ch, (e && e.message) ? e.message : 'something went wrong');
-      ch.root.classList.remove('collapsed');
+      setNow(ROOM, (e && e.message) ? e.message : 'something went wrong');
+      ROOM.root.classList.remove('collapsed');
     } finally {
       processing = false;
       if (!capturing) setMic(listening ? 'listen' : 'off');

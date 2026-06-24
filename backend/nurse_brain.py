@@ -392,6 +392,34 @@ def _build_card(intent: NurseIntent, engine: SimulationEngine, result: StepResul
     return None
 
 
+def _voice_reply(
+    session: VoiceSession, intent: NurseIntent, result: StepResult | None, vitals: dict, transcript: str,
+) -> tuple[str, str]:
+    """Phrase the reply and decide who voices it.
+
+    Most outcomes are the nurse reading back an order. Two are voiced by the
+    person who actually holds the information: a history beat is spoken by its
+    provider (EMS/family/patient), and a bedside measurement (VC/NIF) is reported
+    by the Respiratory Therapist. Returns ``(reply, speaker)``."""
+    engine = session.engine
+    # History from EMS / family / the patient is spoken by that person, grounded.
+    if intent.op == "ask_history" and result is not None and result.revealed:
+        beat = next((h for h in engine.case.history if h.id == intent.target), None)
+        provider = beat.provider if beat else None
+        from backend.actor_voice import provider_speaker, voice_history
+        if provider_speaker(provider) != "nurse":
+            return voice_history(session, provider, result.revealed, transcript)
+    # Bedside respiratory measures are reported by the RT, if the case has one.
+    if intent.op == "order_investigation" and result is not None and result.revealed:
+        inv = next((i for i in engine.case.investigations if i.id == intent.target), None)
+        if inv is not None and inv.category == "bedside":
+            from backend.actor_voice import voice_bedside
+            reply, speaker = voice_bedside(session, result.revealed, transcript)
+            if reply is not None:
+                return reply, speaker
+    return speak(transcript, intent, result, vitals, session.history), "nurse"
+
+
 def _resolve_turn(
     session: VoiceSession, intent: NurseIntent, transcript: str, clock: list,
 ) -> NurseTurn:
@@ -408,10 +436,11 @@ def _resolve_turn(
         from backend.consult_voice import consult_reply
         reply, card = consult_reply(session, intent.target, transcript)
         result = None
+        speaker = "consult"
     else:
         result = dispatch(intent, engine, transcript)
         card = _build_card(intent, engine, result)
-        reply = speak(transcript, intent, result, vitals, session.history)
+        reply, speaker = _voice_reply(session, intent, result, vitals, transcript)
 
     session.history.append({"role": "resident", "text": transcript})
     session.history.append({"role": "nurse", "text": reply})
@@ -432,7 +461,7 @@ def _resolve_turn(
         ended=engine.run.ended,
         clock_events=[c.message for c in clock if c.message],
         diagnostic=card,
-        speaker="consult" if intent.op == "request_consult" else "nurse",
+        speaker=speaker,
     )
 
 

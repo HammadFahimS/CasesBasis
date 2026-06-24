@@ -428,12 +428,38 @@ def _voice_session_payload(session: Any) -> dict[str, Any]:
                 {"id": a.id, "role": a.role} for a in _case_consultants(case)
             ],
         },
+        # Everyone the resident can hear from, with the speaker class that styles
+        # and voices them — drives the unified Room log and addressee routing.
+        "roster": _case_roster(case),
     }
 
 
 def _case_consultants(case: Any) -> list[Any]:
     from backend.consult_voice import consultants
     return consultants(case)
+
+
+def _case_roster(case: Any) -> list[dict[str, str]]:
+    """The room's voices, each tagged with its speaker class (patient/nurse/ems/
+    family/rt/consult). Used by the front-end for avatars, colours and addressing."""
+    from backend.consult_voice import _is_consultant
+    roster: list[dict[str, str]] = []
+    for a in case.actors:
+        tag = f"{a.id} {a.role}".lower()
+        if a.id == "patient" or "patient" in tag:
+            speaker = "patient"
+        elif a.id == "nurse" or "nurse" in tag:
+            speaker = "nurse"
+        elif any(w in tag for w in ("ems", "paramedic", "medic")):
+            speaker = "ems"
+        elif a.id == "rt" or "respiratory" in tag:
+            speaker = "rt"
+        elif _is_consultant(a):
+            speaker = "consult"
+        else:
+            speaker = "family"  # husband/wife/parent and other bedside bystanders
+        roster.append({"id": a.id, "role": a.role, "speaker": speaker})
+    return roster
 
 
 def _persist_turn(session: Any, turn: Any) -> None:
@@ -723,6 +749,19 @@ def api_voice_session_delete(session_id: str, request: Request) -> dict[str, Any
 PATIENT_TTS_VOICE = os.getenv("TOGETHER_PATIENT_TTS_VOICE", "australian woman")
 # A consultant phoned by the resident should sound distinct from the bedside nurse.
 CONSULT_TTS_VOICE = os.getenv("TOGETHER_CONSULT_TTS_VOICE", "professional man")
+# Bedside bystanders the resident hears from directly — each a distinct voice so
+# the room is tellable apart by ear.
+EMS_TTS_VOICE = os.getenv("TOGETHER_EMS_TTS_VOICE", "calm man")
+FAMILY_TTS_VOICE = os.getenv("TOGETHER_FAMILY_TTS_VOICE", "concerned man")
+RT_TTS_VOICE = os.getenv("TOGETHER_RT_TTS_VOICE", "matter of fact man")
+# speaker tag → configured voice, for the per-turn TTS selection below.
+_SPEAKER_VOICE = {
+    "patient": PATIENT_TTS_VOICE,
+    "consult": CONSULT_TTS_VOICE,
+    "ems": EMS_TTS_VOICE,
+    "family": FAMILY_TTS_VOICE,
+    "rt": RT_TTS_VOICE,
+}
 
 
 @app.post("/api/voice/tts")
@@ -739,10 +778,7 @@ def api_voice_tts(body: dict[str, Any], request: Request) -> Response:
     voice = body.get("voice")
     if not voice:
         speaker = (body.get("speaker") or "").lower()
-        if speaker == "patient":
-            voice = PATIENT_TTS_VOICE
-        elif speaker == "consult":
-            voice = CONSULT_TTS_VOICE
+        voice = _SPEAKER_VOICE.get(speaker)  # None → nurse default in voice_service
     from backend.voice_service import synthesize
     try:
         audio = synthesize(text, voice)
