@@ -309,6 +309,18 @@ table.lib tr:hover td { background: var(--paper); }
 .pill.med  { background: var(--caution-bg); color: var(--caution); }
 .pill.easy { background: var(--normal-bg); color: var(--normal); }
 .pill.hard { background: var(--critical-bg); color: var(--critical); }
+.pill.voice { background: var(--teal-50); color: var(--teal-700); text-transform: none; letter-spacing: 0; margin-left: 6px; }
+/* voice-run review drawer */
+.vr-score { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.vr-score-cap { font-size: 13px; font-weight: 600; color: var(--ink-700); }
+.vr-h { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-500); margin-bottom: 10px; }
+.vr-crits { display: flex; flex-direction: column; gap: 8px; }
+.vr-crit { display: flex; align-items: baseline; gap: 9px; padding: 9px 12px; border-radius: 8px; background: var(--ink-50); }
+.vr-mark { width: 14px; text-align: center; font-weight: 700; flex-shrink: 0; }
+.vr-crit.met .vr-mark { color: var(--normal); }
+.vr-crit.miss .vr-mark { color: var(--critical); }
+.vr-label { font-size: 13px; color: var(--ink-900); flex-shrink: 0; }
+.vr-detail { font-size: 11.5px; color: var(--ink-500); margin-left: auto; text-align: right; }
 .score-cell { display: flex; align-items: center; gap: 10px; }
 .score-ring { width: 32px; height: 32px; border-radius: 50%; position: relative; display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--ink-900); flex-shrink: 0; }
 .score-ring svg { position: absolute; inset: 0; }
@@ -1342,7 +1354,7 @@ function renderLibTable(sessions) {
         <div class="case-name">
           <div class="case-ico ${sys.cls}">${sys.abbr}</div>
           <div class="case-name-text">
-            <div class="lbl">${s.diagnosis || 'Untitled'}</div>
+            <div class="lbl">${s.diagnosis || 'Untitled'}${s.source === 'voice' ? ' <span class="pill voice">🎙 Voice</span>' : ''}</div>
             <div class="id-sub">${shortId}…</div>
           </div>
         </div>
@@ -1453,7 +1465,11 @@ function hideDeleteConfirm() {
 async function confirmDeleteSession() {
   const sid = _pendingDeleteSid;
   hideDeleteConfirm();
-  const r = await fetch('/api/dashboard/session/' + sid, {method:'DELETE'});
+  const s = _allSessions.find(x => x.id === sid);
+  const url = (s && s.source === 'voice')
+    ? '/api/voice/sessions/' + sid     // voice runs live in their own table
+    : '/api/dashboard/session/' + sid;
+  const r = await fetch(url, {method:'DELETE'});
   if (r.ok) {
     _allSessions = _allSessions.filter(s => s.id !== sid);
     renderLibrary(_allSessions);
@@ -1513,7 +1529,47 @@ function openDrawer(sid) {
   document.getElementById('drawerBody').innerHTML = '<div class="drawer-loading">Loading session…</div>';
   document.getElementById('drawerFooter').innerHTML = '';
   document.body.style.overflow = 'hidden';
-  loadDrawerSession(sid);
+  const s = _allSessions.find(x => x.id === sid);
+  if (s && s.source === 'voice') loadVoiceReview(sid);
+  else loadDrawerSession(sid);
+}
+
+// A concluded voice run: render its stored assessment (the same criteria the
+// debrief showed) in the drawer shell. Voice runs aren't manual ClinicalCases,
+// so they have their own lightweight review.
+async function loadVoiceReview(sid) {
+  try {
+    const r = await fetch('/api/dashboard/voice-review/' + sid);
+    if (!r.ok) throw new Error('Could not load voice run');
+    const d = await r.json();
+    document.getElementById('drawerDiag').textContent = d.diagnosis || (sid.slice(0,8) + '…');
+    const durStr = d.duration_seconds > 0 ? fmtElapsed(d.duration_seconds) : null;
+    document.getElementById('drawerMeta').innerHTML = [
+      '<span class="pill voice">🎙 Voice</span>',
+      statusBadgeHtml('evaluated'),
+      durStr ? '⏱ ' + durStr : '',
+    ].filter(Boolean).join(' &middot; ');
+
+    const crits = (d.assessment || []).map(c =>
+      `<div class="vr-crit ${c.met ? 'met' : 'miss'}">
+         <span class="vr-mark">${c.met ? '✓' : '✕'}</span>
+         <span class="vr-label">${(c.label || '')}</span>
+         <span class="vr-detail">${(c.detail || '')}</span>
+       </div>`).join('');
+    document.getElementById('drawerBody').innerHTML =
+      `<div class="vr-score">${scoreDonut(d.overall_score || 0)}<div class="vr-score-cap">Overall ${d.overall_score || 0}%</div></div>` +
+      `<div class="vr-h">Assessment</div><div class="vr-crits">${crits || '<div class="vr-detail">No criteria recorded.</div>'}</div>`;
+
+    const footer = document.getElementById('drawerFooter');
+    footer.innerHTML = '';
+    const del = document.createElement('button');
+    del.className = 'drawer-btn danger';
+    del.textContent = 'Delete';
+    del.onclick = () => { closeDrawer(); deleteSession(sid); };
+    footer.appendChild(del);
+  } catch (e) {
+    document.getElementById('drawerBody').innerHTML = '<div class="drawer-loading">Could not load this voice run.</div>';
+  }
 }
 
 function closeDrawer() {

@@ -102,6 +102,81 @@ def delete(session_id: str, resident_id: str) -> bool:
         return False
 
 
+def record_evaluation(
+    session_id: str, score: int, assessment: list[dict[str, Any]], duration_seconds: int,
+) -> None:
+    """Persist a concluded run's score so it appears in analytics. Best-effort and
+    idempotent — re-viewing a debrief simply rewrites the same figures."""
+    now = utcnow()
+    try:
+        with write_transaction() as conn:
+            conn.execute(
+                "UPDATE voice_sessions SET overall_score=?, assessment_json=?, "
+                "duration_seconds=?, evaluated_at=?, status='ended', "
+                "ended_at=COALESCE(ended_at, ?), updated_at=? WHERE id=?",
+                (score, json.dumps(assessment), max(0, int(duration_seconds)),
+                 now, now, now, session_id),
+            )
+    except sqlite3.Error as exc:
+        logger.warning("voice evaluation record failed for %s: %s", session_id, exc)
+
+
+def _case_meta(case_id: str) -> tuple[str, str]:
+    """(title, difficulty) for a case id — for the analytics row label. Fail-soft."""
+    try:
+        from backend.simulated_case_store import load_seed_case
+        meta = load_seed_case(case_id).meta
+        return (meta.title or case_id, meta.difficulty or "medium")
+    except Exception:
+        return (case_id, "medium")
+
+
+def get_resident_evaluations(resident_id: str, limit: int = 200) -> list[dict[str, Any]]:
+    """Concluded, scored voice runs shaped like the dashboard's session rows, so
+    they merge straight into the analytics list and charts (tagged source=voice)."""
+    try:
+        rows = get_db().execute(
+            "SELECT id, case_id, created_at, duration_seconds, overall_score "
+            "FROM voice_sessions WHERE resident_id=? AND overall_score IS NOT NULL "
+            "ORDER BY created_at DESC LIMIT ?",
+            (resident_id, limit),
+        ).fetchall()
+    except sqlite3.Error as exc:
+        logger.warning("voice evaluations read failed for %s: %s", resident_id, exc)
+        return []
+    out = []
+    for r in rows:
+        title, difficulty = _case_meta(r[1])
+        out.append({
+            "id": r[0], "diagnosis": title, "difficulty": difficulty,
+            "status": "evaluated", "created_at": r[2],
+            "duration_seconds": r[3] or 0, "overall_score": r[4], "source": "voice",
+        })
+    return out
+
+
+def get_evaluation(session_id: str, resident_id: str) -> dict[str, Any] | None:
+    """The stored assessment for one voice run, for the analytics review drawer."""
+    try:
+        row = get_db().execute(
+            "SELECT case_id, created_at, duration_seconds, overall_score, assessment_json, evaluated_at "
+            "FROM voice_sessions WHERE id=? AND resident_id=? AND overall_score IS NOT NULL",
+            (session_id, resident_id),
+        ).fetchone()
+    except sqlite3.Error as exc:
+        logger.warning("voice evaluation detail failed for %s: %s", session_id, exc)
+        return None
+    if row is None:
+        return None
+    title, difficulty = _case_meta(row[0])
+    return {
+        "id": session_id, "diagnosis": title, "difficulty": difficulty,
+        "created_at": row[1], "duration_seconds": row[2] or 0,
+        "overall_score": row[3], "assessment": json.loads(row[4] or "[]"),
+        "evaluated_at": row[5], "source": "voice",
+    }
+
+
 def list_for_resident(resident_id: str, limit: int = 50) -> list[dict[str, Any]]:
     """Resumable/recent runs for a resident (newest first), for the home surface."""
     try:

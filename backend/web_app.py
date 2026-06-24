@@ -668,6 +668,18 @@ def api_voice_debrief(body: dict[str, Any], request: Request) -> dict[str, Any]:
     except Exception as exc:
         logging.getLogger(__name__).warning("debrief build failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"debrief failed: {exc}")
+    # Score the run into the resident's analytics (best-effort — never block the
+    # debrief). The criteria are already in the payload; reduce to a 0-100 figure.
+    try:
+        from backend import voice_persistence
+        from backend.sim_scoring import Criterion, overall_score
+        assessment = debrief.get("assessment") or []
+        score = overall_score([Criterion(**c) for c in assessment])
+        duration = (debrief.get("summary") or {}).get("elapsed_seconds") or 0
+        voice_persistence.record_evaluation(session_id, score, assessment, duration)
+        debrief["overall_score"] = score
+    except Exception as exc:
+        logging.getLogger(__name__).warning("voice scoring failed for %s: %s", session_id, exc)
     end_session(session_id)  # viewing the debrief concludes the case
     return debrief
 
@@ -1104,14 +1116,32 @@ def require_resident(request: Request) -> str:
 @app.get("/api/dashboard/sessions")
 def dashboard_sessions(http_request: Request) -> dict[str, Any]:
     resident_id = require_resident(http_request)
+    from backend import voice_persistence
     sessions = get_resident_sessions(resident_id)
+    sessions += voice_persistence.get_resident_evaluations(resident_id)
+    # newest first across both sources (voice runs carry source="voice")
+    sessions.sort(key=lambda s: s.get("created_at") or "", reverse=True)
     return {"sessions": sessions}
 
 
 @app.get("/api/dashboard/stats")
 def dashboard_stats(http_request: Request) -> dict[str, Any]:
     resident_id = require_resident(http_request)
-    return get_resident_stats(resident_id)
+    from backend import voice_persistence
+    stats = get_resident_stats(resident_id)
+    # Fold concluded voice runs into the headline figures so the dashboard reflects
+    # both training modes. (Detailed per-criterion review lives on each run.)
+    voice = voice_persistence.get_resident_evaluations(resident_id)
+    if voice:
+        v_scores = [v["overall_score"] for v in voice if v.get("overall_score") is not None]
+        prior_n = stats.get("cases_completed") or 0
+        prior_avg = stats.get("avg_score")
+        total_n = prior_n + len(v_scores)
+        if v_scores and total_n:
+            blended = ((prior_avg or 0) * prior_n + sum(v_scores)) / total_n
+            stats["avg_score"] = round(blended, 2)
+            stats["cases_completed"] = total_n
+    return stats
 
 
 # Per-resident coaching-insight cache: resident_id -> (evaluation signature, insight).
@@ -1201,6 +1231,17 @@ def dashboard_session_detail(session_id: str, http_request: Request) -> dict[str
     result = _full_state_response(session, session_id, row["status"], duration_seconds=row.get("duration_seconds") or 0)
     result["evaluation_data"] = get_session_evaluation(session_id)
     return result
+
+
+@app.get("/api/dashboard/voice-review/{session_id}")
+def dashboard_voice_review(session_id: str, http_request: Request) -> dict[str, Any]:
+    """The stored assessment for one concluded voice run (analytics review drawer)."""
+    resident_id = require_resident(http_request)
+    from backend import voice_persistence
+    review = voice_persistence.get_evaluation(session_id, resident_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="voice run not found")
+    return review
 
 
 @app.delete("/api/dashboard/session/{session_id}")

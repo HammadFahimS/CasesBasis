@@ -130,3 +130,14 @@ def score_run(session) -> list[Criterion]:
     except Exception:
         pass
     return out
+
+
+def overall_score(criteria: list[Criterion]) -> int:
+    """A single 0-100 figure for analytics: the percent of criteria met.
+
+    Empty criteria → 0 (nothing demonstrated). Rounded to the nearest integer so
+    it slots straight into the same charts as the manual-sim ``overall_score``."""
+    if not criteria:
+        return 0
+    met = sum(1 for c in criteria if c.met)
+    return round(100 * met / len(criteria))
