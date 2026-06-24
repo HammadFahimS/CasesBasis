@@ -35,6 +35,26 @@ def provider_speaker(provider: str | None) -> str:
     return _PROVIDER_SPEAKER.get((provider or "").strip().lower(), "nurse")
 
 
+def actor_speaker(actor) -> str:
+    """The speaker class (styling + voice) for a case actor. The single source of
+    truth shared by the session roster and the cue engine."""
+    if actor is None:
+        return "nurse"
+    from backend.consult_voice import _is_consultant
+    tag = f"{actor.id} {actor.role}".lower()
+    if actor.id == "patient" or "patient" in tag:
+        return "patient"
+    if actor.id == "nurse" or "nurse" in tag:
+        return "nurse"
+    if any(w in tag for w in ("ems", "paramedic", "medic")):
+        return "ems"
+    if actor.id == "rt" or "respiratory" in tag:
+        return "rt"
+    if _is_consultant(actor):
+        return "consult"
+    return "family"
+
+
 def find_actor(case, provider: str | None, speaker: str):
     """Best-effort: the case actor who embodies this provider (for persona/voice)."""
     prov = (provider or "").strip().lower()
@@ -96,6 +116,26 @@ def voice_history(session, provider: str | None, content: str, transcript: str) 
         return content or "", "nurse"
     actor = find_actor(session.engine.case, provider, speaker)
     return _voice_as(actor, speaker, content, transcript), speaker
+
+
+CUE_SYSTEM = (
+    "You are a person at the bedside in an emergency-department simulation. You are "
+    "given a stage direction describing a prompt you should give the resident right "
+    "now (the team is lingering). Say it ALOUD, naturally and briefly, in your own "
+    "voice — never read the stage direction verbatim or describe yourself in the "
+    "third person. No markdown or stage directions. Under about 30 words."
+)
+
+
+def voice_cue(session, actor, speaker: str, text: str) -> str:
+    """Turn an authored cue (a stage direction) into a natural spoken prompt from
+    the actor. Fails soft to a lightly-cleaned version of the cue text."""
+    user = f"{_persona(actor, speaker)}\n\nStage direction (say this in your own words): {text}\n\nYou:"
+    try:
+        return _clean_for_speech(_complete(CUE_SYSTEM, user))
+    except Exception as exc:
+        logger.warning("cue voice failed (%s): %s", speaker, exc)
+        return _clean_for_speech(text)
 
 
 def voice_bedside(session, content: str, transcript: str) -> tuple[str | None, str]:

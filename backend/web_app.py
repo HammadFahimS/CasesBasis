@@ -442,24 +442,11 @@ def _case_consultants(case: Any) -> list[Any]:
 def _case_roster(case: Any) -> list[dict[str, str]]:
     """The room's voices, each tagged with its speaker class (patient/nurse/ems/
     family/rt/consult). Used by the front-end for avatars, colours and addressing."""
-    from backend.consult_voice import _is_consultant
-    roster: list[dict[str, str]] = []
-    for a in case.actors:
-        tag = f"{a.id} {a.role}".lower()
-        if a.id == "patient" or "patient" in tag:
-            speaker = "patient"
-        elif a.id == "nurse" or "nurse" in tag:
-            speaker = "nurse"
-        elif any(w in tag for w in ("ems", "paramedic", "medic")):
-            speaker = "ems"
-        elif a.id == "rt" or "respiratory" in tag:
-            speaker = "rt"
-        elif _is_consultant(a):
-            speaker = "consult"
-        else:
-            speaker = "family"  # husband/wife/parent and other bedside bystanders
-        roster.append({"id": a.id, "role": a.role, "speaker": speaker})
-    return roster
+    from backend.actor_voice import actor_speaker
+    return [
+        {"id": a.id, "role": a.role, "speaker": actor_speaker(a)}
+        for a in case.actors
+    ]
 
 
 def _persist_turn(session: Any, turn: Any) -> None:
@@ -481,6 +468,8 @@ def _turn_payload(turn: Any) -> dict[str, Any]:
         "ended": turn.ended,
         "clock_events": turn.clock_events,
         "diagnostic": turn.diagnostic,
+        "working_dx": getattr(turn, "working_dx", None),
+        "cues": getattr(turn, "cues", []),
     }
 
 

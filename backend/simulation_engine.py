@@ -82,6 +82,7 @@ class RunState:
     visited_states: list[str] = field(default_factory=list)
     critical_errors: list[str] = field(default_factory=list)
     working_diagnoses: list[str] = field(default_factory=list)
+    fired_cues: list[str] = field(default_factory=list)
     log: list[dict[str, object]] = field(default_factory=list)
     ended: bool = False
 
@@ -209,6 +210,26 @@ class SimulationEngine:
             if self.run.ended:
                 break
         return results
+
+    # Seconds in a state before its authored cues start to prompt the resident.
+    CUE_AFTER_SECONDS = 75
+
+    def due_cues(self) -> list[dict[str, str]]:
+        """Authored cues that should prompt now — the room nudging a lingering team.
+
+        Fires at most one cue per call (so prompts trickle rather than pile up),
+        once the resident has been in the state a while. Each cue fires once; the
+        record lives in ``run.fired_cues`` so it survives park/resume."""
+        if self.elapsed_in_state < self.CUE_AFTER_SECONDS:
+            return []
+        for i, cue in enumerate(self.state.cues):
+            key = f"{self.run.current_state_id}:{i}"
+            if key in self.run.fired_cues:
+                continue
+            self.run.fired_cues.append(key)
+            self._log("cue", cue.text)
+            return [{"text": cue.text, "actor_id": cue.actor_id or ""}]
+        return []
 
     def goto(self, state_id: str, reason: str = "") -> StepResult:
         """Force a transition (facilitator/manual override)."""

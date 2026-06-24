@@ -114,6 +114,8 @@ class NurseTurn:
     clock_events: list[str] = field(default_factory=list)
     diagnostic: dict | None = None  # a drawer card (ECG/CXR/report/exam), if any
     speaker: str = "nurse"          # who voices the reply — nurse, or "consult" for a specialist
+    working_dx: str | None = None   # the resident's latest committed working diagnosis
+    cues: list[dict] = field(default_factory=list)  # proactive prompts that fired this turn
 
 
 def _complete(system_prompt: str, user_prompt: str) -> str:
@@ -420,6 +422,26 @@ def _voice_reply(
     return speak(transcript, intent, result, vitals, session.history), "nurse"
 
 
+def _fire_cues(session: VoiceSession) -> list[dict]:
+    """Voice any authored cues that came due — the room proactively prompting a
+    lingering team. Each is role-played by its actor and recorded for context."""
+    raw = session.engine.due_cues()
+    if not raw:
+        return []
+    from backend.actor_voice import actor_speaker, voice_cue
+    case = session.engine.case
+    out: list[dict] = []
+    for cue in raw:
+        actor = next((a for a in case.actors if a.id == cue.get("actor_id")), None)
+        speaker = actor_speaker(actor)
+        line = voice_cue(session, actor, speaker, cue["text"])
+        if not line:
+            continue
+        session.history.append({"role": "nurse", "text": line})  # context for later turns
+        out.append({"speaker": speaker, "text": line})
+    return out
+
+
 def _resolve_turn(
     session: VoiceSession, intent: NurseIntent, transcript: str, clock: list,
 ) -> NurseTurn:
@@ -447,6 +469,9 @@ def _resolve_turn(
     if card:
         session.cards.append(card)  # kept so a parked run rebuilds its drawer on resume
 
+    cues = _fire_cues(session)
+    working_dx = engine.run.working_diagnoses[-1] if engine.run.working_diagnoses else None
+
     transitioned = bool(result and result.transitioned) or bool(clock)
     critical = bool(result and result.critical_error) or any(c.critical_error for c in clock)
     return NurseTurn(
@@ -462,6 +487,8 @@ def _resolve_turn(
         clock_events=[c.message for c in clock if c.message],
         diagnostic=card,
         speaker=speaker,
+        working_dx=working_dx,
+        cues=cues,
     )
 
 

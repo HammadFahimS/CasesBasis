@@ -137,6 +137,12 @@
     font-size: 19px; color: var(--ink-300); margin-top: 5px;
   }
   .pt-meta { font-size: 11px; color: var(--ink-500); margin-top: 10px; letter-spacing: 0.02em; }
+  .pt-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .pt-chip { font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04); color: var(--ink-300); }
+  .pt-chip.intubated { border-color: rgba(95,216,230,0.4); color: var(--teal-glow); background: rgba(45,212,191,0.08); }
+  .pt-chip.dx { border-color: rgba(192,140,240,0.4); color: #c8a4f0; background: rgba(192,140,240,0.08); text-transform: none; letter-spacing: 0; }
 
   .timer { font-family:'JetBrains Mono', monospace; font-size: 27px; font-weight: 600; color: var(--ink-100); letter-spacing: 0.04em; line-height: 1; white-space: nowrap; }
   .timer-label { font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-500); margin-bottom: 8px; }
@@ -641,6 +647,10 @@
   <div class="pt-id"><span class="mono-id" id="ptName">EK</span><span class="age" id="ptAge">· 29F</span></div>
   <div class="pt-cc" id="ptCC">“I can’t catch my breath”</div>
   <div class="pt-meta" id="ptMeta">Respiratory distress · Resus bay 3 · onset ~40 min</div>
+  <div class="pt-chips">
+    <span class="pt-chip" id="airwayChip" hidden></span>
+    <span class="pt-chip dx" id="dxChip" hidden></span>
+  </div>
 </div>
 
 <div class="hud-bar" id="hudBar">
@@ -1159,25 +1169,58 @@
         bpEl = document.getElementById('bp'), spo2El = document.getElementById('spo2'),
         spo2Cell = document.getElementById('spo2cell'), spo2Trend = document.getElementById('spo2Trend');
   // base values (overridden by the case on load)
-  let baseHR = 110, baseRR = 30, baseSys = 126, baseDia = 84, spo2 = 92;
+  let baseHR = 110, baseRR = 30, baseSys = 126, baseDia = 84, spo2 = 92, arrest = false;
   function jitter(base, spread){ return Math.round(base + (Math.random()-0.5)*spread); }
   function renderVitals(){
-    hrEl.innerHTML = `${jitter(baseHR,4)}<span class="u">bpm</span>`;
-    rrEl.innerHTML = `${jitter(baseRR,2)}<span class="u">/min</span>`;
-    bpEl.innerHTML = `${jitter(baseSys,4)}/${jitter(baseDia,3)}<span class="u">mmHg</span>`;
+    // In a pulseless arrest (PEA/asystole/VF) the perfusing vitals are absent —
+    // show flatline dashes, not the last live numbers, so the monitor never lies.
+    if (arrest){
+      hrEl.innerHTML = `—<span class="u">bpm</span>`;
+      rrEl.innerHTML = `—<span class="u">/min</span>`;
+      bpEl.innerHTML = `—<span class="u">mmHg</span>`;
+    } else {
+      hrEl.innerHTML = `${jitter(baseHR,4)}<span class="u">bpm</span>`;
+      rrEl.innerHTML = `${jitter(baseRR,2)}<span class="u">/min</span>`;
+      bpEl.innerHTML = `${jitter(baseSys,4)}/${jitter(baseDia,3)}<span class="u">mmHg</span>`;
+    }
     // Cosmetic monitor flicker only — the engine vitals (spo2) stay authoritative.
     const shown = Math.max(0, Math.min(100, spo2 + (Math.random() < 0.4 ? (Math.random() < 0.5 ? -1 : 1) : 0)));
     spo2El.innerHTML = `${shown}<span class="u">%</span>`;
-    const warn = spo2 < 94;
+    const warn = arrest || spo2 < 94;
     spo2Cell.classList.toggle('warn', warn);
-    spo2Trend.lastChild.textContent = warn ? ' falling' : ' stable';
+    spo2Trend.lastChild.textContent = arrest ? ' arrest' : (warn ? ' falling' : ' stable');
   }
   setInterval(renderVitals, 2400);
+
+  // ---------- status chips (airway + working diagnosis) ----------
+  const airwayChip = document.getElementById('airwayChip');
+  const dxChip = document.getElementById('dxChip');
+  function updateAirwayChip(v){
+    if (!airwayChip || !v) return;
+    const fio2 = (v.fio2 || '').toString().toLowerCase();
+    const gcs = (v.gcs || '').toString().toLowerCase();
+    const intubated = gcs.includes('intubat') || fio2.includes('ventilat');
+    airwayChip.classList.toggle('intubated', intubated);
+    airwayChip.textContent = intubated
+      ? 'Airway: intubated · ventilated'
+      : ('Airway: spontaneous' + (v.fio2 ? ' · ' + v.fio2 : ''));
+    airwayChip.hidden = false;
+  }
+  function setWorkingDx(text){
+    if (!dxChip || !text) return;
+    dxChip.textContent = 'Working dx: ' + text;
+    dxChip.hidden = false;
+  }
 
   // ---------- engine-driven vitals ----------
   // Apply a vitals snapshot from the SimulationEngine (source of truth).
   function applyVitals(v){
     if (!v) return;
+    // A pulseless rhythm with no perfusing HR/BP is an arrest — flag it so the
+    // monitor shows dashes instead of the stale pre-arrest numbers.
+    const rhythm = (v.rhythm || '').toLowerCase();
+    arrest = /pea|asystole|arrest|pulseless|ventricular fib|vfib|v-fib/.test(rhythm)
+             || (!v.heart_rate && (v.blood_pressure == null) && /pea|asystole/.test(rhythm));
     if (v.heart_rate) baseHR = v.heart_rate;
     if (v.respiratory_rate) baseRR = v.respiratory_rate;
     if (typeof v.oxygen_saturation === 'number') spo2 = v.oxygen_saturation;
@@ -1185,6 +1228,7 @@
       const [s, d] = v.blood_pressure.split('/').map(x => parseInt(x, 10));
       if (s) baseSys = s; if (d) baseDia = d;
     }
+    updateAirwayChip(v);
     renderVitals();
   }
 
@@ -1560,12 +1604,14 @@
   // Apply a nurse-channel turn payload (shared by click actions and free-text orders).
   async function applyNurseData(data){
     const reply = (data.reply || '').trim();
-    if (reply) addTurn(NURSE_CH, 'nurse', reply);
+    const speaker = data.speaker || 'nurse';   // a click can be answered by RT / a consultant too
+    if (reply) addTurn(ROOM, speaker, reply);
     applyEngine(data);
     if (reply && VOICE_BACKEND){            // speak only once a voice mode is chosen
       const native = VOICE_BACKEND === 'native' && recognition;
       if (native){ recoSuspend = true; try { recognition.stop(); } catch(e){} }
-      try { await playTTS(reply, data.speaker || 'nurse'); } catch(e){}
+      try { await playTTS(reply, speaker); } catch(e){}
+      await deliverCues(data);              // room nudges after the reply
       if (native && listening){ recoSuspend = false; try { recognition.start(); } catch(e){} }
     }
     if (pendingEnd){ pendingEnd = false; concludeCase(); }
@@ -1611,6 +1657,7 @@
   function applyEngine(d){
     if (!d) return;
     applyVitals(d.vitals);
+    if (d.working_dx) setWorkingDx(d.working_dx);
     if (d.diagnostic) addDiagnostic(d.diagnostic);
     if (d.revealed && !d.diagnostic){
       stageLabel.textContent = (d.state && d.state.name) ? d.state.name : 'Result';
@@ -1624,6 +1671,17 @@
       setNow(NURSE_CH, d.clock_events[0]);
     }
     if (d.ended) pendingEnd = true;   // case reached a terminal state — debrief after the reply
+  }
+
+  // Proactive prompts the room raised this turn (nurse nudge, ICU callback, the
+  // husband's hint): show each in the Room log and voice it after the main reply.
+  async function deliverCues(d){
+    const cues = (d && d.cues) || [];
+    for (const c of cues){
+      const speaker = c.speaker || 'nurse';
+      addTurn(ROOM, speaker, c.text);
+      if (c.text && VOICE_BACKEND){ try { await playTTS(c.text, speaker); } catch(e){} }
+    }
   }
 
   // ---------- start the live engine-backed session ----------
@@ -1938,9 +1996,10 @@
       const route = detectAddressee(said);
       addTurn(ROOM, 'res', said);
 
-      let reply = '', speaker = route.speaker;
+      let reply = '', speaker = route.speaker, lastTurnData = null;
       if (route.toStaff){
         const data = await postJSON('/api/voice/llm', { session_id: SESSION_ID, text: route.text });
+        lastTurnData = data;
         reply = (data.reply || '').trim();
         speaker = data.speaker || 'nurse';   // the server decides who answers (nurse/consult/family/ems/rt)
         addTurn(ROOM, speaker, reply);
@@ -1955,6 +2014,7 @@
       processing = false;
       if (!capturing) setMic(listening ? 'listen' : 'off');
       if (reply) await playTTS(reply, speaker);
+      if (route.toStaff) await deliverCues(lastTurnData);   // room nudges after the reply
       setNow(ROOM, route.toStaff ? 'listening for your next order…' : 'listening…');
       if (pendingEnd){ pendingEnd = false; concludeCase(); }   // terminal state → debrief
     } catch(e){

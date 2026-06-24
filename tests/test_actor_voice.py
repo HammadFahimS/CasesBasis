@@ -60,3 +60,22 @@ def test_lab_order_is_still_voiced_by_the_nurse(monkeypatch):
     intent = NurseIntent(op="order_investigation", target="cbc_lytes")
     turn = _resolve_turn(s, intent, "send a CBC", [])
     assert turn.speaker == "nurse"
+
+
+# ── cue engine: the room prompts a lingering team, in the cue actor's voice ───
+def test_lingering_fires_a_cue_voiced_by_its_actor(monkeypatch):
+    monkeypatch.setattr(nurse_brain, "_complete", lambda s, u: "Heart rate's 106, still tachypnoeic.")
+    monkeypatch.setattr(actor_voice, "_complete", lambda s, u: "Doctor, should we get the husband for collateral?")
+    s = _session()
+    s.engine.tick(s.engine.CUE_AFTER_SECONDS + 1)   # linger in baseline past the cue threshold
+    turn = _resolve_turn(s, NurseIntent(op="read_vitals"), "what's her heart rate?", [])
+    assert turn.cues and turn.cues[0]["speaker"] == "nurse"   # baseline cue is the nurse's
+    assert "husband" in turn.cues[0]["text"].lower()
+
+
+# ── the working-diagnosis chip rides the turn payload ────────────────────────
+def test_turn_carries_latest_working_diagnosis(monkeypatch):
+    monkeypatch.setattr(nurse_brain, "_complete", lambda s, u: "Noted, working diagnosis recorded.")
+    s = _session()
+    turn = _resolve_turn(s, NurseIntent(op="diagnose", action_text="myasthenic crisis"), "I think it's myasthenic crisis", [])
+    assert turn.working_dx == "myasthenic crisis"

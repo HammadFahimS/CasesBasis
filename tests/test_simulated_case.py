@@ -107,6 +107,32 @@ def test_working_diagnoses_survive_snapshot_roundtrip():
     assert restored.run.working_diagnoses == ["myasthenic crisis"]
 
 
+def test_post_intubation_reaches_terminal_via_admission():
+    # Phase E fix: post_intubation -> disposition was manual-only; an admission /
+    # crisis-therapy action must now drive the case to its terminal state.
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    engine.goto("post_intubation")
+    engine.act(LearnerAction(kind="intervene", text="admit her to the ICU"))
+    assert engine.run.current_state_id == "disposition"
+    assert engine.run.ended is True
+
+
+def test_ct_chest_is_gated_so_it_cannot_leak_the_thymoma_early():
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    result = engine.order_investigation("ct_chest")          # at t=0
+    assert "thymoma" not in (result.revealed or "").lower()
+    assert "pending" in result.message.lower()
+
+
+def test_due_cues_fire_once_after_lingering():
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    assert engine.due_cues() == []                            # nothing yet at t=0
+    engine.tick(engine.CUE_AFTER_SECONDS + 1)                 # linger in baseline
+    fired = engine.due_cues()
+    assert fired and fired[0]["actor_id"] == "nurse"          # baseline cue is the nurse's
+    assert engine.due_cues() == []                            # each cue fires only once
+
+
 def test_snapshot_roundtrip():
     engine = SimulationEngine(load_case("myasthenic_crisis"))
     engine.act(LearnerAction(kind="exam", text="neuro exam"))

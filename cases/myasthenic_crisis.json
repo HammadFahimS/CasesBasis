@@ -257,7 +257,8 @@
       "id": "ct_chest",
       "name": "CT chest (with contrast)",
       "category": "imaging",
-      "result": "Anterior mediastinal soft-tissue mass measuring 5 x 3 x 3.6 cm, suggestive of thymoma. (MRN 5854769)."
+      "result": "Anterior mediastinal soft-tissue mass measuring 5 x 3 x 3.6 cm, suggestive of thymoma. (MRN 5854769).",
+      "available_after_seconds": 300
     }
   ],
   "initial_state": "baseline",
@@ -446,6 +447,20 @@
         }
       ],
       "transitions": [
+        {
+          "to_state": "disposition",
+          "description": "Arranges definitive disposition — ICU admission with crisis therapy (plasma exchange or IVIG) under way.",
+          "kind": "action",
+          "keywords": ["admit", "admission", "transfer to icu", "icu bed", "send to icu", "up to icu", "disposition", "plasma exchange", "plasmapheresis", "ivig", "intravenous immunoglobulin"],
+          "patient_effect": "Admitted to ICU on plasma exchange/IVIG and steroids."
+        },
+        {
+          "to_state": "disposition",
+          "description": "Time passes after intubation; the patient is accepted to ICU.",
+          "kind": "time",
+          "after_seconds": 420,
+          "patient_effect": "Admitted to ICU on plasma exchange/IVIG and steroids."
+        },
         {
           "to_state": "disposition",
           "description": "Patient accepted to ICU with crisis therapy initiated.",
