@@ -286,6 +286,27 @@ class Debrief(StrictModel):
     references: list[str] = Field(default_factory=list)
 
 
+class MedicationExpectation(StrictModel):
+    """One graded expectation about a medication the resident might give.
+
+    Powers the debrief's medication-correctness scoring (``backend.sim_scoring``).
+    The matching is keyword-based, consistent with the rest of the engine:
+
+    * ``preferred``   — the right agent to reach for; *met* if any ``drugs`` was given.
+    * ``avoid``       — should not be used; *met* if none of ``drugs`` was given.
+    * ``dose_adjust`` — the dose must be tuned for this patient; only graded *if*
+      the drug was given, and *met* only when the order also voices the right
+      direction (``dose_keywords``, e.g. "reduced" / "increased").
+    """
+
+    id: str
+    label: str
+    drugs: list[str] = Field(default_factory=list)  # match if any appears in an order
+    expectation: Literal["preferred", "avoid", "dose_adjust"] = "preferred"
+    dose_keywords: list[str] = Field(default_factory=list)
+    note: str = ""
+
+
 # --------------------------------------------------------------------------- #
 # Root document                                                               #
 # --------------------------------------------------------------------------- #
@@ -305,6 +326,7 @@ class SimulatedCase(StrictModel):
     initial_state: str
     states: list[ScenarioState]
     debrief: Debrief = Field(default_factory=Debrief)
+    medication_rubric: list[MedicationExpectation] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_graph(self) -> "SimulatedCase":

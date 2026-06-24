@@ -512,6 +512,38 @@
       "is_terminal": true
     }
   ],
+  "medication_rubric": [
+    {
+      "id": "avoid_pyridostigmine",
+      "label": "Avoided pyridostigmine",
+      "drugs": ["pyridostigmine", "neostigmine"],
+      "expectation": "avoid",
+      "note": "Pyridostigmine is not used in myasthenic crisis."
+    },
+    {
+      "id": "non_depolariser",
+      "label": "Chose a non-depolarising paralytic",
+      "drugs": ["rocuronium", "vecuronium", "cisatracurium"],
+      "expectation": "preferred",
+      "note": "Prefer a non-depolariser (reversible with sugammadex) over succinylcholine in MG."
+    },
+    {
+      "id": "rocuronium_reduced",
+      "label": "Reduced the rocuronium dose",
+      "drugs": ["rocuronium", "vecuronium", "cisatracurium"],
+      "expectation": "dose_adjust",
+      "dose_keywords": ["reduced", "reduce", "smaller", "lower", "less", "decreased", "decrease"],
+      "note": "MG patients are markedly sensitive to non-depolarisers — give a smaller dose."
+    },
+    {
+      "id": "succinylcholine_increased",
+      "label": "Increased the succinylcholine dose",
+      "drugs": ["succinylcholine", "suxamethonium"],
+      "expectation": "dose_adjust",
+      "dose_keywords": ["increased", "increase", "higher", "larger", "more", "greater", "double"],
+      "note": "MG patients are relatively resistant to succinylcholine — a larger dose is needed if it is used."
+    }
+  ],
   "debrief": {
     "summary": "Myasthenic crisis is a life-threatening exacerbation of myasthenia gravis defined as worsening myasthenic weakness requiring intubation or non-invasive ventilation. In ~20% of patients presenting in crisis, it is the first manifestation of myasthenia gravis. This patient's crisis was likely precipitated by infection and by ciprofloxacin.",
     "teaching_points": [
