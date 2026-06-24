@@ -63,12 +63,7 @@ def transcribe(audio: bytes, content_type: str = "audio/webm") -> str:
     return (resp.json().get("text") or "").strip()
 
 
-def synthesize(text: str, voice: str | None = None, fmt: str = "mp3") -> bytes:
-    """TTS: text -> audio bytes (Together Cartesia Sonic).
-
-    Voice resolves at call time (request override -> env -> default) so the
-    nurse voice can be changed in .env without a code edit."""
-    voice = voice or os.getenv("TOGETHER_TTS_VOICE", TTS_VOICE)
+def _tts_request(text: str, voice: str, fmt: str) -> bytes:
     resp = httpx.post(
         f"{TOGETHER_BASE_URL}/audio/speech",
         headers={
@@ -85,6 +80,25 @@ def synthesize(text: str, voice: str | None = None, fmt: str = "mp3") -> bytes:
     )
     resp.raise_for_status()
     return resp.content
+
+
+def synthesize(text: str, voice: str | None = None, fmt: str = "mp3") -> bytes:
+    """TTS: text -> audio bytes (Together Cartesia Sonic).
+
+    Voice resolves at call time (request override -> env -> default) so the
+    nurse voice can be changed in .env without a code edit. A bad/unknown voice
+    name must never silence the room: if the provider rejects it (a 4xx), retry
+    once with the default voice so the line still plays."""
+    default = os.getenv("TOGETHER_TTS_VOICE", TTS_VOICE)
+    requested = voice or default
+    try:
+        return _tts_request(text, requested, fmt)
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code if exc.response is not None else 0
+        if requested != default and 400 <= status < 500:
+            logger.warning("TTS voice %r rejected (%s); falling back to default voice", requested, status)
+            return _tts_request(text, default, fmt)
+        raise
 
 
 def nurse_reply(transcript: str, history: list[dict] | None = None) -> str:

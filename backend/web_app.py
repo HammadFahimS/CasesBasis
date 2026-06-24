@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -752,9 +753,11 @@ PATIENT_TTS_VOICE = os.getenv("TOGETHER_PATIENT_TTS_VOICE", "australian woman")
 CONSULT_TTS_VOICE = os.getenv("TOGETHER_CONSULT_TTS_VOICE", "professional man")
 # Bedside bystanders the resident hears from directly — each a distinct voice so
 # the room is tellable apart by ear.
-EMS_TTS_VOICE = os.getenv("TOGETHER_EMS_TTS_VOICE", "calm man")
-FAMILY_TTS_VOICE = os.getenv("TOGETHER_FAMILY_TTS_VOICE", "concerned man")
-RT_TTS_VOICE = os.getenv("TOGETHER_RT_TTS_VOICE", "matter of fact man")
+# Cartesia Sonic voice names (Together mirror). If any of these is rejected,
+# voice_service.synthesize falls back to the default nurse voice automatically.
+EMS_TTS_VOICE = os.getenv("TOGETHER_EMS_TTS_VOICE", "newsman")
+FAMILY_TTS_VOICE = os.getenv("TOGETHER_FAMILY_TTS_VOICE", "polite man")
+RT_TTS_VOICE = os.getenv("TOGETHER_RT_TTS_VOICE", "wise man")
 # speaker tag → configured voice, for the per-turn TTS selection below.
 _SPEAKER_VOICE = {
     "patient": PATIENT_TTS_VOICE,
