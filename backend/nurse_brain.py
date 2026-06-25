@@ -26,6 +26,7 @@ import re
 from dataclasses import dataclass, field
 
 from backend.actors import kind_for_word
+from backend.constitution import constitution
 from backend.medication import needs_dose_confirm, parse_med
 from backend.sim_diagnostics import (
     build_exam_card,
@@ -79,19 +80,7 @@ INTERPRET_SYSTEM = (
     "Only use an id/name that appears in the lists."
 )
 
-SPEAK_SYSTEM = (
-    "You are the bedside nurse in an emergency-department simulation, speaking "
-    "aloud to the resident. You are calm, competent and concise. Read back orders "
-    "the way a real nurse would and report findings plainly. You are given the "
-    "REAL result of what just happened — report it faithfully and never invent "
-    "numbers or findings beyond it. If a result is pending or unavailable, say so. "
-    "When you report a test result, give ONLY the raw values or findings you were "
-    "handed — never interpret them, never name a diagnosis, and never say what they "
-    "indicate or what to do about them. The resident is the one who interprets; "
-    "your job is to report. For an ECG or X-ray, just tell them it's ready to view. "
-    "No markdown, no asterisks, no stage directions — your words are spoken. Keep "
-    "it under ~40 words."
-)
+SPEAK_SYSTEM = constitution("nurse")
 
 
 @dataclass
@@ -124,15 +113,11 @@ class NurseTurn:
 
 
 def _complete(system_prompt: str, user_prompt: str) -> str:
-    """The single LLM seam (Cerebras via the app's provider). Monkeypatched in tests."""
-    from agents.base import build_llm_client, get_llm_provider, resolve_model
+    """The single nurse LLM seam (via the shared interactive runtime, which keeps
+    the app's provider + Cerebras fallback). Monkeypatched in tests."""
+    from backend.agent_runtime import complete
 
-    provider = get_llm_provider()
-    client = build_llm_client(provider)
-    model = resolve_model(provider, None)
-    return client.text_response(
-        model=model, system_prompt=system_prompt, user_prompt=user_prompt
-    ).strip()
+    return complete(system_prompt, user_prompt, kind="nurse")
 
 
 def _catalogue(engine: SimulationEngine) -> str:

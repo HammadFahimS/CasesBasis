@@ -18,6 +18,7 @@ import logging
 import re
 
 from backend.actors import kind_for_word
+from backend.constitution import constitution
 from backend.patient_voice import _clean_for_speech, _complete
 
 logger = logging.getLogger(__name__)
@@ -62,15 +63,10 @@ def find_actor(case, provider: str | None, speaker: str):
     return None
 
 
-VOICE_SYSTEM = (
-    "You are role-playing a real person at the bedside in an emergency-department "
-    "simulation — not a clinician giving analysis. Stay fully in character; never "
-    "mention being an AI or a simulation. You are handed the exact information you "
-    "know and are conveying to the resident: say it aloud naturally, in your own "
-    "voice and words, and do NOT add facts, numbers or opinions beyond what you "
-    "were given. No markdown or stage directions — your words are read aloud. Keep "
-    "it under about 60 words."
-)
+# The grounded-relay constitution, shared by every bystander kind (EMS/family/RT)
+# and also used when the patient *conveys an authored history beat* (distinct from
+# the patient's free role-play constitution in patient_voice).
+VOICE_SYSTEM = constitution("ems")
 
 
 def _persona(actor, speaker: str) -> str:

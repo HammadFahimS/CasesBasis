@@ -13,30 +13,12 @@ from __future__ import annotations
 import logging
 import re
 
+from backend.constitution import constitution
 from backend.voice_session import VoiceSession
 
 logger = logging.getLogger(__name__)
 
-PATIENT_SYSTEM = (
-    "You are role-playing a patient in an emergency-department simulation. Stay "
-    "fully in character as this one person — never break role, never mention being "
-    "an AI or a simulation, and never clinically analyse yourself.\n"
-    "Answer in the first person like a real patient at triage: ANSWER ONLY THE "
-    "QUESTION YOU WERE ASKED, in one or two short sentences. Do NOT recite your "
-    "whole story, list all your symptoms, or volunteer details the doctor hasn't "
-    "asked about yet — make them ask. If a question is open ('what's going on?'), "
-    "give just your main complaint in a sentence and stop; let the doctor probe "
-    "for the rest. Mention a specific symptom only when they ask about that area. "
-    "It is good to be brief — a real frightened, breathless patient does not give "
-    "speeches.\n"
-    "Reflect how you feel right now: if you are breathless or frightened, keep "
-    "your words short and simple, but speak in complete sentences. Show distress "
-    "through what you say, not through punctuation — never break words apart with "
-    "ellipses ('...'), dashes, or line breaks; your reply is read aloud and those "
-    "create unnatural stop-start pauses. Only share what this patient would "
-    "plausibly know; do not invent major new medical facts beyond your "
-    "background. No markdown or stage directions — your words are spoken aloud."
-)
+PATIENT_SYSTEM = constitution("patient")
 
 
 def _clean_for_speech(text: str) -> str:
@@ -57,14 +39,11 @@ def _clean_for_speech(text: str) -> str:
 
 
 def _complete(system_prompt: str, user_prompt: str) -> str:
-    from agents.base import build_llm_client, get_llm_provider, resolve_model
+    """The patient/bystander LLM seam (monkeypatched in tests). Reused by
+    :mod:`backend.actor_voice`; delegates to the shared interactive runtime."""
+    from backend.agent_runtime import complete
 
-    provider = get_llm_provider()
-    client = build_llm_client(provider)
-    model = resolve_model(provider, None)
-    return client.text_response(
-        model=model, system_prompt=system_prompt, user_prompt=user_prompt
-    ).strip()
+    return complete(system_prompt, user_prompt, kind="patient")
 
 
 def _persona(case) -> str:

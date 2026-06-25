@@ -14,22 +14,14 @@ from __future__ import annotations
 
 import logging
 
+from backend.constitution import constitution
 from backend.patient_voice import _clean_for_speech
 from backend.sim_diagnostics import build_consult_card
 from backend.voice_session import VoiceSession
 
 logger = logging.getLogger(__name__)
 
-CONSULT_SYSTEM = (
-    "You are a specialist physician giving a phone consult in an emergency-"
-    "department simulation. Stay fully in character as this consultant — never "
-    "break role or mention being an AI. The bedside resident has paged you; reply "
-    "the way a real consultant would on the phone: acknowledge the case in a "
-    "sentence, then give a focused, practical recommendation grounded only in the "
-    "information you are given. Never invent test results, vitals or findings you "
-    "were not told. Be collegial and concise. No markdown or stage directions — "
-    "your words are read aloud. Keep it under about 70 words."
-)
+CONSULT_SYSTEM = constitution("consult")
 
 # Actors that are *not* consultants (they're the patient, the nurse, prehospital
 # or family). Anything else a case lists is someone the resident could phone.
@@ -41,14 +33,10 @@ _NON_CONSULT = (
 
 
 def _complete(system_prompt: str, user_prompt: str) -> str:
-    from agents.base import build_llm_client, get_llm_provider, resolve_model
+    """The consultant LLM seam (monkeypatched in tests)."""
+    from backend.agent_runtime import complete
 
-    provider = get_llm_provider()
-    client = build_llm_client(provider)
-    model = resolve_model(provider, None)
-    return client.text_response(
-        model=model, system_prompt=system_prompt, user_prompt=user_prompt
-    ).strip()
+    return complete(system_prompt, user_prompt, kind="consult")
 
 
 def _is_consultant(actor) -> bool:

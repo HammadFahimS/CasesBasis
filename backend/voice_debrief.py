@@ -32,14 +32,10 @@ COACH_SYSTEM = (
 
 
 def _complete(system_prompt: str, user_prompt: str) -> str:
-    from agents.base import build_llm_client, get_llm_provider, resolve_model
+    """The coaching-note LLM seam (monkeypatched in tests)."""
+    from backend.agent_runtime import complete
 
-    provider = get_llm_provider()
-    client = build_llm_client(provider)
-    model = resolve_model(provider, None)
-    return client.text_response(
-        model=model, system_prompt=system_prompt, user_prompt=user_prompt
-    ).strip()
+    return complete(system_prompt, user_prompt, kind="coach")
 
 
 def _cards_by(session: VoiceSession, *categories: str) -> list[str]:

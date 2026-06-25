@@ -4,7 +4,7 @@ Three independent legs, deliberately minimal (request/response, no streaming or
 orchestration yet — that comes with the agent phase):
 
 * STT  — Together AI Whisper (``/v1/audio/transcriptions``)
-* LLM  — the app's existing provider (Cerebras) via ``build_llm_client``
+* LLM  — the app's existing provider (Cerebras) via ``agent_runtime.complete``
 * TTS  — Together AI Cartesia Sonic (``/v1/audio/speech``)
 
 API keys stay server-side; the browser only ever talks to our endpoints.
@@ -104,14 +104,10 @@ def synthesize(text: str, voice: str | None = None, fmt: str = "mp3") -> bytes:
 def nurse_reply(transcript: str, history: list[dict] | None = None) -> str:
     """LLM: a resident utterance -> the nurse's spoken reply (via Cerebras).
 
-    Reuses the app's existing provider machinery so the nurse rides the same
-    model the rest of CasesBasis uses. No case context yet — that's the
-    orchestration phase."""
-    from agents.base import build_llm_client, get_llm_provider, resolve_model
-
-    provider = get_llm_provider()
-    client = build_llm_client(provider)
-    model = resolve_model(provider, None)
+    Rides the shared interactive runtime so the stateless nurse uses the same
+    provider + timeout/retry the rest of the room does. No case context yet —
+    that's the orchestration phase."""
+    from backend.agent_runtime import complete
 
     context = ""
     if history:
@@ -125,6 +121,4 @@ def nurse_reply(transcript: str, history: list[dict] | None = None) -> str:
             context = "Recent exchange:\n" + "\n".join(lines) + "\n\n"
 
     user_prompt = f"{context}Resident: {transcript}\nNurse:"
-    return client.text_response(
-        model=model, system_prompt=NURSE_SYSTEM_PROMPT, user_prompt=user_prompt
-    ).strip()
+    return complete(NURSE_SYSTEM_PROMPT, user_prompt, kind="nurse")
