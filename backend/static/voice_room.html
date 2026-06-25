@@ -169,6 +169,9 @@
   .hb-btn.pause:hover { background: rgba(255,255,255,0.10); }
   .hb-btn.end { background: rgba(217,154,60,0.10); border: 1px solid rgba(217,154,60,0.35); color: var(--amber); }
   .hb-btn.end:hover { background: rgba(217,154,60,0.18); }
+  .hb-btn.ambience { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); color: var(--ink-400); padding: 7px 10px; }
+  .hb-btn.ambience:hover { background: rgba(255,255,255,0.09); color: var(--ink-200); }
+  .hb-btn.ambience.muted { color: var(--ink-600); }
   @media (max-width: 860px) { .hb-session, .hb-sep { display: none; } }
 
   /* ===== Vitals strip (bottom center) ===== */
@@ -191,8 +194,28 @@
   .v-val .u { font-size: 11px; color: var(--ink-500); font-weight: 500; }
   .vital.warn .v-label, .vital.warn .v-val { color: var(--amber); }
   .vital.warn .v-val .u { color: rgba(217,154,60,0.6); }
+  .vital.critical .v-label, .vital.critical .v-val { color: #e0573f; }
+  .vital.critical .v-val .u { color: rgba(224,87,63,0.55); }
   .v-trend { font-family:'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-500); margin-top: 4px; display:flex; align-items:center; gap:4px; }
   .vital.warn .v-trend { color: var(--amber); }
+  .vital.critical .v-trend { color: #e0573f; }
+
+  /* ===== Live caption bar (appears during TTS playback) ===== */
+  .caption-bar {
+    position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); z-index: 6;
+    max-width: 580px; width: calc(100vw - 48px); pointer-events: none;
+    text-align: center; padding: 9px 18px; border-radius: 12px;
+    background: rgba(10,15,23,0.72); border: 1px solid rgba(255,255,255,0.07);
+    backdrop-filter: blur(10px);
+    font-size: 14px; line-height: 1.45; color: var(--ink-200);
+    opacity: 0; transition: opacity 0.25s ease;
+  }
+  .caption-bar.visible { opacity: 1; }
+  .caption-bar .cap-who {
+    font-family:'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.18em;
+    text-transform: uppercase; margin-bottom: 4px;
+  }
+  .caption-bar .cap-text { font-family:'Instrument Serif', Georgia, serif; font-style: italic; }
   .spark { display:block; }
   /* live lead-II monitor — wakes when an ECG is generated (bedside-monitor style) */
   .ecg-mon { display: flex; align-items: center; gap: 11px; padding: 0 14px 0 20px; }
@@ -550,6 +573,8 @@
     border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;
     box-shadow: 0 40px 120px rgba(0,0,0,0.6); padding: 28px 30px 24px;
   }
+  .db-head-row { display: flex; align-items: flex-start; gap: 20px; }
+  .db-head-text { flex: 1; min-width: 0; }
   .db-kicker { font-family:'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--teal-glow); }
   .db-title { font-family:'Instrument Serif', Georgia, serif; font-size: 27px; color: var(--ink-100); margin-top: 6px; line-height: 1.2; }
   .db-outcome { margin-top: 10px; display: inline-block; padding: 5px 11px; border-radius: 999px;
@@ -557,14 +582,46 @@
     background: rgba(90,214,160,0.12); color: #5ad6a0; border: 1px solid rgba(90,214,160,0.3); }
   .db-outcome.bad { background: rgba(224,108,95,0.12); color: #e06c5f; border-color: rgba(224,108,95,0.3); }
   .db-outcome.early { background: rgba(217,154,60,0.12); color: var(--amber); border-color: rgba(217,154,60,0.3); }
+  /* score donut */
+  .db-donut { flex-shrink: 0; width: 76px; height: 76px; display: none; position: relative; }
+  .db-donut.visible { display: block; }
+  .db-donut svg { width: 100%; height: 100%; }
+  .db-donut-num {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family:'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; color: var(--ink-100);
+    line-height: 1;
+  }
+  .db-donut-num span { font-size: 8px; color: var(--ink-500); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 1px; }
   .db-body { margin-top: 22px; display: flex; flex-direction: column; gap: 20px; }
-  .db-sec-h { font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-500); margin-bottom: 9px; }
+  .db-sec-h { font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-500); margin-bottom: 9px; display: flex; align-items: center; gap: 8px; }
+  .db-coach-wrap { position: relative; }
   .db-coach { font-size: 14.5px; line-height: 1.6; color: var(--ink-100);
     background: rgba(45,212,191,0.06); border-left: 2px solid var(--teal-glow); border-radius: 0 8px 8px 0; padding: 13px 15px; }
+  .db-coach-play {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(95,216,230,0.3);
+    background: rgba(95,216,230,0.08); cursor: pointer; color: var(--teal-glow);
+    margin-left: auto; flex-shrink: 0; transition: background .15s, border-color .15s;
+  }
+  .db-coach-play:hover { background: rgba(95,216,230,0.18); border-color: var(--teal-glow); }
+  .db-coach-play.playing { background: rgba(95,216,230,0.22); border-color: var(--teal-glow); }
   .db-stats { display: flex; flex-wrap: wrap; gap: 7px; }
   .db-stat { padding: 6px 11px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
     font-family:'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-200); }
   .db-stat b { color: var(--ink-100); font-weight: 600; }
+  /* timeline */
+  .db-timeline { display: flex; flex-direction: column; gap: 0; }
+  .db-tl-item { display: flex; align-items: flex-start; gap: 10px; }
+  .db-tl-spine { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 20px; }
+  .db-tl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal-glow); border: 2px solid var(--ink-900); flex-shrink: 0; margin-top: 3px; }
+  .db-tl-item:last-child .db-tl-dot { background: #5ad6a0; }
+  .db-tl-line { width: 1px; background: rgba(255,255,255,0.08); flex: 1; min-height: 16px; }
+  .db-tl-item:last-child .db-tl-line { display: none; }
+  .db-tl-label { font-size: 12.5px; color: var(--ink-200); padding-bottom: 14px; line-height: 1.3; }
+  .db-tl-label b { font-family:'JetBrains Mono', monospace; font-size: 9px; color: var(--ink-500); display: block; margin-bottom: 1px; }
+  .db-tl-more { font-family:'JetBrains Mono', monospace; font-size: 10px; color: var(--teal-glow); cursor: pointer; letter-spacing: 0.05em; padding: 2px 0 0 30px; }
+  .db-tl-more:hover { text-decoration: underline; }
   .db-crits { display: flex; flex-direction: column; gap: 7px; }
   .db-crit { display: flex; align-items: baseline; gap: 9px; padding: 9px 12px; border-radius: 8px;
     background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); }
@@ -584,12 +641,40 @@
   .db-list li::before { content: '›'; position: absolute; left: 0; color: var(--teal-glow); }
   .db-list.errs li::before { content: '!'; color: #e06c5f; }
   .db-refs { font-size: 12px; color: var(--ink-500); line-height: 1.6; }
-  .db-foot { margin-top: 26px; display: flex; gap: 10px; justify-content: flex-end; }
-  .db-new, .db-close { padding: 9px 16px; border-radius: 9px; cursor: pointer; font-size: 12.5px; font-family: inherit; }
+  .db-foot { margin-top: 26px; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+  .db-new, .db-close, .db-print { padding: 9px 16px; border-radius: 9px; cursor: pointer; font-size: 12.5px; font-family: inherit; }
   .db-new { background: var(--teal-glow); border: 0; color: #04221c; font-weight: 600; }
   .db-new:hover { filter: brightness(1.08); }
   .db-close { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--ink-200); }
   .db-close:hover { background: rgba(255,255,255,0.1); }
+  .db-print { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); color: var(--ink-300); margin-right: auto; }
+  .db-print:hover { background: rgba(255,255,255,0.09); }
+  @media print {
+    body > *:not(.debrief) { display: none !important; }
+    .debrief { position: static; background: #fff; display: block !important; padding: 0; }
+    .db-card { box-shadow: none; border: none; background: #fff; color: #111; max-width: 100%; }
+    .db-foot, .db-kicker { display: none; }
+    .db-title, .db-body { color: #111; }
+    .db-coach { border-left-color: #333; background: #f5f5f5; }
+    .db-sec-h { color: #555; }
+    .db-crit, .db-stat, .db-chip { border-color: #ccc; background: #f9f9f9; color: #111; }
+  }
+
+  /* ===== State transition toast ===== */
+  .state-toast {
+    position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%);
+    z-index: 20; pointer-events: none;
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 14px; border-radius: 999px;
+    background: rgba(13,20,31,0.85); backdrop-filter: blur(10px);
+    border: 1px solid rgba(95,216,230,0.22);
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.07em;
+    color: var(--teal-glow); white-space: nowrap;
+    opacity: 0; transition: opacity 0.25s ease;
+  }
+  .state-toast.visible { opacity: 1; }
+  .state-toast.critical { border-color: rgba(217,154,60,0.4); color: var(--amber); }
+  .state-toast .st-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
   /* ===== Pause overlay ===== */
   .pause-modal {
@@ -714,6 +799,51 @@
     .roster-head { display: none; }
     .actor { width: 50px; }
   }
+
+  /* ── Addressee chips ── */
+  .addr-chips {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    position: fixed; bottom: 68px; left: 50%; transform: translateX(-50%);
+    z-index: 6; padding: 6px 12px 6px 10px; border-radius: 22px;
+    background: rgba(10,15,23,0.72); border: 1px solid rgba(255,255,255,0.07);
+    backdrop-filter: blur(10px);
+    transition: opacity 0.2s ease, border-color 0.2s ease;
+  }
+  .addr-chips.ask-mode {
+    border-color: rgba(255,255,255,0.22);
+    animation: addr-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes addr-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.06); }
+    50%       { box-shadow: 0 0 0 5px rgba(255,255,255,0.00); }
+  }
+  .addr-prompt {
+    font-family: 'JetBrains Mono', monospace; font-size: 8px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-500); margin-right: 2px; white-space: nowrap;
+  }
+  .addr-chip {
+    font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 3px 10px; border-radius: 14px; border: 1px solid;
+    cursor: pointer; transition: opacity 0.15s, background 0.15s, transform 0.1s;
+    opacity: 0.55;
+  }
+  .addr-chip:hover { opacity: 0.85; transform: translateY(-1px); }
+  .addr-chip.selected { opacity: 1; }
+  /* per-speaker colours */
+  .addr-chip[data-sp="patient"]  { color:#e0a85f; border-color:rgba(224,168,95,0.4);  background:rgba(224,168,95,0.08); }
+  .addr-chip[data-sp="patient"].selected  { background:rgba(224,168,95,0.22); }
+  .addr-chip[data-sp="nurse"]    { color:var(--teal-glow); border-color:rgba(0,255,230,0.3); background:rgba(0,255,230,0.06); }
+  .addr-chip[data-sp="nurse"].selected    { background:rgba(0,255,230,0.16); }
+  .addr-chip[data-sp="ems"]      { color:#8ab4f0; border-color:rgba(138,180,240,0.35); background:rgba(138,180,240,0.07); }
+  .addr-chip[data-sp="ems"].selected      { background:rgba(138,180,240,0.20); }
+  .addr-chip[data-sp="family"]   { color:#e7b35a; border-color:rgba(231,179,90,0.35);  background:rgba(231,179,90,0.07); }
+  .addr-chip[data-sp="family"].selected   { background:rgba(231,179,90,0.20); }
+  .addr-chip[data-sp="consult"]  { color:#c08cf0; border-color:rgba(192,140,240,0.35); background:rgba(192,140,240,0.07); }
+  .addr-chip[data-sp="consult"].selected  { background:rgba(192,140,240,0.20); }
+  .addr-chip[data-sp="rt"]       { color:#6fd3c2; border-color:rgba(111,211,194,0.35); background:rgba(111,211,194,0.07); }
+  .addr-chip[data-sp="rt"].selected       { background:rgba(111,211,194,0.20); }
 </style>
 </head>
 <body>
@@ -761,6 +891,9 @@
   <span class="hb-sep"></span>
   <span class="hb-session" id="caseTag">Session <b>—</b></span>
   <span class="hb-sep"></span>
+  <button class="hb-btn ambience" id="ambienceBtn" title="Toggle ambient sound">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M9.5 2.5v11a.5.5 0 0 1-.8.4L4.7 10H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2.7l4-3.9a.5.5 0 0 1 .8.4zm2.6 1.6a.5.5 0 0 1 .7.1 7 7 0 0 1 0 7.6.5.5 0 1 1-.8-.6 6 6 0 0 0 0-6.4.5.5 0 0 1 .1-.7z"/></svg>
+  </button>
   <button class="hb-btn pause" id="pauseBtn" title="Park this case and resume later from home">⏸ Pause</button>
   <button class="hb-btn end" id="endCaseBtn" title="Conclude the case and see your debrief">End &amp; debrief</button>
 </div>
@@ -779,17 +912,17 @@
     </div>
   </div>
   <div class="vsep"></div>
-  <div class="vital">
+  <div class="vital" id="hrCell">
     <div class="v-label">HR</div>
     <div class="v-val" id="hr">110<span class="u">bpm</span></div>
     <div class="v-trend" id="hrTrend">sinus tachy</div>
   </div>
-  <div class="vital">
+  <div class="vital" id="bpCell">
     <div class="v-label">BP</div>
     <div class="v-val" id="bp">126/84<span class="u">mmHg</span></div>
     <div class="v-trend" id="bpTrend">MAP 98</div>
   </div>
-  <div class="vital">
+  <div class="vital" id="rrCell">
     <div class="v-label">RR</div>
     <div class="v-val" id="rr">30<span class="u">/min</span></div>
     <div class="v-trend" id="rrTrend">labored</div>
@@ -812,11 +945,22 @@
   </div>
 </div>
 
+<!-- Live caption bar (shown during TTS playback) -->
+<div class="caption-bar" id="captionBar" aria-live="polite">
+  <div class="cap-who" id="captionWho"></div>
+  <div class="cap-text" id="captionText"></div>
+</div>
+
 <!-- Push-to-talk -->
 <button class="talk" id="talkBtn" title="Tap to start hands-free listening (or press Space). Just speak — say “Nurse, …” for orders, anything else talks to the patient.">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="6" y="1.5" width="4" height="8.5" rx="2"/><path d="M3.5 7c0 2.6 2 4.5 4.5 4.5S12.5 9.6 12.5 7M8 11.5v3M5.5 14.5h5"/></svg>
   <span class="talk-label">Tap to start</span>
 </button>
+
+<!-- Addressee chips — tap to direct your next utterance to a specific actor -->
+<div class="addr-chips" id="addrChips" aria-label="Address your query to" hidden>
+  <span class="addr-prompt" id="addrPrompt">Address to:</span>
+</div>
 
 <!-- Voice-mode chooser (shown once, when the resident begins the case) -->
 <div class="modal-back" id="voiceModal">
@@ -916,13 +1060,28 @@
 <!-- End-of-case debrief -->
 <div class="debrief" id="debrief">
   <div class="db-card">
-    <div class="db-head">
-      <div class="db-kicker">Case debrief</div>
-      <div class="db-title" id="dbTitle"></div>
-      <div class="db-outcome" id="dbOutcome"></div>
+    <div class="db-head-row">
+      <div class="db-head-text">
+        <div class="db-kicker">Case debrief</div>
+        <div class="db-title" id="dbTitle"></div>
+        <div class="db-outcome" id="dbOutcome"></div>
+      </div>
+      <div class="db-donut" id="dbDonut">
+        <svg viewBox="0 0 76 76" fill="none">
+          <circle cx="38" cy="38" r="30" stroke="rgba(255,255,255,0.07)" stroke-width="7"/>
+          <circle id="dbDonutArc" cx="38" cy="38" r="30"
+            stroke="var(--teal-glow)" stroke-width="7"
+            stroke-linecap="round"
+            stroke-dasharray="188.5" stroke-dashoffset="188.5"
+            transform="rotate(-90 38 38)"
+            style="transition: stroke-dashoffset 1.1s cubic-bezier(.4,0,.2,1), stroke .6s ease"/>
+        </svg>
+        <div class="db-donut-num"><span id="dbScoreNum">0</span><span>score</span></div>
+      </div>
     </div>
     <div class="db-body" id="dbBody"></div>
     <div class="db-foot">
+      <button class="db-print" id="dbPrint">Print report</button>
       <button class="db-new" id="dbNew">Start new case</button>
       <button class="db-close" id="dbClose">Close</button>
     </div>
@@ -942,6 +1101,9 @@
     </div>
   </div>
 </div>
+
+<!-- State transition toast -->
+<div class="state-toast" id="stateToast"><span class="st-dot"></span><span id="stateToastLabel"></span></div>
 
 <script>
 (function () {
@@ -1240,6 +1402,7 @@
     });
     buildAddressIndex();
     buildRosterStrip();   // the top-centre presence avatars
+    buildAddresseeChips(); // addressee chip row below the talk button
   }
 
   // ---------- Actor roster / presence strip ----------
@@ -1316,10 +1479,64 @@
     head.innerHTML = '<span class="cnt">' + n + '</span> present' + (enr ? ' · ' + enr + ' en route' : '');
   }
 
+  // ---------- Addressee chips ----------
+  const addrChipsEl  = document.getElementById('addrChips');
+  const addrPromptEl = document.getElementById('addrPrompt');
+
+  function buildAddresseeChips(){
+    // Remove any previously built chips (keep the prompt span)
+    addrChipsEl.querySelectorAll('.addr-chip').forEach(c => c.remove());
+    if (!ROSTER.length){ addrChipsEl.hidden = true; return; }
+    ROSTER.forEach(r => {
+      const chip = document.createElement('button');
+      chip.className = 'addr-chip';
+      chip.dataset.actorId = r.id;
+      chip.dataset.sp = r.speaker;
+      chip.textContent = (r.role || r.id).replace(/\s*\(.*\)/, '').trim();
+      chip.addEventListener('click', () => onChipTap(r));
+      addrChipsEl.appendChild(chip);
+    });
+    addrChipsEl.hidden = false;
+  }
+
+  function onChipTap(actor){
+    // Toggle selection: tap again to deselect
+    const chip = addrChipsEl.querySelector(`.addr-chip[data-actor-id="${actor.id}"]`);
+    const wasSelected = chip && chip.classList.contains('selected');
+    addrChipsEl.querySelectorAll('.addr-chip').forEach(c => c.classList.remove('selected'));
+
+    if (wasSelected){
+      forcedAddressee = null;
+      leaveAskMode();
+      return;
+    }
+
+    chip && chip.classList.add('selected');
+    forcedAddressee = actor.id;
+
+    // Ask-back resubmit: pending transcript waiting for addressee selection
+    if (pendingTranscript){
+      const txt = pendingTranscript;
+      pendingTranscript = null;
+      leaveAskMode();
+      handleSaid(txt, actor.id);
+    }
+  }
+
+  function enterAskMode(){
+    addrChipsEl.classList.add('ask-mode');
+    addrPromptEl.textContent = 'Who for?';
+  }
+  function leaveAskMode(){
+    addrChipsEl.classList.remove('ask-mode');
+    addrPromptEl.textContent = 'Address to:';
+  }
+
   // Illuminate the avatar of whoever just spoke (driven by real turns, one at a
   // time). Resident lines don't light anyone — the resident isn't in the roster.
+  // hold=true: no auto-timeout — caller must call clearSpeaking() when audio ends.
   let speakTokenTimer = null, speakingId = null;
-  function speakRoster(speaker){
+  function speakRoster(speaker, hold){
     if (speaker === 'res') return;
     if (speakingId && actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
     // first present token of this speaker class (cases have one each; consults rare)
@@ -1328,10 +1545,17 @@
     speakingId = hit[0];
     hit[1].el.classList.add('speaking');
     clearTimeout(speakTokenTimer);
-    speakTokenTimer = setTimeout(() => {
-      if (actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
-      speakingId = null;
-    }, 2600);
+    if (!hold){
+      speakTokenTimer = setTimeout(() => {
+        if (actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
+        speakingId = null;
+      }, 2600);
+    }
+  }
+  function clearSpeaking(){
+    clearTimeout(speakTokenTimer);
+    if (speakingId && actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
+    speakingId = null;
   }
 
   // Promote any en-route actor whose arrival time the case clock has now reached.
@@ -1380,10 +1604,39 @@
   // ---------- live vitals (seeded from the loaded case) ----------
   const hrEl = document.getElementById('hr'), rrEl = document.getElementById('rr'),
         bpEl = document.getElementById('bp'), spo2El = document.getElementById('spo2'),
+        hrCell = document.getElementById('hrCell'), rrCell = document.getElementById('rrCell'),
+        bpCell = document.getElementById('bpCell'),
         spo2Cell = document.getElementById('spo2cell'), spo2Trend = document.getElementById('spo2Trend');
   // base values (overridden by the case on load)
   let baseHR = 110, baseRR = 30, baseSys = 126, baseDia = 84, spo2 = 92, arrest = false;
   function jitter(base, spread){ return Math.round(base + (Math.random()-0.5)*spread); }
+
+  // Audible monitor alarm — a short single beep, fires every 4s while any vital is in alarm.
+  let _alarmTimer = null;
+  function _beep(freq, vol, dur){
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator(), g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.type = 'sine'; osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      g.gain.setValueAtTime(vol, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + dur);
+      setTimeout(() => { try { ctx.close(); } catch(e){} }, (dur + 0.1) * 1000);
+    } catch(e){}
+  }
+  function tickAlarm(anyWarn, anyCrit){
+    if (!anyWarn && !anyCrit){ clearInterval(_alarmTimer); _alarmTimer = null; return; }
+    if (!_alarmTimer){
+      const beep = () => anyCrit ? (_beep(1047, 0.09, 0.18), setTimeout(() => _beep(1047, 0.07, 0.14), 220)) : _beep(880, 0.06, 0.22);
+      beep();
+      _alarmTimer = setInterval(() => {
+        const hasCrit = hrCell.classList.contains('critical') || spo2Cell.classList.contains('critical');
+        hasCrit ? (_beep(1047, 0.09, 0.18), setTimeout(() => _beep(1047, 0.07, 0.14), 220)) : _beep(880, 0.06, 0.22);
+      }, 4000);
+    }
+  }
+
   function renderVitals(){
     // In a pulseless arrest (PEA/asystole/VF) the perfusing vitals are absent —
     // show flatline dashes, not the last live numbers, so the monitor never lies.
@@ -1399,9 +1652,25 @@
     // Cosmetic monitor flicker only — the engine vitals (spo2) stay authoritative.
     const shown = Math.max(0, Math.min(100, spo2 + (Math.random() < 0.4 ? (Math.random() < 0.5 ? -1 : 1) : 0)));
     spo2El.innerHTML = `${shown}<span class="u">%</span>`;
-    const warn = arrest || spo2 < 94;
-    spo2Cell.classList.toggle('warn', warn);
-    spo2Trend.lastChild.textContent = arrest ? ' arrest' : (warn ? ' falling' : ' stable');
+
+    // Alarm thresholds: warn (amber) / critical (red).
+    const hrWarn = arrest || baseHR > 120 || baseHR < 50;
+    const hrCrit = arrest || baseHR > 150 || baseHR < 40;
+    const rrWarn = arrest || baseRR > 20 || baseRR < 8;
+    const bpWarn = arrest || baseSys < 90 || baseSys > 180;
+    const spo2Warn = arrest || spo2 < 94;
+    const spo2Crit = arrest || spo2 < 88;
+
+    hrCell.classList.toggle('critical', hrCrit);
+    hrCell.classList.toggle('warn', hrWarn && !hrCrit);
+    rrCell.classList.toggle('warn', rrWarn);
+    bpCell.classList.toggle('warn', bpWarn);
+    spo2Cell.classList.toggle('critical', spo2Crit);
+    spo2Cell.classList.toggle('warn', spo2Warn && !spo2Crit);
+
+    spo2Trend.lastChild.textContent = arrest ? ' arrest' : (spo2Crit ? ' critical' : spo2Warn ? ' falling' : ' stable');
+
+    tickAlarm(hrWarn || rrWarn || bpWarn || spo2Warn, hrCrit || spo2Crit);
   }
   setInterval(renderVitals, 2400);
 
@@ -1434,7 +1703,7 @@
     const rhythm = (v.rhythm || '').toLowerCase();
     arrest = /pea|asystole|arrest|pulseless|ventricular fib|vfib|v-fib/.test(rhythm)
              || (!v.heart_rate && (v.blood_pressure == null) && /pea|asystole/.test(rhythm));
-    if (v.heart_rate) baseHR = v.heart_rate;
+    if (v.heart_rate){ baseHR = v.heart_rate; _ambienceHR = v.heart_rate; }
     if (v.respiratory_rate) baseRR = v.respiratory_rate;
     if (typeof v.oxygen_saturation === 'number') spo2 = v.oxygen_saturation;
     if (typeof v.blood_pressure === 'string' && v.blood_pressure.includes('/')) {
@@ -1443,6 +1712,83 @@
     }
     updateAirwayChip(v);
     renderVitals();
+  }
+
+  // ── Ambient soundscape ────────────────────────────────────────────────────
+  // Pink noise (procedural, no assets) + HR-synced monitor beep, both routed
+  // through a shared gain node so the mute button is one knob.
+  let _ambienceGain = null;   // top-level gain — set to 0 to mute, 0.85 to restore
+  let _ambienceHR = 80;       // updated by applyVitals; drives beep period
+  let _beepTimer = null;
+  let _ambienceMuted = false;
+  const AMBIENCE_VOL = 0.85;  // master gain when unmuted
+
+  function _initAmbience(ctx){
+    if (_ambienceGain) return;  // already running
+    _ambienceGain = ctx.createGain();
+    _ambienceGain.gain.value = AMBIENCE_VOL;
+    _ambienceGain.connect(ctx.destination);
+
+    // Pink noise: Voss–McCartney algorithm via ScriptProcessor.
+    // Very subtle — below the voice level at all times.
+    const bufSz = 4096;
+    const noiseNode = ctx.createScriptProcessor(bufSz, 0, 1);
+    let b = [0, 0, 0, 0, 0, 0, 0];
+    noiseNode.onaudioprocess = (e) => {
+      const out = e.outputBuffer.getChannelData(0);
+      for (let i = 0; i < bufSz; i++){
+        const w = Math.random() * 2 - 1;
+        b[0] = 0.99886 * b[0] + w * 0.0555179;
+        b[1] = 0.99332 * b[1] + w * 0.0750759;
+        b[2] = 0.96900 * b[2] + w * 0.1538520;
+        b[3] = 0.86650 * b[3] + w * 0.3104856;
+        b[4] = 0.55000 * b[4] + w * 0.5329522;
+        b[5] = -0.7616 * b[5] - w * 0.0168980;
+        out[i] = (b[0]+b[1]+b[2]+b[3]+b[4]+b[5]+b[6]+w*0.5362) * 0.0065;
+        b[6] = w * 0.115926;
+      }
+    };
+    // Low-pass at ~900 Hz — retains the "room hum" without harsh highs
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 0.5;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0.28;
+    noiseNode.connect(lp);
+    lp.connect(noiseGain);
+    noiseGain.connect(_ambienceGain);
+
+    _scheduleBeep(ctx);
+  }
+
+  function _scheduleBeep(ctx){
+    if (!_ambienceGain || !ctx) return;
+    const hr = Math.max(20, Math.min(300, _ambienceHR || 80));
+    const period = (60 / hr) * 1000;  // ms between beeps
+    _beepTimer = setTimeout(() => {
+      if (!_ambienceGain) return;
+      try {
+        const osc = ctx.createOscillator();
+        const env = ctx.createGain();
+        osc.type = 'sine'; osc.frequency.value = 880;
+        env.gain.setValueAtTime(0, ctx.currentTime);
+        env.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.004);
+        env.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+        osc.connect(env); env.connect(_ambienceGain);
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.07);
+      } catch(e){}
+      _scheduleBeep(ctx);
+    }, period);
+  }
+
+  function _toggleAmbience(){
+    _ambienceMuted = !_ambienceMuted;
+    const btn = document.getElementById('ambienceBtn');
+    if (_ambienceGain){
+      _ambienceGain.gain.setTargetAtTime(
+        _ambienceMuted ? 0 : AMBIENCE_VOL, audioCtx.currentTime, 0.05
+      );
+    }
+    if (btn) btn.classList.toggle('muted', _ambienceMuted);
   }
 
   // ---------- diagnostics drawer (four functional panes) ----------
@@ -1645,16 +1991,57 @@
   // ---------- end-of-case debrief ----------
   const debrief = document.getElementById('debrief');
   const dbTitle = document.getElementById('dbTitle'), dbOutcome = document.getElementById('dbOutcome'), dbBody = document.getElementById('dbBody');
+  const dbDonut = document.getElementById('dbDonut'), dbDonutArc = document.getElementById('dbDonutArc'), dbScoreNum = document.getElementById('dbScoreNum');
   let pendingEnd = false, debriefShown = false;
+  let pendingTranscript = null;   // stored after a Director ask-back for chip-tap resubmit
+  let forcedAddressee = null;     // set by addressee chip tap; consumed on next utterance
+  let _coachNote = '';
+
+  function _renderTimeline(path){
+    if (!path || !path.length) return '';
+    const SHOW = 5;
+    const items = path.map((name, i) =>
+      `<div class="db-tl-item">
+        <div class="db-tl-spine"><div class="db-tl-dot"></div><div class="db-tl-line"></div></div>
+        <div class="db-tl-label"><b>Step ${i + 1}</b>${escapeHtml(name)}</div>
+      </div>`
+    );
+    const hidden = items.length > SHOW;
+    const visibleHtml = items.slice(0, hidden ? SHOW : undefined).join('');
+    const hiddenHtml = hidden
+      ? `<div class="db-tl-hidden" style="display:none">${items.slice(SHOW).join('')}</div>
+         <div class="db-tl-more" onclick="this.previousElementSibling.style.display=''; this.remove()">
+           + ${items.length - SHOW} more states
+         </div>`
+      : '';
+    return `<div class="db-timeline">${visibleHtml}${hiddenHtml}</div>`;
+  }
 
   function showDebrief(d){
     const s = d.summary || {}, t = d.teaching || {};
     dbTitle.textContent = d.case_title || 'Case complete';
     dbOutcome.textContent = s.ended ? s.outcome : ('Ended early — ' + (s.outcome || ''));
     dbOutcome.className = 'db-outcome' + (!s.ended ? ' early' : ((s.critical_errors || []).length ? ' bad' : ''));
-    const sec = (h, inner) => inner ? `<div><div class="db-sec-h">${h}</div>${inner}</div>` : '';
+
+    // Score donut
+    const score = typeof d.overall_score === 'number' ? d.overall_score : null;
+    if (score !== null){
+      const circ = 188.5;
+      dbDonutArc.setAttribute('stroke-dashoffset', String(circ * (1 - score / 100)));
+      dbDonutArc.setAttribute('stroke', score >= 70 ? 'var(--teal-glow)' : score >= 40 ? 'var(--amber)' : '#e06c5f');
+      dbScoreNum.textContent = score;
+      dbDonut.classList.add('visible');
+    } else {
+      dbDonut.classList.remove('visible');
+    }
+
+    _coachNote = d.coaching_note || '';
+    const sec = (h, inner, extraHead) => inner
+      ? `<div><div class="db-sec-h">${escapeHtml(h)}${extraHead || ''}</div>${inner}</div>`
+      : '';
     const chips = arr => (arr && arr.length) ? arr.map(x => `<span class="db-chip">${escapeHtml(x)}</span>`).join('') : '<span class="db-chip none">none</span>';
     const list = (arr, cls) => (arr && arr.length) ? `<ul class="db-list ${cls || ''}">${arr.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : '';
+
     let html = '';
     const assess = d.assessment || [];
     if (assess.length){
@@ -1665,8 +2052,20 @@
       ).join('');
       html += sec('Assessment', `<div class="db-crits">${rows}</div>`);
     }
-    if (d.coaching_note) html += sec('Coaching', `<div class="db-coach">${escapeHtml(d.coaching_note)}</div>`);
-    html += sec('Your run', `<div class="db-stats"><span class="db-stat">Time <b>${escapeHtml(s.elapsed_label || '—')}</b></span><span class="db-stat">Path <b>${(s.states_path || []).length} states</b></span></div>`);
+    if (_coachNote){
+      const playBtn = `<button class="db-coach-play" id="dbCoachPlay" title="Read aloud">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg>
+      </button>`;
+      html += sec('Coaching', `<div class="db-coach-wrap"><div class="db-coach">${escapeHtml(_coachNote)}</div></div>`, playBtn);
+    }
+    html += sec('Your run',
+      `<div class="db-stats">
+        <span class="db-stat">Time <b>${escapeHtml(s.elapsed_label || '—')}</b></span>
+        <span class="db-stat">Path <b>${(s.states_path || []).length} states</b></span>
+        ${score !== null ? `<span class="db-stat">Score <b>${score}/100</b></span>` : ''}
+      </div>`);
+    const path = s.states_path || [];
+    if (path.length) html += sec('Timeline', _renderTimeline(path));
     html += sec('Examined', `<div class="db-chips">${chips(s.exams)}</div>`);
     html += sec('Investigations', `<div class="db-chips">${chips(s.investigations)}</div>`);
     html += sec('Consults', `<div class="db-chips">${chips(s.consults)}</div>`);
@@ -1676,6 +2075,24 @@
     if ((t.references || []).length) html += sec('References', `<div class="db-refs">${t.references.map(escapeHtml).join('<br>')}</div>`);
     dbBody.innerHTML = html;
     debrief.classList.add('open');
+
+    // Coaching read-aloud button
+    const playBtn = document.getElementById('dbCoachPlay');
+    if (playBtn){
+      playBtn.addEventListener('click', async () => {
+        if (playBtn.classList.contains('playing')){
+          stopAudio();
+          playBtn.classList.remove('playing');
+          playBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg>';
+          return;
+        }
+        playBtn.classList.add('playing');
+        playBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1"/><rect x="9" y="2" width="4" height="12" rx="1"/></svg>';
+        try { await playTTS(_coachNote, 'nurse'); } catch(e){}
+        playBtn.classList.remove('playing');
+        playBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg>';
+      });
+    }
   }
 
   async function concludeCase(){
@@ -1692,6 +2109,7 @@
       NURSE_CH.root.classList.remove('collapsed');
     }
   }
+  document.getElementById('ambienceBtn').addEventListener('click', _toggleAmbience);
   document.getElementById('endCaseBtn').addEventListener('click', () => {
     if (debriefShown) return;
     if (confirm('Conclude the case and see your debrief?')) concludeCase();
@@ -1717,6 +2135,7 @@
   document.getElementById('pmHome').addEventListener('click', () => { location.href = '/home'; });
   document.getElementById('dbNew').addEventListener('click', () => { location.href = '/simulator'; });
   document.getElementById('dbClose').addEventListener('click', () => debrief.classList.remove('open'));
+  document.getElementById('dbPrint').addEventListener('click', () => window.print());
 
   // ---------- click-to-order panels (the case's own menu, docked per tab) ----------
   // Every control here mirrors a voice command: it routes through the same engine,
@@ -1941,7 +2360,9 @@
       if (d.vitals) applyVitals(d.vitals);                // the monitor reacts to deterioration
       if (m.text){
         setNow(NURSE_CH, m.text);
-        stageLabel.textContent = d.critical ? ('⚠ ' + m.text) : (m.data && m.data.state_name) || stageLabel.textContent;
+        const stateName = (m.data && m.data.state_name) || '';
+        stageLabel.textContent = d.critical ? ('⚠ ' + m.text) : stateName || stageLabel.textContent;
+        showStateToast(stateName || m.text, !!d.critical);
       }
       return;
     }
@@ -1949,6 +2370,22 @@
       if (!debriefShown) concludeCase();
       return;
     }
+  }
+
+  // ---------- state transition toast ----------
+  const stateToast = document.getElementById('stateToast');
+  const stateToastLabel = document.getElementById('stateToastLabel');
+  let _toastTimer = null;
+  function showStateToast(label, isCritical){
+    if (!label) return;
+    stateToastLabel.textContent = label;
+    stateToast.className = 'state-toast' + (isCritical ? ' critical' : '');
+    stateToast.classList.add('visible');
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => {
+      stateToast.classList.remove('visible');
+      _toastTimer = null;
+    }, 2800);
   }
 
   // ---------- start the live engine-backed session ----------
@@ -2016,6 +2453,7 @@
   let capturing = false;     // recording the current utterance
   let processing = false;    // STT/LLM in flight (no audio yet)
   let curAudio = null, playResolve = null;          // playing TTS reply (for barge-in)
+  let curAbortCtrl = null, curPCMGain = null;       // streaming PCM path: fetch abort + gain node
   let voiced = false, voiceStart = 0, silenceAt = 0;
   let vadGate = false;       // mute the VAD while a reply is speaking (half-duplex, kills self-capture)
   let recentSpoken = [];     // last few things we spoke — to drop echo that leaks past the gate
@@ -2096,7 +2534,8 @@
   }
 
   async function stt(blob){
-    const res = await fetch('/api/voice/stt', { method:'POST', headers:{ 'Content-Type': blob.type }, body: blob });
+    const url = SESSION_ID ? `/api/voice/stt?session_id=${encodeURIComponent(SESSION_ID)}` : '/api/voice/stt';
+    const res = await fetch(url, { method:'POST', headers:{ 'Content-Type': blob.type }, body: blob });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || 'transcription failed');
     return (data.text || '').trim();
@@ -2144,37 +2583,144 @@
     return { toStaff: false, speaker: 'patient', text: said };
   }
 
+  // ---------- caption bar ----------
+  const captionBar = document.getElementById('captionBar');
+  const captionWho = document.getElementById('captionWho');
+  const captionText = document.getElementById('captionText');
+  const CAP_WHO_LABELS = { nurse:'RN Nurse', patient:'Patient', ems:'EMS', family:'Family', rt:'RT', consult:'Consultant' };
+  function showCaption(text, speaker){
+    if (!captionBar) return;
+    captionWho.textContent = CAP_WHO_LABELS[speaker] || speaker;
+    captionWho.style.color = { nurse:'var(--teal-glow)', patient:'#e0a85f', ems:'#8ab4f0', family:'#e7b35a', rt:'#6fd3c2', consult:'#c08cf0' }[speaker] || 'var(--ink-400)';
+    captionText.textContent = text;
+    captionBar.classList.add('visible');
+  }
+  function hideCaption(){
+    if (captionBar) captionBar.classList.remove('visible');
+  }
+
   function stopAudio(){ // halt any playing reply (barge-in / stop) and release the await
+    clearSpeaking();
+    hideCaption();
     if (curAudio){ try { curAudio.pause(); } catch(e){} curAudio = null; }
+    if (curAbortCtrl){ curAbortCtrl.abort(); curAbortCtrl = null; }
+    if (curPCMGain && audioCtx){ try { curPCMGain.gain.setValueAtTime(0, audioCtx.currentTime); } catch(e){} curPCMGain = null; }
     if (window.speechSynthesis){ try { speechSynthesis.cancel(); } catch(e){} }
     if (playResolve){ const r = playResolve; playResolve = null; r(); }
   }
-  async function playTTS(text, speaker){
+  async function playTTS(text, speaker, stabilityOverride){
     selectState('responding');
     rememberSpoken(text);
     if (VOICE_BACKEND === 'native') return speakNative(text, speaker);
-    gateVad(true);                          // mute the mic for the whole reply
+    gateVad(true);
+    speakRoster(speaker, true);
+    showCaption(text, speaker);
+    const body = { text, speaker };
+    if (stabilityOverride != null) body.stability = stabilityOverride;
+    const abortCtrl = new AbortController();
+    curAbortCtrl = abortCtrl;
     try {
-      const res = await fetch('/api/voice/tts', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ text, speaker }) });
-      if (!res.ok) throw new Error('synthesis failed');
-      const url = URL.createObjectURL(await res.blob());
-      const audio = new Audio(url); curAudio = audio;
-      await new Promise(resolve => {
-        playResolve = resolve;
-        const done = () => { URL.revokeObjectURL(url); if (curAudio===audio) curAudio=null; if (playResolve){ playResolve=null; resolve(); } };
-        audio.onended = done; audio.onerror = done;
-        audio.play().catch(done);
+      const res = await fetch('/api/voice/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), signal: abortCtrl.signal,
       });
+      if (!res.ok) throw new Error('synthesis failed');
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('audio/pcm')) {
+        await _playPCMStream(res);
+      } else {
+        // MP3 blob path (Together fallback)
+        const url = URL.createObjectURL(await res.blob());
+        const audio = new Audio(url); curAudio = audio;
+        await new Promise(resolve => {
+          playResolve = resolve;
+          const done = () => { clearSpeaking(); hideCaption(); URL.revokeObjectURL(url); if (curAudio===audio) curAudio=null; if (playResolve){ playResolve=null; resolve(); } };
+          audio.onended = done; audio.onerror = done;
+          audio.play().catch(done);
+        });
+      }
+    } catch(e) {
+      if (e.name !== 'AbortError') throw e;
     } finally {
-      setTimeout(() => gateVad(false), GATE_TAIL_MS);   // reopen the floor after the room rings out
+      curAbortCtrl = null;
+      clearSpeaking();
+      hideCaption();
+      setTimeout(() => gateVad(false), GATE_TAIL_MS);
     }
+  }
+
+  // Play a server-sent PCM-16000 stream (16-bit signed LE mono) via Web Audio API.
+  // Chunks are scheduled on the AudioContext timeline as they arrive, so audio
+  // starts after the first ~4 KB chunk (~128 ms of audio) rather than the full file.
+  async function _playPCMStream(res){
+    const SAMPLE_RATE = 16000;
+    const ctx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx = ctx;
+    if (ctx.state === 'suspended') await ctx.resume();
+
+    const masterGain = ctx.createGain();
+    masterGain.connect(ctx.destination);
+    curPCMGain = masterGain;
+
+    const reader = res.body.getReader();
+    let nextTime = ctx.currentTime + 0.06;   // 60 ms startup gap so first chunk doesn't clip
+    let leftover = new Uint8Array(0);
+    let lastSrc = null;
+
+    await new Promise(async (resolve) => {
+      playResolve = resolve;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value || !value.length) continue;
+
+          // Merge leftover bytes from the previous iteration (PCM needs even byte count)
+          const full = new Uint8Array(leftover.length + value.length);
+          full.set(leftover); full.set(value, leftover.length);
+          const numSamples = Math.floor(full.length / 2);
+          const evenLen = numSamples * 2;
+          leftover = full.slice(evenLen);
+          if (numSamples === 0) continue;
+
+          // Int16 little-endian → Float32 [-1, 1]
+          const view = new DataView(full.buffer, full.byteOffset, evenLen);
+          const f32 = new Float32Array(numSamples);
+          for (let i = 0; i < numSamples; i++) f32[i] = view.getInt16(i * 2, true) / 32768.0;
+
+          const buf = ctx.createBuffer(1, numSamples, SAMPLE_RATE);
+          buf.getChannelData(0).set(f32);
+
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(masterGain);
+          if (nextTime < ctx.currentTime + 0.01) nextTime = ctx.currentTime + 0.01;
+          src.start(nextTime);
+          nextTime += buf.duration;
+          lastSrc = src;
+        }
+      } catch(e) {
+        if (e.name !== 'AbortError') console.warn('[pcm stream]', e);
+      }
+      if (lastSrc) {
+        // Safety timeout resolves if onended never fires (e.g. browser suspend)
+        const safetyMs = Math.max(0, (nextTime - ctx.currentTime)) * 1000 + 500;
+        const tOut = setTimeout(() => { if (playResolve){ playResolve = null; resolve(); } }, safetyMs);
+        lastSrc.onended = () => { clearTimeout(tOut); if (playResolve){ playResolve = null; resolve(); } };
+      } else {
+        if (playResolve){ playResolve = null; resolve(); }
+      }
+    });
+    curPCMGain = null;
   }
   // Native speech synthesis (zero-cost mode). Distinct voice + pitch per speaker.
   function speakNative(text, speaker){
+    speakRoster(speaker, true);
+    showCaption(text, speaker);
     return new Promise(resolve => {
-      if (!window.speechSynthesis){ resolve(); return; }
+      if (!window.speechSynthesis){ clearSpeaking(); hideCaption(); resolve(); return; }
       playResolve = resolve;
-      const fin = () => { if (playResolve){ playResolve = null; resolve(); } };
+      const fin = () => { clearSpeaking(); hideCaption(); if (playResolve){ playResolve = null; resolve(); } };
       try {
         speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
@@ -2253,38 +2799,65 @@
   }
 
   // Shared by both backends: a recognised utterance → routed, grounded, spoken reply.
-  async function handleSaid(said){
+  async function handleSaid(said, _forcedAddr){
     if (looksLikeEcho(said)){                 // our own TTS bled into the mic — ignore it
       processing = false;
       if (!capturing) setMic(listening ? 'listen' : 'off');
       selectState(listening ? 'listening' : 'idle');
       return;
     }
+    // Resolve forced addressee: explicit param wins over the chip state variable.
+    const effectiveAddr = _forcedAddr || forcedAddressee || null;
+    // Consume the chip selection so it doesn't bleed into subsequent turns.
+    forcedAddressee = null;
+    addrChipsEl.querySelectorAll('.addr-chip').forEach(c => c.classList.remove('selected'));
+    leaveAskMode();
+
     try {
-      const route = detectAddressee(said);
+      // Determine routing: chip/forced addressee overrides the keyword detector.
+      let route;
+      if (effectiveAddr){
+        const actor = ROSTER.find(r => r.id === effectiveAddr);
+        const isPatient = actor && actor.speaker === 'patient';
+        route = { toStaff: !isPatient, speaker: actor?.speaker || 'nurse',
+                  text: said, forcedAddr: effectiveAddr };
+      } else {
+        route = detectAddressee(said);
+      }
       addTurn(ROOM, 'res', said);
 
-      let reply = '', speaker = route.speaker, lastTurnData = null;
+      let reply = '', speaker = route.speaker, lastTurnData = null, patientStability = null;
       if (route.toStaff){
-        const data = await postJSON('/api/voice/llm', { session_id: SESSION_ID, text: route.text });
+        const body = { session_id: SESSION_ID, text: said };
+        if (route.forcedAddr) body.forced_addressee = route.forcedAddr;
+        const data = await postJSON('/api/voice/llm', body);
         lastTurnData = data;
         reply = (data.reply || '').trim();
-        speaker = data.speaker || 'nurse';   // the server decides who answers (nurse/consult/family/ems/rt)
+        speaker = data.speaker || 'nurse';
         addTurn(ROOM, speaker, reply);
         applyEngine(data);
+
+        // Director ask-back: store the utterance and illuminate the chips.
+        if (data.needs_addressee){
+          pendingTranscript = said;
+          enterAskMode();
+        }
       } else {
         speaker = 'patient';
-        const data = await postJSON('/api/voice/llm-patient', { session_id: SESSION_ID, text: said });
+        const body = { session_id: SESSION_ID, text: said };
+        if (route.forcedAddr) body.forced_addressee = route.forcedAddr;
+        const data = await postJSON('/api/voice/llm-patient', body);
         reply = (data.reply || '').trim();
+        patientStability = data.affect_stability ?? null;
         addTurn(ROOM, 'patient', reply);
       }
 
       processing = false;
       if (!capturing) setMic(listening ? 'listen' : 'off');
-      if (reply) await playTTS(reply, speaker);
-      if (route.toStaff) await deliverCues(lastTurnData);   // room nudges after the reply
+      if (reply) await playTTS(reply, speaker, speaker === 'patient' ? patientStability : null);
+      if (route.toStaff) await deliverCues(lastTurnData);
       setNow(ROOM, route.toStaff ? 'listening for your next order…' : 'listening…');
-      if (pendingEnd){ pendingEnd = false; concludeCase(); }   // terminal state → debrief
+      if (pendingEnd){ pendingEnd = false; concludeCase(); }
     } catch(e){
       setNow(ROOM, (e && e.message) ? e.message : 'something went wrong');
       ROOM.root.classList.remove('collapsed');
@@ -2315,6 +2888,7 @@
     } catch(e){ setNow(NURSE_CH, 'microphone permission needed'); NURSE_CH.root.classList.remove('collapsed'); return; }
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') await audioCtx.resume();
+    _initAmbience(audioCtx);
     if (!analyser){
       analyser = audioCtx.createAnalyser(); analyser.fftSize = 512;
       micSource = audioCtx.createMediaStreamSource(stream);

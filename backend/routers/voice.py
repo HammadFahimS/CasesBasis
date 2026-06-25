@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -148,6 +149,7 @@ def _turn_payload(turn: Any) -> dict[str, Any]:
         "diagnostic": turn.diagnostic,
         "working_dx": getattr(turn, "working_dx", None),
         "cues": getattr(turn, "cues", []),
+        "needs_addressee": getattr(turn, "needs_addressee", False),
     }
 
 
@@ -241,21 +243,65 @@ async def ws_voice(websocket: WebSocket, session_id: str) -> None:
         bus.unsubscribe(session_id, queue)
 
 
+def _stt_prompt(case: Any) -> str:
+    """Build a Whisper prompt from the case's vocabulary.
+
+    Whisper uses this as a prior over its next token distribution — passing
+    clinical terms (drug names, test names, actor roles) cuts transcription
+    errors on low-frequency medical vocabulary."""
+    terms: list[str] = []
+    if getattr(getattr(case, "meta", None), "title", None):
+        terms.append(case.meta.title)
+    for a in getattr(case, "actors", []):
+        if getattr(a, "role", None):
+            terms.append(a.role)
+    for i in getattr(case, "investigations", []):
+        name = (getattr(i, "name", None) or "").split("(")[0].strip()
+        if name:
+            terms.append(name)
+    for h in getattr(case, "history", []):
+        # Pull hint text words ≥6 chars — likely to be clinical terms
+        for w in (getattr(h, "hint", None) or "").split():
+            if len(w) >= 6:
+                terms.append(w)
+    seen: set[str] = set()
+    unique = [t for t in terms if t not in seen and not seen.add(t)]  # type: ignore[func-returns-value]
+    return ", ".join(unique)[:500]
+
+
 @router.post("/api/voice/stt")
 @limiter.limit("60/minute")
 async def api_voice_stt(request: Request) -> dict[str, Any]:
-    """Speech-to-text. The browser POSTs the raw recorded audio as the body."""
-    require_resident(request)
+    """Speech-to-text. The browser POSTs the raw recorded audio as the body.
+
+    Accepts an optional ``?session_id=`` query parameter — when present, pulls
+    the case's drug/test/actor vocabulary and passes it to Whisper as a prompt
+    so clinical terms are recognised more accurately."""
+    resident_id = require_resident(request)
     audio = await request.body()
     if not audio:
         raise HTTPException(status_code=400, detail="empty audio")
     content_type = request.headers.get("content-type", "audio/webm")
+
+    prompt: str | None = None
+    session_id = request.query_params.get("session_id", "").strip()
+    if session_id:
+        try:
+            from backend.voice_session import get_session
+            session = get_session(session_id, resident_id)
+            prompt = _stt_prompt(session.case) or None
+        except Exception:
+            pass  # best-effort — a missing session never breaks STT
+
     from backend.voice_service import transcribe
+    t0 = time.perf_counter()
     try:
-        text = transcribe(audio, content_type)
+        text = transcribe(audio, content_type, prompt=prompt)
     except Exception as exc:
         logging.getLogger(__name__).warning("STT failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"transcription failed: {exc}")
+    logger.info("[LATENCY] stt=%.0fms bytes=%d prompt=%s",
+                (time.perf_counter() - t0) * 1000, len(audio), bool(prompt))
     return {"text": text}
 
 
@@ -289,11 +335,15 @@ def api_voice_llm(body: dict[str, Any], request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="session not found")
     except AccessDenied:
         raise HTTPException(status_code=403, detail="access denied")
+    forced_addressee = (body.get("forced_addressee") or "").strip() or None
+    t0 = time.perf_counter()
     try:
-        turn = run_turn(session, text)
+        turn = run_turn(session, text, forced_addressee=forced_addressee)
     except Exception as exc:
         logging.getLogger(__name__).warning("nurse turn failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"nurse reply failed: {exc}")
+    llm_ms = (time.perf_counter() - t0) * 1000
+    logger.info("[LATENCY] session=%s llm=%.0fms op=%s", session_id[:8], llm_ms, turn.intent.op)
     _persist_turn(session, turn)
     return _turn_payload(turn)
 
@@ -333,7 +383,12 @@ def api_voice_action(body: dict[str, Any], request: Request) -> dict[str, Any]:
 @router.post("/api/voice/llm-patient")
 @limiter.limit("60/minute")
 def api_voice_patient(body: dict[str, Any], request: Request) -> dict[str, Any]:
-    """The patient's in-character spoken reply (role-play, not engine-grounded)."""
+    """The patient's spoken reply: grounded for history beats, free roleplay otherwise.
+
+    When the utterance maps to a patient-held history beat, routes through the
+    engine (grounding the reveal and tracking it in run.revealed_history) and
+    returns the full turn payload. For conversational exchanges that don't map to
+    an authored beat, falls through to free-roleplay patient_reply."""
     resident_id = require_resident(request)
     text = (body.get("text") or "").strip()
     if not text:
@@ -341,7 +396,6 @@ def api_voice_patient(body: dict[str, Any], request: Request) -> dict[str, Any]:
     session_id = (body.get("session_id") or "").strip()
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
-    from backend.patient_voice import patient_reply
     from backend.voice_session import AccessDenied, CaseNotFound, get_session
     try:
         session = get_session(session_id, resident_id)
@@ -349,14 +403,29 @@ def api_voice_patient(body: dict[str, Any], request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="session not found")
     except AccessDenied:
         raise HTTPException(status_code=403, detail="access denied")
+    # Grounded path: if the utterance maps to a patient history beat, use the engine
     try:
+        from backend.nurse_brain import run_patient_turn
+        turn = run_patient_turn(session, text)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("patient grounded turn failed: %s", exc)
+        turn = None
+    if turn is not None:
+        _persist_turn(session, turn)
+        payload = _turn_payload(turn)
+        from backend.patient_voice import _affect_stability
+        payload["affect_stability"] = _affect_stability(session.engine)
+        return payload
+    # Free-roleplay fallback for conversational exchanges
+    try:
+        from backend.patient_voice import _affect_stability, patient_reply
         reply = patient_reply(session, text)
     except Exception as exc:
         logging.getLogger(__name__).warning("patient reply failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"patient reply failed: {exc}")
     from backend.voice_session import persist_session
-    persist_session(session)  # the patient exchange is part of the resumable transcript
-    return {"reply": reply, "speaker": "patient"}
+    persist_session(session)
+    return {"reply": reply, "speaker": "patient", "affect_stability": _affect_stability(session.engine)}
 
 
 @router.post("/api/voice/debrief")
@@ -470,24 +539,57 @@ def api_voice_session_delete(session_id: str, request: Request) -> dict[str, Any
 
 @router.post("/api/voice/tts")
 @limiter.limit("60/minute")
-def api_voice_tts(body: dict[str, Any], request: Request) -> Response:
-    """Text-to-speech. Returns audio bytes (mp3) for the browser to play.
+def api_voice_tts(body: dict[str, Any], request: Request):
+    """Text-to-speech.
 
-    ``speaker`` selects the voice (nurse default vs patient); an explicit
-    ``voice`` still wins for auditioning."""
+    When ElevenLabs is configured, streams PCM-16000 (``audio/pcm``) so the
+    browser can start playing after the first chunk (~75 ms).  Falls back to a
+    blocking Together/Cartesia MP3 response (``audio/mpeg``) when ElevenLabs is
+    absent.  ``speaker`` selects the voice; an explicit ``voice`` wins."""
     require_resident(request)
     text = (body.get("text") or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="empty text")
     voice = body.get("voice")
     if not voice:
-        voice = _speaker_voice(body.get("speaker"))  # None → nurse default in voice_service
-    from backend.voice_service import synthesize
+        voice = _speaker_voice(body.get("speaker"))
+    raw_stab = body.get("stability")
+    stability_override: float | None = None
+    if raw_stab is not None:
+        try:
+            stability_override = float(raw_stab)
+        except (TypeError, ValueError):
+            pass
+
+    from backend.voice_service import synthesize_stream
+    from fastapi.responses import StreamingResponse
+
+    speaker_label = body.get("speaker") or "nurse"
+    t0 = time.perf_counter()
+    media_type, chunks = synthesize_stream(text, voice, stability_override=stability_override)
+
+    if media_type == "audio/pcm":
+        def _pcm_gen():
+            first = True
+            try:
+                for chunk in chunks:
+                    if first:
+                        first = False
+                        logger.info("[LATENCY] tts_first=%.0fms chars=%d speaker=%s",
+                                    (time.perf_counter() - t0) * 1000, len(text), speaker_label)
+                    yield chunk
+            except Exception as exc:
+                logger.warning("ElevenLabs stream TTS error mid-stream: %s", exc)
+        return StreamingResponse(_pcm_gen(), media_type="audio/pcm")
+
+    # Together / Cartesia path — consume synchronously so errors become 502
     try:
-        audio = synthesize(text, voice)
+        audio = b"".join(chunks)
     except Exception as exc:
         logging.getLogger(__name__).warning("TTS failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"synthesis failed: {exc}")
+    logger.info("[LATENCY] tts=%.0fms chars=%d speaker=%s",
+                (time.perf_counter() - t0) * 1000, len(text), speaker_label)
     return Response(content=audio, media_type="audio/mpeg")
 
 

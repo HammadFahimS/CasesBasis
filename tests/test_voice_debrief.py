@@ -45,7 +45,7 @@ def test_result_reads_surfaces_hidden_interpretation_for_ordered_tests():
         {"kind": "report", "id": "vbg", "title": "Venous blood gas", "category": "lab", "summary": ""},
     ]
     reads = voice_debrief._result_reads(s)
-    assert {"test": "Venous blood gas", "read": "Early hypercapnic (type-2) respiratory failure from neuromuscular fatigue."} in reads
+    assert {"test": "Venous blood gas", "read": "Hypercapnic (type-2) respiratory failure from neuromuscular fatigue. The elevated pCO2 and low-normal pH confirm ventilatory failure."} in reads
     # a test that was NOT ordered must not leak its read
     assert all(r["test"] != "CT chest (with contrast)" for r in reads)
 

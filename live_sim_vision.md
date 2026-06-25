@@ -268,6 +268,15 @@ predate recent routing work), then fix:
 
 **Phase 2 — Director + emotional engine (generalize).**
 - Extract the **Director** module (routing + cues + emotional-state computation) from `nurse_brain`.
+  - **Uncertainty ask-back:** When the Director cannot confidently resolve the addressee from
+    context, it asks the resident back: "Whom is this query for?" (short spoken prompt via the nurse
+    voice, plus a brief UI disambiguation chip row). This prevents silent mis-routes during the
+    early-Director window before chips exist.
+- **Addressee affordances + multi-actor routing.** The Director owns "who speaks this turn?" with
+  full context (last speaker, patient state, actor availability). Add quick-tap addressee chips
+  ("Patient · Nurse · EMS · Husband · Neuro") to the UI so the resident can target an actor without
+  voicing a vocative — the chip sets the forced addressee the Director reads. Shelf the routing-logic
+  change until the Director exists; the chips are a Phase 2 frontend complement to it.
 - Scribe **STT** (realtime + keyterm prompting on case drug/test names).
 - Streaming TTS + **barge-in**.
 - Ambient soundscape, state-transition polish, debrief-as-report.

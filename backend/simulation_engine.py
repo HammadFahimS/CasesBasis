@@ -21,7 +21,7 @@ simulator.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
-from typing import Callable, Literal
+from typing import Callable, ClassVar, Literal
 
 from schemas.simulated_case import (
     InvestigationDef,
@@ -344,13 +344,47 @@ class SimulationEngine:
         return StepResult(state_id=self.run.current_state_id, state_name=self.state.name, **kwargs)
 
     # --------------------------------------------------------------- persistence #
+    SNAPSHOT_VERSION = 1
+
+    # Migration registry: keys are the *from* version (int); values are callables
+    # that accept the raw run dict and return the transformed dict.
+    #
+    # HOW TO ADD A MIGRATION:
+    #   1. Add  _MIGRATIONS[N] = lambda r: {**r, "new_field": default, ...}
+    #   2. Bump SNAPSHOT_VERSION to N + 1
+    #
+    # Migrations run in ascending key order, so v0→v2 automatically chains
+    # v0→v1→v2.  The filter after migration keeps only known RunState fields, so
+    # a migration can be additive without risking unknown-field errors.
+    _MIGRATIONS: ClassVar[dict[int, Callable[[dict], dict]]] = {}
+
     def snapshot(self) -> dict[str, object]:
-        return {"case_id": self.case.id, "run": self.run.__dict__}
+        return {"snapshot_version": self.SNAPSHOT_VERSION, "case_id": self.case.id, "run": self.run.__dict__}
+
+    @classmethod
+    def _apply_migrations(cls, run: dict, from_v: int) -> dict:
+        """Chain migrations from ``from_v`` up to (but not including) SNAPSHOT_VERSION."""
+        for ver in sorted(k for k in cls._MIGRATIONS if from_v <= k < cls.SNAPSHOT_VERSION):
+            run = cls._MIGRATIONS[ver](run)
+        return run
 
     def restore(self, snapshot: dict[str, object]) -> None:
         # Tolerate snapshots written by an older/newer RunState shape: keep only
         # fields this version knows, so a renamed/dropped field can't 500 every
         # parked resume. Missing fields fall back to their dataclass defaults.
-        run = snapshot.get("run") or {}
+        import logging as _logging
+        _log = _logging.getLogger(__name__)
+        v = snapshot.get("snapshot_version")
+        from_v: int
+        if v is None:
+            _log.warning("restoring unversioned snapshot; treating as v0")
+            from_v = 0
+        else:
+            from_v = int(v)
+            if from_v != self.SNAPSHOT_VERSION:
+                _log.warning("snapshot version %s != engine version %s; migrating",
+                             from_v, self.SNAPSHOT_VERSION)
+        run = dict(snapshot.get("run") or {})
+        run = self._apply_migrations(run, from_v)
         known = {f.name for f in fields(RunState)}
-        self.run = RunState(**{k: v for k, v in run.items() if k in known})  # type: ignore[arg-type]
+        self.run = RunState(**{k: val for k, val in run.items() if k in known})  # type: ignore[arg-type]

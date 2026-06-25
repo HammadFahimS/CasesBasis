@@ -212,8 +212,8 @@
       "id": "vbg",
       "name": "Venous blood gas",
       "category": "lab",
-      "result": "pH 7.31, pCO2 55 mmHg, pO2 (venous) 42 mmHg, HCO3 26 mmol/L, lactate 1.4 mmol/L.",
-      "interpretation": "Early hypercapnic (type-2) respiratory failure from neuromuscular fatigue.",
+      "result": "VBG: pH 7.31, pCO2 55 mmHg, HCO3 26 mmol/L, lactate 1.4 mmol/L. (Venous sample — use pulse oximetry for oxygenation; pCO2 and pH are reliable.)",
+      "interpretation": "Hypercapnic (type-2) respiratory failure from neuromuscular fatigue. The elevated pCO2 and low-normal pH confirm ventilatory failure.",
       "available_after_seconds": 120
     },
     {
@@ -349,8 +349,8 @@
       ],
       "cues": [
         {
-          "text": "If learners are unsure about the cause, the husband mentions that the patient's mother had a neuromuscular condition he cannot name.",
-          "actor_id": "husband",
+          "text": "The team seems unsure of the cause. The nurse suggests speaking with the husband, who has arrived and may have useful family history.",
+          "actor_id": "nurse",
           "when": "team unsure of diagnosis"
         }
       ],

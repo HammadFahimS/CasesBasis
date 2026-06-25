@@ -63,7 +63,8 @@ INTERPRET_SYSTEM = (
     "— no prose, no markdown — using exactly these keys:\n"
     '  {"op": <one of read_vitals|ask_history|order_investigation|perform_exam|order_medication|perform_action|request_consult|diagnose|chitchat>,\n'
     '   "target": <id/name from the lists below, or null>,\n'
-    '   "action_text": <short paraphrase of the order, or "">}\n'
+    '   "action_text": <short paraphrase of the order, or "">,\n'
+    '   "clarify": <true if the utterance is ambiguous or your target match is uncertain; false otherwise>}\n'
     "Rules: read_vitals for any request about current vital signs / how the "
     "patient looks on the monitor. ask_history to elicit history from the patient/"
     "EMS/family (pick the closest history id). order_investigation for tests/labs/"
@@ -77,7 +78,12 @@ INTERPRET_SYSTEM = (
     "diagnose when the resident commits a working or differential diagnosis "
     "('I think this is …', 'my working diagnosis is …') — set action_text to the "
     "diagnosis. chitchat for anything social or unclear. "
-    "Only use an id/name that appears in the lists."
+    "Only use an id/name that appears in the lists. "
+    "Set clarify:true when: the stated test or procedure name is unclear or a "
+    "plausible mishearing of multiple catalogue entries (e.g. 'ACG' could be ABG "
+    "or ECG); your target match feels like a stretch; or the utterance is genuinely "
+    "ambiguous between two different ops. When clarify:true, still pick the most "
+    "likely op and target so the nurse can name them in the clarification question."
 )
 
 SPEAK_SYSTEM = constitution("nurse")
@@ -90,6 +96,7 @@ class NurseIntent:
     op: str = "chitchat"
     target: str | None = None
     action_text: str = ""
+    clarify: bool = False  # interpreter flagged uncertain/ambiguous match
 
 
 @dataclass
@@ -110,6 +117,7 @@ class NurseTurn:
     speaker: str = "nurse"          # who voices the reply — nurse, or "consult" for a specialist
     working_dx: str | None = None   # the resident's latest committed working diagnosis
     cues: list[dict] = field(default_factory=list)  # proactive prompts that fired this turn
+    needs_addressee: bool = False   # Director uncertain — resident must pick who to address
 
 
 def _complete(system_prompt: str, user_prompt: str) -> str:
@@ -164,8 +172,12 @@ def _parse_intent(raw: str) -> NurseIntent:
     target = data.get("target")
     if target in ("", "null", None):
         target = None
-    return NurseIntent(op=op, target=str(target) if target else None,
-                       action_text=(data.get("action_text") or "").strip())
+    return NurseIntent(
+        op=op,
+        target=str(target) if target else None,
+        action_text=(data.get("action_text") or "").strip(),
+        clarify=bool(data.get("clarify", False)),
+    )
 
 
 def _addressed_history_speaker(transcript: str) -> str | None:
@@ -226,7 +238,10 @@ def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> 
     """Run the intent on the engine. Pure/deterministic — no LLM.
 
     Returns the engine's :class:`StepResult` (None for read_vitals/chitchat,
-    which don't mutate state)."""
+    which don't mutate state). When ``intent.clarify`` is True, execution is
+    withheld so the nurse can ask for confirmation first."""
+    if intent.clarify:
+        return None  # hold — let speak() produce a "did you mean X?" line
     if intent.op == "ask_history" and intent.target:
         return engine.ask(intent.target)
     if intent.op == "order_investigation" and intent.target:
@@ -244,8 +259,16 @@ def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> 
     return None  # read_vitals / chitchat / malformed target
 
 
-def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict) -> str:
+def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict,
+                   already_asked: bool = False) -> str:
     """The factual nugget speak() must report — the engine's real output."""
+    # Clarification guard: interpreter flagged ambiguous/uncertain match
+    if intent.clarify and intent.op in ("order_investigation", "order_medication", "perform_action"):
+        label = intent.target or intent.action_text or "that"
+        return (
+            f"You were uncertain what the resident meant. Ask them to clarify: "
+            f"'Did you mean {label}? Please say it again so I can confirm.'"
+        )
     if intent.op == "read_vitals":
         keep = {k: v for k, v in vitals.items() if v not in (None, {}, "")}
         return "Current vitals: " + json.dumps(keep)
@@ -287,7 +310,13 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict)
         return "No specific result; respond conversationally and stay in role."
     parts = []
     if result.revealed:
-        parts.append(f"Result/finding: {result.revealed}")
+        if already_asked:
+            parts.append(
+                f"The resident already heard this — acknowledge briefly that you "
+                f"already shared it, then give a one-sentence reminder: {result.revealed}"
+            )
+        else:
+            parts.append(f"Result/finding: {result.revealed}")
     if result.transitioned:
         parts.append(f"The patient's condition changed: {result.message}")
     if result.critical_error:
@@ -299,13 +328,13 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict)
 
 def speak(
     transcript: str, intent: NurseIntent, result: StepResult | None,
-    vitals: dict, history: list[dict],
+    vitals: dict, history: list[dict], already_asked: bool = False,
 ) -> str:
     """Phrase the nurse's spoken reply from the real engine outcome (one LLM call)."""
     user = (
         f"Recent exchange:\n{_history_lines(history) or '(none)'}\n\n"
         f'Resident said: "{transcript}"\n'
-        f"{_outcome_brief(intent, result, vitals)}\n\n"
+        f"{_outcome_brief(intent, result, vitals, already_asked=already_asked)}\n\n"
         "Nurse (spoken reply):"
     )
     try:
@@ -319,13 +348,14 @@ def speak(
 
 
 INTRO_SYSTEM = (
-    "You are the bedside nurse welcoming the resident to the bedside in an "
-    "emergency department. Give a short spoken handoff so they can start: who the "
-    "patient is, what brought them in (the chief complaint), and the most relevant "
-    "background. Speak calmly and naturally, the way a nurse hands off at the "
-    "bedside — not as a written report. No markdown, no lists, no stage directions; "
-    "your words are read aloud. Keep it under about 60 words and finish by inviting "
-    "the resident to begin."
+    "You are the bedside nurse handing off to a resident who has just walked in. "
+    "Give a SHORT spoken handoff — two or three sentences at most — the way a real "
+    "nurse speaks at the bedside: name, age, and why they're here, plus the one or "
+    "two things the resident absolutely needs to know right now. "
+    "Sound like speech, not a written note: present tense, no headers, no vital-sign "
+    "lists, no HPI prose. End with a single short prompt that opens the room "
+    "(e.g. 'She's all yours.' or 'What do you want to start with?'). "
+    "No markdown, no stage directions. Under 50 words total."
 )
 
 
@@ -436,51 +466,18 @@ def _build_card(intent: NurseIntent, engine: SimulationEngine, result: StepResul
 
 
 def _voice_reply(
-    session: VoiceSession, intent: NurseIntent, result: StepResult | None, vitals: dict, transcript: str,
+    session: VoiceSession, intent: NurseIntent, result: StepResult | None, vitals: dict,
+    transcript: str, already_asked: bool = False,
 ) -> tuple[str, str]:
-    """Phrase the reply and decide who voices it.
-
-    Most outcomes are the nurse reading back an order. Two are voiced by the
-    person who actually holds the information: a history beat is spoken by its
-    provider (EMS/family/patient), and a bedside measurement (VC/NIF) is reported
-    by the Respiratory Therapist. Returns ``(reply, speaker)``."""
-    engine = session.engine
-    # History from EMS / family / the patient is spoken by that person, grounded.
-    if intent.op == "ask_history" and result is not None and result.revealed:
-        beat = next((h for h in engine.case.history if h.id == intent.target), None)
-        provider = beat.provider if beat else None
-        from backend.actor_voice import provider_speaker, voice_history
-        if provider_speaker(provider) != "nurse":
-            return voice_history(session, provider, result.revealed, transcript)
-    # Bedside respiratory measures are reported by the RT, if the case has one.
-    if intent.op == "order_investigation" and result is not None and result.revealed:
-        inv = next((i for i in engine.case.investigations if i.id == intent.target), None)
-        if inv is not None and inv.category == "bedside":
-            from backend.actor_voice import voice_bedside
-            reply, speaker = voice_bedside(session, result.revealed, transcript)
-            if reply is not None:
-                return reply, speaker
-    return speak(transcript, intent, result, vitals, session.history), "nurse"
+    """Delegate to the Director, which owns speaker-voice routing."""
+    from backend.director import voice_reply
+    return voice_reply(session, intent, result, vitals, transcript, already_asked=already_asked)
 
 
 def _fire_cues(session: VoiceSession) -> list[dict]:
-    """Voice any authored cues that came due — the room proactively prompting a
-    lingering team. Each is role-played by its actor and recorded for context."""
-    raw = session.engine.due_cues()
-    if not raw:
-        return []
-    from backend.actor_voice import actor_speaker, voice_cue
-    case = session.engine.case
-    out: list[dict] = []
-    for cue in raw:
-        actor = next((a for a in case.actors if a.id == cue.get("actor_id")), None)
-        speaker = actor_speaker(actor)
-        line = voice_cue(session, actor, speaker, cue["text"])
-        if not line:
-            continue
-        session.history.append({"role": "nurse", "text": line})  # context for later turns
-        out.append({"speaker": speaker, "text": line})
-    return out
+    """Delegate to the Director, which owns proactive room events."""
+    from backend.director import fire_cues
+    return fire_cues(session)
 
 
 def _resolve_turn(
@@ -501,9 +498,18 @@ def _resolve_turn(
         result = None
         speaker = "consult"
     else:
+        # Capture before dispatch mutates revealed_history so we can tell the
+        # speaker "you already mentioned this" on a repeated history ask.
+        was_already_asked = (
+            intent.op == "ask_history"
+            and bool(intent.target)
+            and intent.target in engine.run.revealed_history
+        )
         result = dispatch(intent, engine, transcript)
         card = _build_card(intent, engine, result)
-        reply, speaker = _voice_reply(session, intent, result, vitals, transcript)
+        reply, speaker = _voice_reply(
+            session, intent, result, vitals, transcript, already_asked=was_already_asked,
+        )
 
     session.history.append({"role": "resident", "text": transcript})
     session.history.append({"role": "nurse", "text": reply})
@@ -533,14 +539,44 @@ def _resolve_turn(
     )
 
 
-def run_turn(session: VoiceSession, transcript: str) -> NurseTurn:
-    """Full grounded turn: advance clock, interpret, dispatch, speak."""
-    # Hold the session lock so a background runtime tick can't advance the clock or
-    # fire a cue mid-turn (double-firing a transition). Uncontended when the runtime
-    # is off, so this is free in the default configuration.
+def run_turn(
+    session: VoiceSession, transcript: str, forced_addressee: str | None = None
+) -> NurseTurn:
+    """Full grounded turn: advance clock, Director routing, interpret, dispatch, speak.
+
+    ``forced_addressee`` is set when the resident taps an addressee chip after a
+    Director ask-back.  It bypasses confidence checking and routes directly to the
+    named actor."""
     with session.lock:
         clock = advance_clock(session)
         intent = interpret(transcript, session.engine, session.history)
+
+        from backend.director import ask_back_prompt, resolve_addressee
+        decision = resolve_addressee(intent, session.engine, forced_addressee=forced_addressee)
+
+        if decision.ask_back:
+            # Director is unsure — ask the resident before dispatching anything.
+            vitals = session.engine.current_vitals().model_dump(exclude_none=True)
+            session.history.append({"role": "resident", "text": transcript})
+            return NurseTurn(
+                reply=ask_back_prompt(session.engine),
+                intent=intent,
+                vitals=vitals,
+                state_id=session.engine.run.current_state_id,
+                state_name=session.engine.state.name,
+                clock_events=[c.message for c in clock if c.message],
+                speaker="nurse",
+                needs_addressee=True,
+            )
+
+        if decision.forced_speaker:
+            # Chip selected: route to the specified actor's best history beat.
+            beat_id = _beat_for_speaker(session.engine, decision.forced_speaker)
+            if beat_id:
+                intent = NurseIntent(
+                    op="ask_history", target=beat_id, action_text=intent.action_text
+                )
+
         return _resolve_turn(session, intent, transcript, clock)
 
 
@@ -559,6 +595,27 @@ def _action_label(session: VoiceSession, op: str, target: str | None) -> str:
         actor = find_consultant(case, target)
         return f"Call {actor.role if actor else target}."
     return target or op
+
+
+def run_patient_turn(session: VoiceSession, transcript: str) -> NurseTurn | None:
+    """Grounded patient-addressed turn for ask_history beats held by the patient.
+
+    When the resident speaks directly to the patient and the utterance maps to a
+    patient-held history beat, runs it through the engine (grounding the reveal in
+    ``run.revealed_history``) and voices it through the patient character. Returns
+    ``None`` to signal "this is conversational — fall through to patient_reply"."""
+    with session.lock:
+        clock = advance_clock(session)
+        intent = interpret(transcript, session.engine, session.history)
+        if intent.op != "ask_history" or not intent.target:
+            return None
+        beat = next((h for h in session.engine.case.history if h.id == intent.target), None)
+        if beat is None:
+            return None
+        from backend.actor_voice import provider_speaker
+        if provider_speaker(beat.provider) != "patient":
+            return None
+        return _resolve_turn(session, intent, transcript, clock)
 
 
 def run_action(

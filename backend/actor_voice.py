@@ -79,12 +79,29 @@ def _persona(actor, speaker: str) -> str:
     return "\n".join(bits)
 
 
-def _voice_as(actor, speaker: str, content: str, transcript: str) -> str:
+def _voice_as(actor, speaker: str, content: str, transcript: str,
+              already_asked: bool = False) -> str:
     """Role-play ``actor`` saying the grounded ``content`` aloud. Fails soft."""
+    repeat_note = (
+        "\n\n(The doctor is asking about something you already told them. "
+        "Acknowledge briefly that you already mentioned it, then give a "
+        "single-sentence reminder — do not repeat the full story.)"
+        if already_asked else ""
+    )
+    # Family members are collateral historians: they describe the patient in
+    # third person ("she", "her"). Without this guard the LLM reads "say it in
+    # your own voice" and rewrites "her arms" → "my arms", making the husband
+    # sound like the patient.
+    pov_note = (
+        "\n\nYou are describing your relative/partner — the patient — NOT yourself. "
+        "Use 'she', 'her', 'they', 'their' when referring to them. "
+        "Never say 'I' or 'my' as if the symptoms happened to you."
+        if speaker == "family" else ""
+    )
     user = (
         f"{_persona(actor, speaker)}\n\n"
         f"The resident said: \"{transcript}\"\n\n"
-        f"What you know and are telling them:\n{content}\n\nYou:"
+        f"What you know and are telling them:\n{content}{pov_note}{repeat_note}\n\nYou:"
     )
     try:
         return _clean_for_speech(_complete(VOICE_SYSTEM, user))
@@ -93,7 +110,8 @@ def _voice_as(actor, speaker: str, content: str, transcript: str) -> str:
         return _clean_for_speech(content)
 
 
-def voice_history(session, provider: str | None, content: str, transcript: str) -> tuple[str, str]:
+def voice_history(session, provider: str | None, content: str, transcript: str,
+                  already_asked: bool = False) -> tuple[str, str]:
     """Voice an authored history beat as the person who holds it.
 
     Returns ``(reply, speaker)``. ``speaker`` is the styling/voice class
@@ -104,7 +122,7 @@ def voice_history(session, provider: str | None, content: str, transcript: str) 
     if speaker == "nurse" or not content:
         return content or "", "nurse"
     actor = find_actor(session.engine.case, provider, speaker)
-    return _voice_as(actor, speaker, content, transcript), speaker
+    return _voice_as(actor, speaker, content, transcript, already_asked=already_asked), speaker
 
 
 CUE_SYSTEM = (

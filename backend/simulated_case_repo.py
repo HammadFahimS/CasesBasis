@@ -120,7 +120,10 @@ def list_cases() -> list[dict[str, Any]]:
 
 
 def get_case(case_id: str) -> dict[str, Any] | None:
-    """Return the full case + layout + protection flag, or None."""
+    """Return the full case + layout + protection flag, or None.
+
+    Applies ``migrate_case_json`` on every read so the in-memory dict is always
+    at the current schema version without requiring a DB write-back."""
     conn = get_db()
     row = conn.execute(
         "SELECT id, case_json, layout_json, is_gold, created_at, updated_at "
@@ -129,9 +132,11 @@ def get_case(case_id: str) -> dict[str, Any] | None:
     ).fetchone()
     if row is None:
         return None
+    from backend.case_migrations import migrate_case_json
+    case_raw = migrate_case_json(json.loads(row["case_json"]))
     return {
         "id": row["id"],
-        "case": json.loads(row["case_json"]),
+        "case": case_raw,
         "layout": json.loads(row["layout_json"] or "{}"),
         "is_gold": bool(row["is_gold"]),
         "created_at": row["created_at"],
