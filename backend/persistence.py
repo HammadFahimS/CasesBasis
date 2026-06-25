@@ -18,7 +18,7 @@ from schemas.investigation import InvestigationResult
 from schemas.physical_exam import ExamFinding
 
 if TYPE_CHECKING:
-    from backend.web_app import WebSession
+    from backend.sim_core import WebSession
 
 
 def create_session(
@@ -52,7 +52,7 @@ def save_session(session_id: str, session: WebSession) -> None:
 
 
 def load_session(session_id: str) -> WebSession | None:
-    from backend.web_app import WebSession
+    from backend.sim_core import WebSession
 
     conn = get_db()
     row = conn.execute(
@@ -129,7 +129,7 @@ def _serialize_state(session: WebSession) -> dict[str, Any]:
 
 
 def _deserialize_state(case: ClinicalCase, state: dict[str, Any]) -> WebSession:
-    from backend.web_app import WebSession
+    from backend.sim_core import WebSession
 
     return WebSession(
         case=case,

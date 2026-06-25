@@ -223,7 +223,7 @@ def test_critical_vitals_produce_escalation_and_safety_warnings() -> None:
 
 
 def test_web_doctor_consult_path_uses_service(monkeypatch: Any) -> None:
-    from backend import web_app
+    from backend import sim_core, web_app
 
     class FakeDoctorConsultService:
         def consult(
@@ -244,7 +244,7 @@ def test_web_doctor_consult_path_uses_service(monkeypatch: Any) -> None:
 
     session_id = "doctor-consult-session"
     web_app.SESSIONS[session_id] = web_app.WebSession(case=mi_case())
-    monkeypatch.setattr(web_app, "DOCTOR_CONSULT_SERVICE", FakeDoctorConsultService())
+    monkeypatch.setattr(sim_core, "DOCTOR_CONSULT_SERVICE", FakeDoctorConsultService())
 
     from tests.helpers import make_request
     result = web_app.call_doctor(

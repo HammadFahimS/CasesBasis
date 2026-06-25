@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from backend import sim_core
 from backend.investigations import InvestigationService
 from schemas.clinical_case import ClinicalCase
 from schemas.investigation import InvestigationResult
@@ -73,7 +74,7 @@ def test_generate_case_reuses_recent_cached_case(monkeypatch: object) -> None:
     simulator = FakeSimulator()
     web_app.CASE_CACHE.clear()
     web_app.SESSIONS.clear()
-    monkeypatch.setattr(web_app, "SIMULATOR", simulator)
+    monkeypatch.setattr(sim_core, "SIMULATOR", simulator)
 
     first = web_app.generate_case(
         web_app.GenerateCaseRequest(
@@ -142,7 +143,7 @@ def test_web_evaluation_preserves_exact_diagnosis_guess(monkeypatch: object) -> 
     web_app.SESSIONS.clear()
     web_app.SESSIONS[session_id] = web_app.WebSession(case=sample_case())
     web_app.SESSIONS[session_id].diagnosis_guess = "Heart Attack"
-    monkeypatch.setattr(web_app, "EVALUATOR", evaluator)
+    monkeypatch.setattr(sim_core, "EVALUATOR", evaluator)
 
     from tests.helpers import make_request
     web_app.evaluate(web_app.EvaluateRequest(session_id=session_id), make_request())
@@ -282,7 +283,7 @@ def test_investigation_endpoint_preserves_full_result_in_session(monkeypatch: ob
     case = sample_case()
     web_app.SESSIONS.clear()
     web_app.SESSIONS[session_id] = web_app.WebSession(case=case)
-    monkeypatch.setattr(web_app, "INVESTIGATION_SERVICE", FakeInvestigationService())
+    monkeypatch.setattr(sim_core, "INVESTIGATION_SERVICE", FakeInvestigationService())
 
     from tests.helpers import make_request
     display = web_app.order_investigation(
@@ -311,7 +312,7 @@ def test_investigation_endpoint_returns_multiple_sanitized_displays(monkeypatch:
     case = sample_case()
     web_app.SESSIONS.clear()
     web_app.SESSIONS[session_id] = web_app.WebSession(case=case)
-    monkeypatch.setattr(web_app, "INVESTIGATION_SERVICE", FakeInvestigationService())
+    monkeypatch.setattr(sim_core, "INVESTIGATION_SERVICE", FakeInvestigationService())
 
     from tests.helpers import make_request as _make_request
     display = web_app.order_investigation(
