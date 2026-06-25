@@ -10,6 +10,7 @@ from backend.simulated_case_repo import (
     duplicate_case,
     get_case,
     list_cases,
+    reseed_gold_case,
     seed_gold_cases,
     update_case,
 )
@@ -38,6 +39,29 @@ def test_seed_is_idempotent(db_path):
     before = len(list_cases())
     seed_gold_cases()
     assert len(list_cases()) == before
+
+
+def test_reseed_overwrites_gold_row_from_file(db_path, monkeypatch):
+    # seed_gold_cases never clobbers an existing row; reseed_gold_case deliberately does.
+    # Deep-copy so we don't mutate load_seed_case's cached instance (shared across tests).
+    edited = load_seed_case("myasthenic_crisis").model_copy(deep=True)
+    edited.meta.title = "Edited Title"
+    monkeypatch.setattr(
+        "backend.simulated_case_repo.load_seed_case", lambda _id: edited
+    )
+    assert reseed_gold_case("myasthenic_crisis") is True
+    assert get_case("myasthenic_crisis")["case"]["meta"]["title"] == "Edited Title"
+    # is_gold protection is preserved through the reseed
+    assert get_case("myasthenic_crisis")["is_gold"] is True
+
+
+def test_reseed_returns_false_when_row_absent(db_path, monkeypatch):
+    fake = load_seed_case("myasthenic_crisis").model_copy(deep=True)
+    fake.id = "not_seeded_case"
+    monkeypatch.setattr(
+        "backend.simulated_case_repo.load_seed_case", lambda _id: fake
+    )
+    assert reseed_gold_case("not_seeded_case") is False
 
 
 def test_gold_cannot_be_updated_or_deleted(db_path):

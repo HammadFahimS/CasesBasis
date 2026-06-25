@@ -497,6 +497,101 @@ When a new design bundle arrives, the README inside it explains: read the chat t
 
 ---
 
+## Live Voice Sim — the dynamic case engine (read this before touching `backend/voice_*` / `nurse_brain` / `actors`)
+
+A second, separate experience from the Workbench v3 single-encounter UI: a **real-time,
+voice-driven ED simulation**. The resident speaks; a cast of voices (patient, nurse, EMS,
+family, RT, consultant) speaks back; a **state machine** drives the case forward on a
+**wall-clock**. Entry point is `GET /simulator/voice-room` (`backend/static/voice_room.html`);
+the case is **myasthenic crisis** (the gold case). See [docs/live-sim-walkthrough.md](docs/live-sim-walkthrough.md)
+for a full step-by-step run that exercises every feature.
+
+> **CRITICAL gotcha (see auto-memory `gold-case-db-not-file`):** the live sim loads the case
+> from the **DB** via `get_case`, **not** `cases/*.json`. `seed_gold_cases()` is insert-only and
+> never overwrites an existing row. Editing `cases/myasthenic_crisis.json` is **invisible** to
+> the running app until the DB row is re-seeded, and you must start a **fresh** session
+> (parked/resumed sessions keep their old case). Verify through `get_case`, not `load_seed_case`.
+
+### Core engine — `backend/simulation_engine.py`
+- `SimulationEngine` drives one encounter from a `schemas.simulated_case.SimulatedCase`. Owns
+  mutable run state (current state, clock, revealed facts, critical errors, working diagnoses).
+- **Hybrid trigger resolution:** deterministic triggers (`time` / `inaction` / `vitals` guard)
+  fire on their own; `action` triggers match by **keyword** (offline default) **or** an injected
+  `intent_matcher(action_text, transition_desc) -> bool` for soft LLM intent ("opts for intubation").
+- Serialisable (`snapshot` / `restore`) → a run parks in the DB and resumes.
+- **Cue engine:** `due_cues()` fires at most one authored cue per call once `elapsed_in_state ≥
+  CUE_AFTER_SECONDS` (75s). Each cue fires once; `run.fired_cues` survives park/resume.
+
+### Session lifecycle — `backend/voice_session.py`
+- `VoiceSession` binds an engine + DB-loaded case + transcripts (separate `history` nurse channel
+  and `patient_history` patient channel) + diagnostics `cards`. In-memory LRU (`_MAX_LIVE_SESSIONS=256`)
+  backed by `voice_persistence` (every session is parked to the DB, rehydrates on demand — eviction
+  is lossless).
+- `advance_clock(session)` advances the engine by **real elapsed time** between turns, so the world
+  moves while the resident deliberates. **Parked time does NOT advance the clock** (a parked patient
+  must not deteriorate — `_rehydrate` resets `last_tick` to now; a concluded run is frozen).
+
+### The turn pipeline — `backend/nurse_brain.py` (`run_turn`)
+1. `advance_clock` — time/inaction transitions fire.
+2. `interpret` — **one LLM call** → structured `NurseIntent` (engine op + target), chosen from the
+   case's real catalogue of beats/investigations/actions.
+3. `dispatch` — **pure, deterministic**, runs the op on the engine. No LLM → unit-tested offline.
+4. `speak` — **one LLM call** phrases the nurse's reply from the engine's real outcome.
+- Ops: `read_vitals`, `ask_history`, `order_investigation`, `perform_exam`, `order_medication`,
+  `perform_action`, `request_consult`, `diagnose`, `chitchat`.
+- All LLM access goes through a single `_complete` seam that tests monkeypatch.
+
+### The cast / addressee routing — `backend/actors.py` (single source of truth)
+- `SPEAKERS` registry of **speaker kinds** (`nurse`/`patient`/`ems`/`family`/`rt`/`consult`): each
+  has synonyms (vocatives), a TTS voice env var + default, and `holds_history`. This unifies what
+  used to be restated in four places (provider→speaker map, vocative table, TTS voice map).
+- **Addressing:** lead an utterance with a name ("Nurse… / Husband… / EMS… / RT… / Neuro… / ICU…")
+  to reach staff; **anything unaddressed goes to the patient.** `kind_for_word` / `speaker_voice`.
+- It governs only *who voices* a line and *with what voice* — the engine remains the source of every
+  clinical fact; nothing in `actors` invents content.
+
+### Who speaks each line
+- `backend/patient_voice.py` — free-form patient role-play (restrained: answers only what's asked).
+- `backend/actor_voice.py` — **grounded** bystander voices: `voice_history` (EMS/husband/patient speak
+  an authored history beat without inventing), `voice_bedside` (RT reports VC/NIF), `voice_cue` (turns
+  an authored cue stage-direction into a natural spoken prompt). Distinct from `consult_voice` (a
+  specialist who *advises*).
+- TTS via `voice_service.synthesize` (Cartesia Sonic voice names; falls back to nurse voice if rejected).
+
+### Gating & the medication mechanic (myasthenic crisis specifics)
+- **Real-time gates:** results return only after wall-clock delay — **VC/NIF 60s · VBG 120s · husband
+  arrives 300s · CT chest 300s.** Order it, keep working, ask again later.
+- **Dose-confirm loop** (`backend/medication.py` — `needs_dose_confirm`, `parse_med`): ordering a
+  high-alert drug with no dose makes the nurse ask you to confirm; correct paralytic (rocuronium,
+  reduced dose) advances state; succinylcholine standard-dose → **critical error → PEA arrest** branch.
+
+### Scoring & debrief
+- `backend/sim_scoring.py` — `score_run` emits a flat list of `Criterion` (recognition, avoided
+  critical errors, non-depolariser, reduced roc dose, avoided pyridostigmine). **Pure/deterministic,
+  no LLM**, fails soft. New scoring lives here, not bolted onto features.
+- `backend/voice_debrief.py` — `build_debrief`: settles the clock, then assembles (1) deterministic
+  `run_summary` from the engine, (2) the case author's `teaching`, (3) the `score_run` assessment
+  checklist, (4) one fail-soft LLM `coaching_note`. The deterministic debrief always renders.
+- **Analytics loop:** voice runs surface in `/analytics` with a 🎙 Voice badge and score on the trend
+  chart; `GET /api/dashboard/voice-review/{session_id}` backs the Review overlay.
+
+### Voice-sim routes (`backend/web_app.py`)
+`/api/voice/session` (start) · `/resume` · `/stt` · `/llm` (nurse turn) · `/action` · `/llm-patient`
+(patient turn) · `/debrief` · `/pause` + `/unpause` · `/sessions` (list) + `DELETE /sessions/{id}` ·
+`/tts` · `/sample`.
+
+### Files in the live-sim work (current `feature/workbench-v3-ui` branch, uncommitted)
+- `backend/actors.py` (new) + `tests/test_actors.py` (new) — the cast registry.
+- `backend/actor_voice.py`, `backend/nurse_brain.py`, `backend/patient_voice.py`,
+  `backend/voice_debrief.py`, `backend/web_app.py`, `backend/static/voice_room.html` — refactored to
+  the single cast registry + cue/scoring/dosing work.
+- `cases/myasthenic_crisis.json`, `schemas/simulated_case.py`, `casesbasis.db` — case content + schema
+  (remember: DB is the live source, re-seed after JSON edits).
+- Open TODO (from auto-memory): add `scripts/reseed_case.py <case_id>` (or a `--reseed` flag) so the
+  DB re-seed isn't a hand-written SQL `UPDATE` each time.
+
+---
+
 ## Quick orientation for the next Claude session
 
 1. **All UI lives in `backend/web_app.py`.** Search there first.

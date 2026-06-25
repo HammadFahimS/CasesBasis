@@ -170,6 +170,11 @@ class ActorRole(StrictModel):
     voice: str = ""
     persona: str = ""
     script: list[str] = Field(default_factory=list)
+    # When this actor becomes present in the room, in case-clock seconds. ``None``
+    # (the default) means present from the start; a value means the actor is "en
+    # route" until the clock reaches it, then arrives (e.g. the husband at 300s).
+    # Drives the roster's en-route → present state generically, per case.
+    available_after_seconds: int | None = None
 
 
 class InvestigationDef(StrictModel):
@@ -179,8 +184,15 @@ class InvestigationDef(StrictModel):
     id: str
     name: str
     category: Literal["lab", "imaging", "ecg", "bedside", "other"] = "lab"
+    # The RAW finding the resident sees/hears — values, measurements, what's on the
+    # film. It must NOT contain the clinical read or a management directive: the
+    # resident interprets it. (Tests/exams hand over signal, not the answer.)
     result: str = ""
     result_by_state: dict[str, str] = Field(default_factory=dict)
+    # The clinical interpretation of the result — deliberately hidden during the
+    # case and surfaced only at debrief, so teaching value is kept without giving
+    # the diagnosis away live (e.g. "type-2 respiratory failure").
+    interpretation: str = ""
     image_ref: str | None = None
     available_after_seconds: int | None = None
     # Diagnosis/finding hint that drives the real ECG/CXR image generators

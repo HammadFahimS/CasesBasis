@@ -88,7 +88,8 @@
       "label": "Family history hint (husband)",
       "content": "The husband recalls that the patient's mother had some kind of neuromuscular condition, though he cannot remember its name.",
       "provider": "family",
-      "reveal": "on_trigger"
+      "reveal": "on_trigger",
+      "available_after_seconds": 300
     }
   ],
   "exam": [
@@ -162,6 +163,7 @@
       "role": "Husband",
       "voice": "Concerned, anxious; wants to know what is going on.",
       "persona": "Arrives ~5 minutes after the patient. Does not speak until asked to give history.",
+      "available_after_seconds": 300,
       "script": [
         "Gives the 3-month collateral history when asked (see history.husband_collateral).",
         "If learners seem unsure of the cause, volunteers that her mother had some neuromuscular condition he can't name (see history.husband_family_history)."
@@ -210,7 +212,8 @@
       "id": "vbg",
       "name": "Venous blood gas",
       "category": "lab",
-      "result": "pH 7.31, pCO2 55 mmHg, pO2 (venous) 42 mmHg, HCO3 26 mmol/L, lactate 1.4 — early hypercapnic (type 2) respiratory failure from neuromuscular fatigue.",
+      "result": "pH 7.31, pCO2 55 mmHg, pO2 (venous) 42 mmHg, HCO3 26 mmol/L, lactate 1.4 mmol/L.",
+      "interpretation": "Early hypercapnic (type-2) respiratory failure from neuromuscular fatigue.",
       "available_after_seconds": 120
     },
     {
@@ -223,41 +226,46 @@
       "id": "ecg",
       "name": "ECG",
       "category": "ecg",
-      "result": "Sinus tachycardia at ~105 bpm. No ischaemic changes, normal intervals.",
+      "result": "12-lead ECG recorded; the tracing is up on the monitor for you to read.",
+      "interpretation": "Sinus tachycardia ~105 bpm, no ischaemic changes, normal intervals — the rate reflects distress, not a primary cardiac cause.",
       "visual_dx": "sinus tachycardia"
     },
     {
       "id": "cxr",
       "name": "Chest X-ray",
       "category": "imaging",
-      "result": "No acute consolidation, effusion or pneumothorax. Possible subtle anterior mediastinal fullness.",
+      "result": "Portable chest film is on the screen for you to review.",
+      "interpretation": "No acute consolidation, effusion or pneumothorax; possible subtle anterior mediastinal fullness.",
       "visual_dx": "normal chest, no acute cardiopulmonary process"
     },
     {
       "id": "vital_capacity",
       "name": "Bedside vital capacity (VC)",
       "category": "bedside",
-      "result": "VC < 20 mL/kg (and falling) — below the threshold that mandates intubation in neuromuscular respiratory failure.",
+      "result": "VC less than 20 mL/kg, and falling.",
+      "interpretation": "Below the threshold that mandates intubation in neuromuscular respiratory failure.",
       "available_after_seconds": 60
     },
     {
       "id": "nif",
       "name": "Negative inspiratory force (NIF)",
       "category": "bedside",
-      "result": "NIF approximately -25 cmH2O — markedly weak inspiratory effort.",
+      "result": "NIF approximately -25 cmH2O.",
+      "interpretation": "Markedly weak inspiratory effort — impending respiratory failure.",
       "available_after_seconds": 60
     },
     {
       "id": "ct_head",
       "name": "CT head",
       "category": "imaging",
-      "result": "Normal."
+      "result": "No acute intracranial abnormality."
     },
     {
       "id": "ct_chest",
       "name": "CT chest (with contrast)",
       "category": "imaging",
-      "result": "Anterior mediastinal soft-tissue mass measuring 5 x 3 x 3.6 cm, suggestive of thymoma. (MRN 5854769).",
+      "result": "Anterior mediastinal soft-tissue mass measuring 5 x 3 x 3.6 cm. (MRN 5854769).",
+      "interpretation": "Suggestive of thymoma — the underlying driver of the myasthenic crisis.",
       "available_after_seconds": 300
     }
   ],

@@ -37,6 +37,19 @@ def test_run_summary_collects_actions_and_outcome():
     assert summary["consults"] == ["Neurology consultant"]
 
 
+def test_result_reads_surfaces_hidden_interpretation_for_ordered_tests():
+    # The clinical read is withheld live; the debrief brings it back for teaching,
+    # keyed on the investigation id (so only tests the resident actually ordered).
+    s = _session()
+    s.cards = [
+        {"kind": "report", "id": "vbg", "title": "Venous blood gas", "category": "lab", "summary": ""},
+    ]
+    reads = voice_debrief._result_reads(s)
+    assert {"test": "Venous blood gas", "read": "Early hypercapnic (type-2) respiratory failure from neuromuscular fatigue."} in reads
+    # a test that was NOT ordered must not leak its read
+    assert all(r["test"] != "CT chest (with contrast)" for r in reads)
+
+
 def test_build_debrief_surfaces_teaching_and_coaching(monkeypatch):
     monkeypatch.setattr(voice_debrief, "_complete", lambda sys, usr: "Solid early workup; secure the airway sooner.")
     s = _session()

@@ -15,41 +15,34 @@ from __future__ import annotations
 
 import logging
 
+import re
+
+from backend.actors import kind_for_word
 from backend.patient_voice import _clean_for_speech, _complete
 
 logger = logging.getLogger(__name__)
 
-# A history beat's ``provider`` maps to one of these speaker classes — the tag the
-# front-end styles and the TTS voices. Anything unrecognised falls back to nurse.
-_PROVIDER_SPEAKER = {
-    "ems": "ems", "paramedic": "ems", "medic": "ems", "prehospital": "ems",
-    "family": "family", "husband": "family", "wife": "family", "partner": "family",
-    "mother": "family", "father": "family", "parent": "family", "son": "family",
-    "daughter": "family", "relative": "family", "carer": "family", "caregiver": "family",
-    "patient": "patient",
-}
-
 
 def provider_speaker(provider: str | None) -> str:
-    """The speaker class that should voice a beat from this provider."""
-    return _PROVIDER_SPEAKER.get((provider or "").strip().lower(), "nurse")
+    """The speaker class that should voice a beat from this provider. A provider
+    tag is a single word ('ems'/'family'/'patient'); anything unrecognised falls
+    back to the nurse reading it."""
+    kind = kind_for_word(provider)
+    return kind.id if kind else "nurse"
 
 
 def actor_speaker(actor) -> str:
-    """The speaker class (styling + voice) for a case actor. The single source of
-    truth shared by the session roster and the cue engine."""
+    """The speaker class (styling + voice) for a case actor — the single source of
+    truth shared by the session roster and the cue engine. Resolved from the
+    actor's id/role against the cast registry, with consultants detected
+    behaviourally and an unrecognised bystander treated as family."""
     if actor is None:
         return "nurse"
     from backend.consult_voice import _is_consultant
-    tag = f"{actor.id} {actor.role}".lower()
-    if actor.id == "patient" or "patient" in tag:
-        return "patient"
-    if actor.id == "nurse" or "nurse" in tag:
-        return "nurse"
-    if any(w in tag for w in ("ems", "paramedic", "medic")):
-        return "ems"
-    if actor.id == "rt" or "respiratory" in tag:
-        return "rt"
+    for token in re.findall(r"[a-z']+", f"{actor.id} {actor.role}".lower()):
+        kind = kind_for_word(token)
+        if kind is not None:
+            return kind.id
     if _is_consultant(actor):
         return "consult"
     return "family"

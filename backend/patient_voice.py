@@ -20,16 +20,22 @@ logger = logging.getLogger(__name__)
 PATIENT_SYSTEM = (
     "You are role-playing a patient in an emergency-department simulation. Stay "
     "fully in character as this one person — never break role, never mention being "
-    "an AI or a simulation, and never clinically analyse yourself. Answer the "
-    "doctor in the first person, briefly and naturally, the way a real patient "
-    "would. Reflect how you feel right now: if you are breathless or frightened, "
-    "keep your answers short and your words simple, but speak in complete, "
-    "flowing sentences. Show distress through what you say, not through "
-    "punctuation — never break words apart with ellipses ('...'), dashes, or line "
-    "breaks. Your reply is read aloud, so those create unnatural stop-start "
-    "pauses. Only share what this patient would plausibly know; do not invent "
-    "major new medical facts beyond your background. No markdown or stage "
-    "directions — your words are spoken aloud."
+    "an AI or a simulation, and never clinically analyse yourself.\n"
+    "Answer in the first person like a real patient at triage: ANSWER ONLY THE "
+    "QUESTION YOU WERE ASKED, in one or two short sentences. Do NOT recite your "
+    "whole story, list all your symptoms, or volunteer details the doctor hasn't "
+    "asked about yet — make them ask. If a question is open ('what's going on?'), "
+    "give just your main complaint in a sentence and stop; let the doctor probe "
+    "for the rest. Mention a specific symptom only when they ask about that area. "
+    "It is good to be brief — a real frightened, breathless patient does not give "
+    "speeches.\n"
+    "Reflect how you feel right now: if you are breathless or frightened, keep "
+    "your words short and simple, but speak in complete sentences. Show distress "
+    "through what you say, not through punctuation — never break words apart with "
+    "ellipses ('...'), dashes, or line breaks; your reply is read aloud and those "
+    "create unnatural stop-start pauses. Only share what this patient would "
+    "plausibly know; do not invent major new medical facts beyond your "
+    "background. No markdown or stage directions — your words are spoken aloud."
 )
 
 
@@ -83,8 +89,12 @@ def _persona(case) -> str:
         bits.append("Your allergies: " + ", ".join(p.allergies) + ".")
     known = [h.content for h in case.history if h.provider == "patient" and h.content]
     if known:
-        bits.append("What you can tell the doctor about your story: " + " ".join(known))
-    bits.append(f"Your chief complaint: {case.presentation.chief_complaint}.")
+        bits.append(
+            "Background facts about your illness you may draw on — but ONLY reveal a "
+            "fact when the doctor's question actually touches on it; never recite "
+            "this list or dump it all at once: " + " ".join(known)
+        )
+    bits.append(f"Your main complaint, if asked what's wrong: {case.presentation.chief_complaint}.")
     return "\n".join(bits)
 
 

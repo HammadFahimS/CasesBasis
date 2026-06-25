@@ -25,6 +25,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+from backend.actors import kind_for_word
 from backend.medication import needs_dose_confirm, parse_med
 from backend.sim_diagnostics import (
     build_exam_card,
@@ -84,6 +85,10 @@ SPEAK_SYSTEM = (
     "the way a real nurse would and report findings plainly. You are given the "
     "REAL result of what just happened — report it faithfully and never invent "
     "numbers or findings beyond it. If a result is pending or unavailable, say so. "
+    "When you report a test result, give ONLY the raw values or findings you were "
+    "handed — never interpret them, never name a diagnosis, and never say what they "
+    "indicate or what to do about them. The resident is the one who interprets; "
+    "your job is to report. For an ECG or X-ray, just tell them it's ready to view. "
     "No markdown, no asterisks, no stage directions — your words are spoken. Keep "
     "it under ~40 words."
 )
@@ -178,6 +183,45 @@ def _parse_intent(raw: str) -> NurseIntent:
                        action_text=(data.get("action_text") or "").strip())
 
 
+def _addressed_history_speaker(transcript: str) -> str | None:
+    """If the utterance opens by naming a bystander who *holds history* ('EMS, …'
+    / 'Husband, …'), the speaker class they addressed — else None. Staff (nurse,
+    RT) and consultants don't hold history beats, so addressing them routes
+    normally. Used to keep a beat with the person actually spoken to, rather than
+    whoever's beat reads most relevant."""
+    head = (transcript or "").strip().lower()
+    m = re.match(r"[a-z']+", head)
+    kind = kind_for_word(m.group(0)) if m else None
+    return kind.id if (kind and kind.holds_history) else None
+
+
+def _beat_for_speaker(engine: SimulationEngine, speaker_class: str) -> str | None:
+    """A history-beat id held by ``speaker_class`` — preferring one not yet asked."""
+    from backend.actor_voice import provider_speaker
+    beats = [h for h in engine.case.history if provider_speaker(h.provider) == speaker_class]
+    if not beats:
+        return None
+    unrevealed = [h for h in beats if h.id not in engine.run.revealed_history]
+    return (unrevealed or beats)[0].id
+
+
+def _apply_addressee(intent: NurseIntent, transcript: str, engine: SimulationEngine) -> NurseIntent:
+    """Honour an explicit vocative: if the resident addressed EMS/family/the patient,
+    keep the history beat with that person. Overrides only when the interpreter's
+    pick lands on the wrong person (or it under-classified as chitchat)."""
+    addressed = _addressed_history_speaker(transcript)
+    if not addressed or intent.op not in ("ask_history", "chitchat"):
+        return intent
+    from backend.actor_voice import provider_speaker
+    current = next((h for h in engine.case.history if h.id == intent.target), None)
+    if current is not None and provider_speaker(current.provider) == addressed:
+        return intent  # the interpreter already picked this person's beat — keep its specificity
+    beat_id = _beat_for_speaker(engine, addressed)
+    if not beat_id:
+        return intent
+    return NurseIntent(op="ask_history", target=beat_id, action_text=intent.action_text)
+
+
 def interpret(transcript: str, engine: SimulationEngine, history: list[dict]) -> NurseIntent:
     """Map one utterance to a structured engine intent (one LLM call)."""
     user = (
@@ -186,10 +230,11 @@ def interpret(transcript: str, engine: SimulationEngine, history: list[dict]) ->
         f'Resident just said: "{transcript}"\n\nJSON:'
     )
     try:
-        return _parse_intent(_complete(INTERPRET_SYSTEM, user))
+        intent = _parse_intent(_complete(INTERPRET_SYSTEM, user))
     except Exception as exc:  # never let interpretation break the turn
         logger.warning("nurse interpret failed: %s", exc)
-        return NurseIntent(op="chitchat")
+        intent = NurseIntent(op="chitchat")
+    return _apply_addressee(intent, transcript, engine)
 
 
 def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> StepResult | None:
@@ -242,6 +287,17 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict)
             "noted it, neutrally and without confirming or judging whether it's "
             "right. Do not reveal the correct answer."
         )
+    if intent.op == "order_investigation":
+        if result and result.revealed:
+            return (
+                "Report this test result to the resident as RAW findings only, "
+                "exactly the signal given — do NOT add any interpretation, "
+                "diagnosis, or what it means; the resident interprets it: "
+                f"{result.revealed}"
+            )
+        if result and result.message:
+            return f"The test isn't back yet — relay this plainly: {result.message}"
+        return "Order acknowledged; nothing back yet — say so briefly."
     if result is None:
         return "No specific result; respond conversationally and stay in role."
     parts = []

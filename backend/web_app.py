@@ -445,7 +445,14 @@ def _case_roster(case: Any) -> list[dict[str, str]]:
     family/rt/consult). Used by the front-end for avatars, colours and addressing."""
     from backend.actor_voice import actor_speaker
     return [
-        {"id": a.id, "role": a.role, "speaker": actor_speaker(a)}
+        {
+            "id": a.id,
+            "role": a.role,
+            "speaker": actor_speaker(a),
+            # None → present from the start; a number → en route until the case
+            # clock reaches it. The front-end compares this to the live clock.
+            "available_after_seconds": a.available_after_seconds,
+        }
         for a in case.actors
     ]
 
@@ -746,26 +753,10 @@ def api_voice_session_delete(session_id: str, request: Request) -> dict[str, Any
     return {"ok": True}
 
 
-# Default TTS voices per speaker (overridable via env). The nurse default lives
-# in voice_service; the patient is a distinct voice so the two are tellable apart.
-PATIENT_TTS_VOICE = os.getenv("TOGETHER_PATIENT_TTS_VOICE", "australian woman")
-# A consultant phoned by the resident should sound distinct from the bedside nurse.
-CONSULT_TTS_VOICE = os.getenv("TOGETHER_CONSULT_TTS_VOICE", "professional man")
-# Bedside bystanders the resident hears from directly — each a distinct voice so
-# the room is tellable apart by ear.
-# Cartesia Sonic voice names (Together mirror). If any of these is rejected,
-# voice_service.synthesize falls back to the default nurse voice automatically.
-EMS_TTS_VOICE = os.getenv("TOGETHER_EMS_TTS_VOICE", "newsman")
-FAMILY_TTS_VOICE = os.getenv("TOGETHER_FAMILY_TTS_VOICE", "polite man")
-RT_TTS_VOICE = os.getenv("TOGETHER_RT_TTS_VOICE", "wise man")
-# speaker tag → configured voice, for the per-turn TTS selection below.
-_SPEAKER_VOICE = {
-    "patient": PATIENT_TTS_VOICE,
-    "consult": CONSULT_TTS_VOICE,
-    "ems": EMS_TTS_VOICE,
-    "family": FAMILY_TTS_VOICE,
-    "rt": RT_TTS_VOICE,
-}
+# Per-speaker TTS voices (each distinct so the room is tellable apart by ear) live
+# in the cast registry, which resolves them from env at call time. The nurse
+# default lives in voice_service; a rejected voice falls back there automatically.
+from backend.actors import speaker_voice as _speaker_voice
 
 
 @app.post("/api/voice/tts")
@@ -781,8 +772,7 @@ def api_voice_tts(body: dict[str, Any], request: Request) -> Response:
         raise HTTPException(status_code=400, detail="empty text")
     voice = body.get("voice")
     if not voice:
-        speaker = (body.get("speaker") or "").lower()
-        voice = _SPEAKER_VOICE.get(speaker)  # None → nurse default in voice_service
+        voice = _speaker_voice(body.get("speaker"))  # None → nurse default in voice_service
     from backend.voice_service import synthesize
     try:
         audio = synthesize(text, voice)

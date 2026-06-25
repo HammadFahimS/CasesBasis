@@ -13,6 +13,20 @@ def _session():
     return VoiceSession(id="s1", resident_id="r1", case=case, engine=SimulationEngine(case))
 
 
+# ── roster carries each actor's case-driven arrival time (no hardcoding) ─────
+def test_case_roster_exposes_arrival_time_per_actor():
+    from backend.web_app import _case_roster
+    case = load_seed_case("myasthenic_crisis")
+    roster = {a["id"]: a for a in _case_roster(case)}
+    # the husband is en route until the case-authored arrival; staff are present from t=0
+    assert roster["husband"]["available_after_seconds"] == 300
+    assert roster["husband"]["speaker"] == "family"
+    assert roster["nurse"]["available_after_seconds"] is None
+    assert roster["patient"]["available_after_seconds"] is None
+    # every entry carries the field, so the front-end never has to hardcode arrival
+    assert all("available_after_seconds" in a for a in roster.values())
+
+
 # ── provider → speaker class ─────────────────────────────────────────────────
 def test_provider_speaker_mapping():
     assert provider_speaker("ems") == "ems"

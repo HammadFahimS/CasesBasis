@@ -17,5 +17,8 @@ data/ptbxl_index/
 # Local / transient
 .claude/
 .DS_Store
+# Runtime database — rebuilt from migrations + cases/*.json (seed_gold_cases) on startup.
+# Do not track: it's runtime state (sessions/evals), churns every run, and conflicts on merge.
+casesbasis.db
 *.db-wal
 *.db-shm

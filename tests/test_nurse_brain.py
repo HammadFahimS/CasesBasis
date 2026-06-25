@@ -22,7 +22,10 @@ def test_dispatch_order_investigation_returns_real_result():
     engine = _engine()
     result = dispatch(NurseIntent(op="order_investigation", target="ecg"), engine, "get an ECG")
     assert result is not None
-    assert "Sinus tachycardia" in (result.revealed or "")
+    # The raw result hands the tracing over for the resident to read; the clinical
+    # interpretation ("sinus tachycardia / no ischaemia") is deliberately withheld.
+    assert "monitor" in (result.revealed or "").lower()
+    assert "ischaemic" not in (result.revealed or "").lower()
 
 
 def test_dispatch_gated_investigation_reports_pending():
@@ -39,6 +42,49 @@ def test_dispatch_ask_history_reveals_real_beat():
     result = dispatch(NurseIntent(op="ask_history", target="ems_handover"), engine, "ems story")
     assert result is not None
     assert (result.revealed or "").startswith("Called 20")
+
+
+# ── addressee override (deterministic, no LLM) ───────────────────────────────
+def test_addressee_keeps_history_with_the_person_addressed():
+    # "EMS, what's the story?" must reach the paramedic even when the interpreter
+    # picked the richer patient beat by content; "Husband, …" must reach family.
+    engine = _engine()
+    out = nurse_brain._apply_addressee(
+        NurseIntent(op="ask_history", target="patient_symptoms"), "EMS, what's the story?", engine
+    )
+    assert out.op == "ask_history" and out.target == "ems_handover"
+
+    out = nurse_brain._apply_addressee(
+        NurseIntent(op="ask_history", target="ems_handover"), "Husband, what's her background?", engine
+    )
+    assert out.op == "ask_history" and out.target in ("husband_collateral", "husband_family_history")
+
+
+def test_addressee_coerces_chitchat_when_a_bystander_is_named():
+    engine = _engine()
+    out = nurse_brain._apply_addressee(
+        NurseIntent(op="chitchat"), "Paramedics, walk me through it.", engine
+    )
+    assert out.op == "ask_history" and out.target == "ems_handover"
+
+
+def test_addressee_keeps_specific_beat_when_class_already_matches():
+    # The interpreter already chose a family beat — don't clobber its specificity.
+    engine = _engine()
+    out = nurse_brain._apply_addressee(
+        NurseIntent(op="ask_history", target="husband_family_history"),
+        "Husband, any family history?", engine,
+    )
+    assert out.target == "husband_family_history"
+
+
+def test_addressee_leaves_unaddressed_and_staff_utterances_alone():
+    engine = _engine()
+    unaddressed = NurseIntent(op="ask_history", target="patient_symptoms")
+    assert nurse_brain._apply_addressee(unaddressed, "What's been happening?", engine).target == "patient_symptoms"
+    # Addressing the nurse to give a drug must not be rerouted to a history beat.
+    med = NurseIntent(op="order_medication", target="rocuronium", action_text="0.6 mg/kg")
+    assert nurse_brain._apply_addressee(med, "Nurse, give rocuronium.", engine).op == "order_medication"
 
 
 def test_dispatch_perform_action_trips_transition():
@@ -146,9 +192,11 @@ def test_run_turn_grounds_reply_in_engine(db_path, monkeypatch):
     def fake_complete(system_prompt, user_prompt):
         if "routing brain" in system_prompt:
             return '{"op": "order_investigation", "target": "ecg", "action_text": ""}'
-        # speak step: the real ECG result must have reached this prompt
-        assert "Sinus tachycardia" in user_prompt
-        return "ECG shows sinus tachycardia around 105, no ischaemic changes."
+        # speak step: the real (raw) ECG result must have reached this prompt, and
+        # the speak rubric must forbid the nurse from interpreting it.
+        assert "monitor" in user_prompt
+        assert "do NOT add any interpretation" in user_prompt
+        return "The ECG tracing is up on the monitor for you to read."
 
     monkeypatch.setattr(nurse_brain, "_complete", fake_complete)
     # Stub the image generator so the turn stays offline (real ECG = an LLM call).
@@ -164,8 +212,8 @@ def test_run_turn_grounds_reply_in_engine(db_path, monkeypatch):
     turn = run_turn(session, "pull up the ECG")
 
     assert turn.intent.op == "order_investigation"
-    assert "Sinus tachycardia" in (turn.revealed or "")
-    assert "tachycardia" in turn.reply
+    assert "monitor" in (turn.revealed or "").lower()
+    assert "monitor" in turn.reply.lower()
     assert turn.vitals.get("heart_rate")
     assert turn.diagnostic and turn.diagnostic["kind"] == "ecg"   # drawer card produced
     # the exchange is recorded for context on the next turn

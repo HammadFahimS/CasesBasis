@@ -613,10 +613,106 @@
   .pm-home { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--ink-200); }
   .pm-home:hover { background: rgba(255,255,255,0.1); }
 
+  /* ===== Actor roster (presence strip, top-centre) ===== */
+  .roster {
+    position: fixed; top: 72px; left: 50%; transform: translateX(-50%); z-index: 5;
+    display: flex; align-items: flex-start; gap: 4px;
+    padding: 10px 16px 11px; border-radius: 18px;
+    background: rgba(13,20,31,0.42);
+    border: 1px solid rgba(255,255,255,0.055);
+    backdrop-filter: blur(9px);
+    box-shadow: 0 14px 44px rgba(0,0,0,0.4);
+  }
+  .roster:empty { display: none; }
+  .roster-head {
+    align-self: center; margin-right: 8px; padding-right: 14px;
+    border-right: 1px solid rgba(255,255,255,0.07);
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .roster-head .rh-1 { font-family:'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-500); }
+  .roster-head .rh-2 { font-family:'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; color: var(--ink-600); display:flex; align-items:center; gap:5px; }
+  .roster-head .rh-2 .cnt { color: var(--teal-glow); font-weight: 600; }
+
+  .actor {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    width: 60px; position: relative; cursor: default; transition: opacity .6s ease;
+  }
+  .ava-wrap { position: relative; width: 46px; height: 46px; }
+  .actor .ava {
+    width: 46px; height: 46px; border-radius: 50%;
+    background: linear-gradient(140deg, var(--ac), var(--ac2));
+    display: grid; place-items: center;
+    font-family:'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: #0b1119;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+    transition: box-shadow .5s ease, filter .6s ease, transform .5s ease;
+    position: relative; overflow: visible;
+  }
+  .actor .ring { position: absolute; inset: -4px; border-radius: 50%; border: 1.5px solid var(--ac); opacity: 0; pointer-events: none; }
+  .actor .badge {
+    position: absolute; right: -2px; bottom: -2px; width: 17px; height: 17px; border-radius: 50%;
+    background: #0c131e; border: 1px solid rgba(255,255,255,0.12);
+    display: grid; place-items: center; color: var(--ac); box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  }
+  .actor .nm { font-family:'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-400); transition: color .5s ease; white-space: nowrap; }
+  .actor .tag {
+    display: none; align-items: center; gap: 4px;
+    font-family:'JetBrains Mono', monospace; font-size: 7.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ac); margin-top: -3px;
+  }
+  .actor .tag .tdot { width: 4px; height: 4px; border-radius: 50%; background: var(--ac); animation: enroute-dot 1.4s ease-in-out infinite; }
+  @keyframes enroute-dot { 0%,100%{ opacity:.25; transform: translateX(0);} 50%{ opacity:1; transform: translateX(2px);} }
+
+  /* present-idle: calm full colour with a soft accent breathing glow */
+  .actor.idle .ava { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 13px -3px var(--ac); animation: breathe-soft 4.5s ease-in-out infinite; }
+  @keyframes breathe-soft { 0%,100%{ box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 11px -4px var(--ac);} 50%{ box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 16px -2px var(--ac);} }
+
+  /* speaking: illuminated + pulsing (mirrors the orb's RESPONDING glow) */
+  .actor.speaking .ava { animation: speak-glow 1.05s ease-in-out infinite; transform: translateY(-2px) scale(1.07); }
+  .actor.speaking .nm { color: var(--ac); }
+  .actor.speaking .ring { animation: speak-ring 1.05s ease-out infinite; }
+  @keyframes speak-glow {
+    0%,100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4), 0 0 16px 1px var(--ac); }
+    50%     { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 30px 6px var(--ac); }
+  }
+  @keyframes speak-ring { 0%{ transform: scale(.82); opacity: .8; } 100%{ transform: scale(1.45); opacity: 0; } }
+
+  /* en route: dim desaturated ghost with a pulsing "En route" tag */
+  .actor.enroute { opacity: .42; }
+  .actor.enroute .ava { filter: grayscale(.72) brightness(.62); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07); animation: none; }
+  .actor.enroute .nm { color: var(--ink-600); }
+  .actor.enroute .badge { color: var(--ink-500); }
+  .actor.enroute .tag { display: flex; }
+
+  /* arrival: en-route → present settle-in */
+  .actor.arriving { animation: arrive 1.25s cubic-bezier(.2,.75,.15,1); }
+  .actor.arriving .ava { animation: arrive-ava 1.25s cubic-bezier(.2,.75,.15,1); }
+  @keyframes arrive { 0%{ opacity:.42; transform: translateY(7px) scale(.92);} 55%{ opacity:1; transform: translateY(-3px) scale(1.1);} 100%{ opacity:1; transform: translateY(0) scale(1);} }
+  @keyframes arrive-ava {
+    0%   { filter: grayscale(.72) brightness(.62); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07), 0 0 0 0 var(--ac); }
+    55%  { filter: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5), 0 0 34px 8px var(--ac); }
+    100% { filter: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 14px -3px var(--ac); }
+  }
+
+  /* arrival toast */
+  .toast {
+    position: fixed; top: 188px; left: 50%; transform: translate(-50%, -8px); z-index: 7; pointer-events: none;
+    display: inline-flex; align-items: center; gap: 9px; padding: 9px 16px; border-radius: 99px;
+    background: rgba(16,24,36,0.82); border: 1px solid rgba(231,179,90,0.4);
+    backdrop-filter: blur(10px); box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+    font-size: 12px; letter-spacing: 0.01em; color: var(--ink-200);
+    opacity: 0; transition: opacity .5s ease, transform .5s ease;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast .t-dot { width: 8px; height: 8px; border-radius: 50%; background: #e7b35a; box-shadow: 0 0 12px #e7b35a; }
+  .toast b { color: #f0c87a; font-weight: 600; }
+
   @media (max-width: 720px) {
     .switcher { gap: 9px; }
     .sw canvas { width: 38px; height: 38px; }
     .sw .sw-ring { width: 42px; height: 42px; }
+    .roster { gap: 0; padding: 9px 10px; }
+    .roster-head { display: none; }
+    .actor { width: 50px; }
   }
 </style>
 </head>
@@ -652,6 +748,12 @@
     <span class="pt-chip dx" id="dxChip" hidden></span>
   </div>
 </div>
+
+<!-- Actor roster / presence strip (built from the case roster on load) -->
+<div class="roster" id="roster" aria-label="People in the room"></div>
+
+<!-- Arrival toast (an actor who was en route joins the bedside) -->
+<div class="toast" id="arrivalToast"><span class="t-dot"></span> <b id="arrivalName">Someone</b>&nbsp;arrived at the bedside</div>
 
 <div class="hud-bar" id="hudBar">
   <span class="hb-clock" id="timer">00:00</span>
@@ -1137,6 +1239,115 @@
       }
     });
     buildAddressIndex();
+    buildRosterStrip();   // the top-centre presence avatars
+  }
+
+  // ---------- Actor roster / presence strip ----------
+  // Each speaker class carries the same accent gradient used by the transcript
+  // tags, so an avatar and its Room-log lines read as the same person.
+  const SPEAKER_AC = {
+    patient:['#e0a85f','#b9772f'], nurse:['#5fd8e6','#0e8a9e'],
+    ems:['#8ab4f0','#4d6fb0'], family:['#e7b35a','#b9772f'],
+    rt:['#6fd3c2','#2f8d7e'], consult:['#c08cf0','#7e4fb0'],
+  };
+  const PHONE_SVG = '<svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.2c0 5 4.8 9.8 9.8 9.8l.8-2.6-3-1-1.2 1.4c-1.7-.8-3-2.1-3.8-3.8l1.4-1.2-1-3z"/></svg>';
+  const rosterEl = document.getElementById('roster');
+  const arrivalToast = document.getElementById('arrivalToast');
+  const arrivalName = document.getElementById('arrivalName');
+  const actorTokens = {};   // actor id → { el, role, arrive, present, class }
+
+  // A short monogram for an actor, derived generically: initials in a parenthetical
+  // ("Patient (EK)" → EK), else the acronym of the role words ("Respiratory
+  // Therapist" → RT), else the first two letters.
+  function monogram(r){
+    const role = r.role || r.id || '';
+    const paren = role.match(/\(([^)]+)\)/);
+    if (paren){
+      const m = paren[1].match(/[A-Za-z]+/g) || [];
+      if (m.length >= 2) return (m[0][0] + m[1][0]).toUpperCase();
+      return paren[1].replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase() || '··';
+    }
+    const words = role.replace(/[^A-Za-z ]/g,'').split(/\s+/).filter(Boolean);
+    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+    return (role.replace(/[^A-Za-z]/g,'').slice(0,2) || '··').toUpperCase();
+  }
+
+  // A short roster caption per actor — keeps the strip legible (the transcript
+  // carries the full role). Consultants show their specialty, family the relation.
+  function shortLabel(r){
+    const fixed = { patient:'Patient', nurse:'Nurse', ems:'EMS', rt:'RT' };
+    if (fixed[r.speaker]) return fixed[r.speaker];
+    if (r.speaker === 'consult') return (r.role || 'Consult').split(/\s+/)[0];
+    return r.role || r.speaker;   // family → "Husband"
+  }
+
+  function buildRosterStrip(){
+    rosterEl.innerHTML = '';
+    for (const k in actorTokens) delete actorTokens[k];
+    if (!ROSTER.length) return;
+    const head = document.createElement('div');
+    head.className = 'roster-head';
+    head.innerHTML = '<div class="rh-1">In the room</div><div class="rh-2"></div>';
+    rosterEl.appendChild(head);
+    ROSTER.forEach(r => {
+      const ac = SPEAKER_AC[r.speaker]; if (!ac) return;   // 'res' etc. never appears here
+      const arrive = (r.available_after_seconds == null) ? 0 : r.available_after_seconds;
+      const present = secs >= arrive;
+      const el = document.createElement('div');
+      el.className = 'actor ' + (present ? 'idle' : 'enroute');
+      el.style.setProperty('--ac', ac[0]);
+      el.style.setProperty('--ac2', ac[1]);
+      el.innerHTML =
+        '<div class="ava-wrap"><div class="ava">' + escapeHtml(monogram(r)) + '</div>' +
+        '<div class="ring"></div>' + (r.speaker === 'consult' ? '<div class="badge">' + PHONE_SVG + '</div>' : '') +
+        '</div><div class="nm">' + escapeHtml(shortLabel(r)) + '</div>' +
+        '<div class="tag"><span class="tdot"></span>En route</div>';
+      rosterEl.appendChild(el);
+      actorTokens[r.id] = { el, role: r.role, arrive, present, speaker: r.speaker };
+    });
+    refreshPresence();
+  }
+
+  function refreshPresence(){
+    const head = rosterEl.querySelector('.rh-2'); if (!head) return;
+    const all = Object.values(actorTokens);
+    const n = all.filter(a => a.present).length;
+    const enr = all.length - n;
+    head.innerHTML = '<span class="cnt">' + n + '</span> present' + (enr ? ' · ' + enr + ' en route' : '');
+  }
+
+  // Illuminate the avatar of whoever just spoke (driven by real turns, one at a
+  // time). Resident lines don't light anyone — the resident isn't in the roster.
+  let speakTokenTimer = null, speakingId = null;
+  function speakRoster(speaker){
+    if (speaker === 'res') return;
+    if (speakingId && actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
+    // first present token of this speaker class (cases have one each; consults rare)
+    const hit = Object.entries(actorTokens).find(([,a]) => a.speaker === speaker && a.present);
+    if (!hit){ speakingId = null; return; }
+    speakingId = hit[0];
+    hit[1].el.classList.add('speaking');
+    clearTimeout(speakTokenTimer);
+    speakTokenTimer = setTimeout(() => {
+      if (actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
+      speakingId = null;
+    }, 2600);
+  }
+
+  // Promote any en-route actor whose arrival time the case clock has now reached.
+  function checkArrivals(){
+    Object.values(actorTokens).forEach(a => {
+      if (!a.present && a.arrive && secs >= a.arrive){
+        a.present = true;
+        a.el.classList.remove('enroute');
+        a.el.classList.add('arriving', 'idle');
+        setTimeout(() => a.el.classList.remove('arriving'), 1300);
+        arrivalName.textContent = a.role || 'Someone';
+        arrivalToast.classList.add('show');
+        setTimeout(() => arrivalToast.classList.remove('show'), 4200);
+        refreshPresence();
+      }
+    });
   }
   function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function setNow(ch, text){ ch.now.innerHTML = `<span class="dots"><i></i><i></i><i></i></span> ${escapeHtml(text)}`; }
@@ -1151,6 +1362,7 @@
     ch.scroll.insertBefore(div, ch.now);
     ch.root.classList.remove('collapsed');
     ch.now.scrollIntoView({ block:'nearest' });
+    speakRoster(speaker);   // light the speaker's roster avatar
   }
 
   // ---------- case clock ----------
@@ -1162,6 +1374,7 @@
     const m = String(Math.floor(secs/60)).padStart(2,'0');
     const s = String(secs%60).padStart(2,'0');
     timerEl.textContent = `${m}:${s}`;
+    checkArrivals();                  // promote any en-route actor whose time has come
   }, 1000);
 
   // ---------- live vitals (seeded from the loaded case) ----------
@@ -1397,7 +1610,9 @@
   }
   function startEcgMonitor(morph){
     ecgMorph = morph || ecgMorph || {};
-    if (ecgRhythmEl) ecgRhythmEl.textContent = (ecgMorph.rhythm_label || 'sinus').toLowerCase();
+    // Show a neutral lead label, not the rhythm name — the resident reads the
+    // tracing themselves (the morphology still drives the waveform internally).
+    if (ecgRhythmEl) ecgRhythmEl.textContent = 'lead II';
     if (ecgMon.hidden){ ecgMon.hidden = false; monSep.hidden = false; ecgResize(); }
     ecgRR = 60 / Math.max(20, Math.min(250, baseHR || 80));
     if (!ecgRAF){ ecgLastTs = 0; ecgRAF = requestAnimationFrame(ecgLoop); }

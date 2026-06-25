@@ -114,6 +114,9 @@
   .brand-name { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; color: white; }
   .brand-name .lc { color: var(--teal-400); font-weight: 500; }
   .brand-sub  { font-size: 11px; color: var(--ink-400); margin-top: 1px; letter-spacing: 0.04em; }
+  .grant-badge { position: relative; z-index: 2; display: inline-block; margin-top: 18px; opacity: 0.82; transition: opacity .15s; }
+  .grant-badge:hover { opacity: 1; }
+  .grant-badge img { display: block; width: 200px; max-width: 60%; height: auto; }
 
   /* Hero text */
   .hero {
@@ -527,6 +530,10 @@
       <span class="dot"></span>
       <a href="#">Curriculum</a>
     </div>
+
+    <a class="grant-badge" href="https://elevenlabs.io/startup-grants" target="_blank" rel="noopener" aria-label="Backed by an ElevenLabs Startup Grant">
+      <img src="https://eleven-public-cdn.elevenlabs.io/payloadcms/cy7rxce8uki-IIElevenLabsGrants%201.webp" alt="ElevenLabs Grants" width="200">
+    </a>
 
     <div class="floating-chips" aria-hidden="true">
       <div class="chip-float chip-a">

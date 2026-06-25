@@ -63,6 +63,38 @@ def seed_gold_cases() -> None:
     conn.commit()
 
 
+def reseed_gold_case(case_id: str) -> bool:
+    """Overwrite an existing gold case's DB row from its ``cases/*.json`` file.
+
+    The deliberate counterpart to :func:`seed_gold_cases` (which is insert-only and
+    never clobbers a row). Use this after editing a gold case JSON so the change
+    reaches the live sim, which reads the case from the DB via :func:`get_case` —
+    never from the file. ``is_gold`` and ``created_at`` are preserved; only the
+    case content and ``updated_at`` change. Returns ``False`` if the row is absent
+    (call ``seed_gold_cases`` first) and raises if the JSON fails validation.
+
+    No server restart is needed (the DB is read per new session), but a parked or
+    resumed session keeps its old case — start a *fresh* session to see the change.
+    """
+    case = load_seed_case(case_id)  # validates against the schema; raises on bad JSON
+    conn = get_db()
+    row = conn.execute(
+        "SELECT is_gold FROM simulated_cases WHERE id=?", (case.id,)
+    ).fetchone()
+    if row is None:
+        return False
+    now = utcnow()
+    conn.execute(
+        "UPDATE simulated_cases SET title=?, specialty=?, difficulty=?, "
+        "case_json=?, updated_at=? WHERE id=?",
+        (case.meta.title, case.meta.specialty, case.meta.difficulty,
+         case.model_dump_json(), now, case.id),
+    )
+    conn.commit()
+    logger.info("reseeded gold simulated case from file: %s", case_id)
+    return True
+
+
 def list_cases() -> list[dict[str, Any]]:
     """Catalogue rows for the CRUD table."""
     conn = get_db()
