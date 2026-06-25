@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from pathlib import Path
@@ -438,7 +438,15 @@ def _voice_session_payload(session: Any) -> dict[str, Any]:
         # Everyone the resident can hear from, with the speaker class that styles
         # and voices them — drives the unified Room log and addressee routing.
         "roster": _case_roster(case),
+        # Whether the autonomous clock is running — the client opens the live event
+        # WebSocket only when it is, so the default (runtime-off) config stays quiet.
+        "live_runtime": _live_runtime_enabled(),
     }
+
+
+def _live_runtime_enabled() -> bool:
+    from backend.session_runtime import runtime_enabled
+    return runtime_enabled()
 
 
 def _case_consultants(case: Any) -> list[Any]:
@@ -530,6 +538,51 @@ def api_voice_resume(body: dict[str, Any], request: Request) -> dict[str, Any]:
     payload["patient_history"] = session.patient_history
     payload["cards"] = session.cards
     return payload
+
+
+@app.websocket("/ws/voice/{session_id}")
+async def ws_voice(websocket: WebSocket, session_id: str) -> None:
+    """Live event channel for one session: streams the autonomous-clock events
+    (deterioration, cues, state changes, case end) the Session Runtime publishes.
+
+    Auth is the same signed cookie as the REST routes, and the socket only opens
+    for the resident who owns the session. ``?since=<seq>`` replays missed events
+    after a reconnect (the client dedups by ``seq``). Server→client only for now;
+    turn replies still flow over the REST POST."""
+    import asyncio
+
+    from backend.session_runtime import get_bus
+    from backend.voice_session import AccessDenied, CaseNotFound, get_session
+
+    resident_id = get_current_resident_id(websocket)
+    if resident_id is None:
+        await websocket.close(code=4401)  # unauthenticated
+        return
+    try:
+        # Authorises ownership and ensures the session is live (so the runtime ticks
+        # it); the DB hit on a cold session runs off the event loop.
+        await asyncio.to_thread(get_session, session_id, resident_id)
+    except (CaseNotFound, AccessDenied):
+        await websocket.close(code=4403)  # not found / not yours
+        return
+
+    await websocket.accept()
+    bus = get_bus()
+    queue = bus.subscribe(session_id)
+    try:
+        since = websocket.query_params.get("since")
+        if since is not None:
+            try:
+                for ev in bus.replay(session_id, int(since)):
+                    await websocket.send_json(ev)
+            except ValueError:
+                pass
+        while True:
+            await websocket.send_json(await queue.get())
+    except WebSocketDisconnect:
+        pass
+    finally:
+        bus.unsubscribe(session_id, queue)
 
 
 @app.post("/api/voice/stt")

@@ -1899,6 +1899,58 @@
     }
   }
 
+  // ---------- live event channel (autonomous clock — F1+F2) ----------
+  // The server's Session Runtime advances the case on a wall-clock even while the
+  // resident is silent (deterioration, cues, state changes) and streams the events
+  // here. Turn *replies* still arrive over the REST POST; this socket carries only
+  // what happens between turns. Opened only when the server reports live_runtime.
+  let liveWS = null, liveLastSeq = 0, liveRetry = 0;
+  function connectLiveEvents(){
+    if (!SESSION_ID || liveWS) return;
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const since = liveLastSeq ? `?since=${liveLastSeq}` : '';
+    let ws;
+    try { ws = new WebSocket(`${proto}://${location.host}/ws/voice/${SESSION_ID}${since}`); }
+    catch(e){ return; }
+    liveWS = ws;
+    ws.onopen = () => { liveRetry = 0; };
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch(e){ return; }
+      if (!m || typeof m.seq !== 'number' || m.seq <= liveLastSeq) return;  // dedup + ordering
+      liveLastSeq = m.seq;
+      handleLiveEvent(m);
+    };
+    ws.onerror = () => { try { ws.close(); } catch(e){} };
+    ws.onclose = () => {
+      liveWS = null;
+      if (debriefShown || pendingEnd) return;            // case over → stop reconnecting
+      liveRetry = Math.min(liveRetry + 1, 6);
+      setTimeout(connectLiveEvents, 500 * Math.pow(2, liveRetry - 1));   // backoff → ~16s
+    };
+  }
+
+  async function handleLiveEvent(m){
+    const d = m.data || {};
+    if (m.kind === 'cue'){
+      const speaker = m.speaker || 'nurse';
+      addTurn(ROOM, speaker, m.text);
+      if (m.text && VOICE_BACKEND && !processing){ try { await playTTS(m.text, speaker); } catch(e){} }
+      return;
+    }
+    if (m.kind === 'state_change' || m.kind === 'condition'){
+      if (d.vitals) applyVitals(d.vitals);                // the monitor reacts to deterioration
+      if (m.text){
+        setNow(NURSE_CH, m.text);
+        stageLabel.textContent = d.critical ? ('⚠ ' + m.text) : (m.data && m.data.state_name) || stageLabel.textContent;
+      }
+      return;
+    }
+    if (m.kind === 'case_ended'){
+      if (!debriefShown) concludeCase();
+      return;
+    }
+  }
+
   // ---------- start the live engine-backed session ----------
   let SESSION_ID = null;
   function titleCase(s){ return s ? s[0].toUpperCase()+s.slice(1) : s; }
@@ -1929,6 +1981,7 @@
     applyVitals(data.vitals);
     applyRoster(data.roster);  // who's in the room → Room-log avatars/labels + addressing
     renderPanels(data.menu);   // dock the case's exam/order/consult controls into the tabs
+    if (data.live_runtime) connectLiveEvents();  // stream autonomous-clock events (F1+F2)
     if (data.resumed){
       repaintResume(data);     // full visual rehydration of a parked run
     } else {

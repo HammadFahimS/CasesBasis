@@ -70,27 +70,32 @@ class SessionEvent:
         }
 
 
-def to_events(clock: list[StepResult], cues: list[dict], elapsed: int) -> list[SessionEvent]:
+def to_events(
+    clock: list[StepResult], cues: list[dict], elapsed: int,
+    vitals: dict | None = None,
+) -> list[SessionEvent]:
     """Pure mapping: engine outputs for one tick → ordered room events.
 
     A transition becomes a ``state_change``; a non-transition message (a condition
     change with no state move) becomes a ``condition``; cues carry their actor's
-    voice. A run that just ended is closed with a ``case_ended`` event.
+    voice. A run that just ended is closed with a ``case_ended`` event. ``vitals``
+    (the engine's live vitals after the tick) ride on the engine-driven events so
+    the room's monitor reacts to deterioration without a separate fetch.
     """
     events: list[SessionEvent] = []
-    ended = False
     for r in clock:
         if r.transitioned:
             events.append(SessionEvent(
                 kind="state_change", t=elapsed, speaker="system",
                 text=r.message or f"Entered {r.state_name}",
                 data={"from_state": r.from_state, "state_id": r.state_id,
-                      "state_name": r.state_name, "critical": r.critical_error},
+                      "state_name": r.state_name, "critical": r.critical_error,
+                      "vitals": vitals},
             ))
         elif r.message:
             events.append(SessionEvent(
                 kind="condition", t=elapsed, speaker="system",
-                text=r.message, data={"critical": r.critical_error},
+                text=r.message, data={"critical": r.critical_error, "vitals": vitals},
             ))
         # A terminal transition sets ended on the run; surface it once, after the move.
     for cue in cues:
@@ -212,7 +217,8 @@ class SessionRuntime:
             cues = _fire_cues(session)
             if not clock and not cues:
                 return []
-            events = to_events(clock, cues, session.engine.run.elapsed_seconds)
+            vitals = session.engine.current_vitals().model_dump(exclude_none=True)
+            events = to_events(clock, cues, session.engine.run.elapsed_seconds, vitals)
             if session.engine.run.ended:
                 events.append(SessionEvent(
                     kind="case_ended", t=session.engine.run.elapsed_seconds,

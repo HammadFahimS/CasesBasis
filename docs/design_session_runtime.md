@@ -115,3 +115,10 @@ One JSON envelope per event, ordered, monotonically sequenced per session:
    thin client consumer that renders events into the existing Room log / monitor.
 3. Flip REST turns to also publish to the bus, so the socket is the single ordered stream.
 4. Only then build emotion/Director and streaming audio on top.
+
+**Status (June 2026):** steps 1–2 shipped. The WebSocket (`/ws/voice/{session_id}`) streams
+autonomous-clock events (deterioration/cues/state changes/case end), enriched with live vitals so
+the monitor reacts; the client opens it only when the server reports `live_runtime`, dedups by `seq`,
+and reconnects with backoff + `?since=`. **Step 3 (REST turns → bus) is deliberately deferred** — turn
+*replies* still flow over the REST POST response, so the socket carries only between-turn events. This
+avoids client double-render until the room renders from a single stream. Step 4 is the next phase.

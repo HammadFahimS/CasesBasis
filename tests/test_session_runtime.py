@@ -10,13 +10,18 @@ import threading
 import types
 from collections import OrderedDict
 
+import pytest
+
 from backend import session_runtime as sr
 from backend.simulation_engine import StepResult
 
 
 def _session(status: str = "active", ended: bool = False, elapsed: int = 120):
     engine = types.SimpleNamespace(
-        run=types.SimpleNamespace(ended=ended, elapsed_seconds=elapsed)
+        run=types.SimpleNamespace(ended=ended, elapsed_seconds=elapsed),
+        current_vitals=lambda: types.SimpleNamespace(
+            model_dump=lambda exclude_none=True: {"heart_rate": 120}
+        ),
     )
     return types.SimpleNamespace(
         id="s1", status=status, lock=threading.Lock(), engine=engine
@@ -50,6 +55,12 @@ def test_to_events_cues_carry_speaker():
 
 def test_to_events_empty_when_nothing_happened():
     assert sr.to_events([], [], 10) == []
+
+
+def test_to_events_attaches_vitals_to_engine_events():
+    r = StepResult(state_id="s1", state_name="Baseline", transitioned=False, message="worse")
+    [ev] = sr.to_events([r], [], 30, vitals={"heart_rate": 130})
+    assert ev.data["vitals"] == {"heart_rate": 130}
 
 
 # ── EventBus ──────────────────────────────────────────────────────────────────
@@ -169,3 +180,69 @@ def test_tick_once_publishes_active_session_events(monkeypatch):
     asyncio.run(runtime.tick_once())
     published = bus.replay(s.id, 0)
     assert [e["kind"] for e in published] == ["state_change"]
+
+
+# ── WebSocket endpoint (F2 transport) ─────────────────────────────────────────
+
+@pytest.fixture()
+def live_env(tmp_path, monkeypatch):
+    """A migrated, seeded DB + a real resident, with the heavy FAISS warmup in the
+    app lifespan stubbed so a TestClient spins up fast."""
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "ws_test.db"))
+    monkeypatch.setenv("APP_SECRET", "test-secret-ws")
+    from backend import cxr_service, voice_session
+    from backend.db import run_migrations
+    from backend.persistence import get_or_create_resident
+    from backend.simulated_case_repo import seed_gold_cases
+    monkeypatch.setattr(cxr_service._faiss_index, "_load", lambda: None)
+    run_migrations()
+    seed_gold_cases()
+    voice_session._SESSIONS.clear()
+    return get_or_create_resident("ws@test.com")
+
+
+def test_ws_streams_published_events(live_env):
+    from fastapi.testclient import TestClient
+
+    from backend import voice_session, web_app
+    from backend.auth import COOKIE_NAME, make_session_cookie
+    from backend.session_runtime import SessionEvent, get_bus
+
+    session = voice_session.start_session("myasthenic_crisis", live_env)
+    client = TestClient(web_app.app)
+    client.cookies.set(COOKIE_NAME, make_session_cookie(live_env))
+    with client, client.websocket_connect(f"/ws/voice/{session.id}") as ws:
+        get_bus().publish(session.id, [
+            SessionEvent(kind="cue", t=5, speaker="nurse", text="Doctor, the husband's here.")
+        ])
+        msg = ws.receive_json()
+    assert msg["kind"] == "cue" and msg["speaker"] == "nurse"
+    assert msg["text"] == "Doctor, the husband's here." and msg["seq"] == 1
+
+
+def test_ws_rejects_unauthenticated(live_env):
+    from fastapi.testclient import TestClient
+    from starlette.websockets import WebSocketDisconnect
+
+    from backend import voice_session, web_app
+
+    session = voice_session.start_session("myasthenic_crisis", live_env)
+    client = TestClient(web_app.app)  # no auth cookie
+    with client, pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect(f"/ws/voice/{session.id}"):
+            pass
+
+
+def test_ws_rejects_other_residents_session(live_env):
+    from fastapi.testclient import TestClient
+    from starlette.websockets import WebSocketDisconnect
+
+    from backend import voice_session, web_app
+    from backend.auth import COOKIE_NAME, make_session_cookie
+
+    session = voice_session.start_session("myasthenic_crisis", live_env)
+    client = TestClient(web_app.app)
+    client.cookies.set(COOKIE_NAME, make_session_cookie("not-the-owner"))
+    with client, pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect(f"/ws/voice/{session.id}"):
+            pass
