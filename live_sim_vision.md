@@ -197,6 +197,49 @@ The room currently works; these make it feel like a product:
 - **Interruption/turn-taking correctness.** When barge-in lands, cleanly cancel in-flight TTS and
   re-open the mic without dropping engine state.
 
+### 7.1 Live playtest findings — 2026-06-25 (gold case, myasthenic_crisis)
+
+A real run surfaced the following. Confirm each against current HEAD first (the running server may
+predate recent routing work), then fix:
+
+- [ ] **History spoken by the *nurse* in first person.** The authored `patient_symptoms` beat ("I sleep
+  on three pillows…") was delivered with `speaker:"nurse"`, not the patient. By design
+  (`nurse_brain._voice_reply` → `voice_history`) a beat whose provider is `patient` must be voiced by
+  the **patient**; the DB case tags it `patient`, so the server returning `nurse` is the inverse of
+  intended. **Most likely a stale server** (pre actor-voice routing) — restart on HEAD and re-test; if
+  it persists, log per-turn `intent.op/target/speaker` to catch the misroute. Even when the nurse
+  *relays*, she must use third person ("She reports…"), never "I".
+- [ ] **Two unreconciled history paths.** History-taking is engine-grounded only on the **nurse channel**
+  (`ask_history` reveals authored beats); the **patient channel** (`/api/voice/llm-patient` →
+  `patient_reply`) is ungrounded free roleplay with only persona/known facts. So asking the *patient*
+  directly yields thin distress lines while the authored timeline only surfaces via the nurse — the
+  opposite of a resident's instinct. Ground the patient channel in the same beats (or route patient-held
+  `ask_history` through the patient voice) so history-taking works whoever you talk to.
+- [ ] **No "you already have this" handling.** Re-asking re-dumps the same beat (delivered twice,
+  reworded) and the patient loops near-identical lines. The engine already tracks
+  `run.revealed_history` — use it to acknowledge ("I already told you…") or add nothing on repeat.
+- [ ] **Ambiguous/low-confidence orders resolve silently.** "perform an ACG" (typo/mishear) mapped to
+  **ABG** with no confirmation; the resident likely meant ECG (asked for it next). Add a "did you
+  mean…?" guard when the interpreter's match is low-confidence or ambiguous between named tests.
+- [ ] **Case-data fix: ABG labeled but venous.** The ABG result reads "pO₂ 42 **venous**" — a venous gas
+  isn't an ABG. Correct the authored investigation in the case (and reseed).
+- [ ] **Flat clinical tension.** Crisis physiology (pH 7.31, pCO₂ 55, hypoxia) but no deterioration
+  cue/state change and a static-repetitive patient affect across the run. Confirm `LIVE_RUNTIME` is on
+  and wire the **emotional/deterioration arc** (Phase 1) so distress escalates with the clock.
+- [ ] **Handoff reads like a chart, not speech.** Opening narration ("currently on 6 L via face mask
+  with SpO₂ 97%, sitting upright and unable to speak full sentences") is HPI prose; tighten
+  `INTRO_SYSTEM` toward spoken bedside handoff.
+- [ ] **Actor self-voices collateral unprompted.** The husband volunteered family history ("my wife's
+  mother had a neuromuscular disorder…") without being engaged — the proactive **cue system**
+  (`_fire_cues` → `engine.due_cues`) firing an authored `family` cue on the clock. Decide the intended
+  behavior: should an actor *self-voice* collateral before the resident addresses them, or should the
+  cue only *nudge* ("the husband is here if you want to talk to him") and gate the actual beat behind
+  the resident engaging? Tune cue authoring + `CUE_AFTER_SECONDS` accordingly.
+- [ ] **ElevenLabs not wired (confirmed).** TTS still routes to Together AI Cartesia Sonic
+  (`voice_service.synthesize` → `api.together.ai/v1/audio/speech`, `cartesia/sonic-2`);
+  `ELEVENLABS_API_KEY` is in `.env` but unused — hence grant credits unchanged. This is the unstarted
+  **Phase 1** swap, called out here so it isn't mistaken for a regression.
+
 ---
 
 ## 8 · Scoring & debrief depth
