@@ -143,9 +143,11 @@ def test_sessions_endpoint_enriches_title_and_resumable(env, monkeypatch):
 
 def test_delete_is_owner_scoped_and_drops_the_run(env, monkeypatch):
     _stub_llm(monkeypatch)
+    from fastapi import HTTPException
+
     from backend.auth import COOKIE_NAME, make_session_cookie
     from backend.persistence import get_or_create_resident
-    from backend.web_app import HTTPException, api_voice_session_delete
+    from backend.web_app import api_voice_session_delete
 
     session = voice_session.start_session("myasthenic_crisis", env)
     other = get_or_create_resident("intruder@test.com")
