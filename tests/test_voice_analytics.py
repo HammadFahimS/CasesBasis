@@ -66,7 +66,7 @@ def test_evaluation_is_owner_scoped(env):
 
 # ── dashboard merge ──────────────────────────────────────────────────────────
 def test_dashboard_sessions_merges_voice_runs(env, monkeypatch):
-    from backend.web_app import dashboard_sessions, dashboard_stats
+    from backend.routers.dashboard import dashboard_sessions, dashboard_stats
 
     session = voice_session.start_session("myasthenic_crisis", env)
     voice_persistence.record_evaluation(session.id, 75, [
@@ -75,7 +75,8 @@ def test_dashboard_sessions_merges_voice_runs(env, monkeypatch):
 
     class _Req:  # dashboard endpoints only need the resident cookie resolver
         pass
-    monkeypatch.setattr("backend.web_app.require_resident", lambda req: env)
+    # Patch require_resident where the handler resolves it (its own module).
+    monkeypatch.setattr("backend.routers.dashboard.require_resident", lambda req: env)
 
     sessions = dashboard_sessions(_Req())["sessions"]
     voice_rows = [s for s in sessions if s.get("source") == "voice"]
