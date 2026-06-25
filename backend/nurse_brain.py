@@ -550,9 +550,13 @@ def _resolve_turn(
 
 def run_turn(session: VoiceSession, transcript: str) -> NurseTurn:
     """Full grounded turn: advance clock, interpret, dispatch, speak."""
-    clock = advance_clock(session)
-    intent = interpret(transcript, session.engine, session.history)
-    return _resolve_turn(session, intent, transcript, clock)
+    # Hold the session lock so a background runtime tick can't advance the clock or
+    # fire a cue mid-turn (double-firing a transition). Uncontended when the runtime
+    # is off, so this is free in the default configuration.
+    with session.lock:
+        clock = advance_clock(session)
+        intent = interpret(transcript, session.engine, session.history)
+        return _resolve_turn(session, intent, transcript, clock)
 
 
 def _action_label(session: VoiceSession, op: str, target: str | None) -> str:
@@ -581,7 +585,8 @@ def run_action(
     directly to the deterministic dispatch. Everything else matches a voice turn."""
     if op not in OPS:
         raise ValueError(f"unknown op: {op}")
-    clock = advance_clock(session)
-    label = action_text.strip() or _action_label(session, op, target)
-    intent = NurseIntent(op=op, target=target, action_text=label)
-    return _resolve_turn(session, intent, label, clock)
+    with session.lock:  # serialise against a background runtime tick (see run_turn)
+        clock = advance_clock(session)
+        label = action_text.strip() or _action_label(session, op, target)
+        intent = NurseIntent(op=op, target=target, action_text=label)
+        return _resolve_turn(session, intent, label, clock)

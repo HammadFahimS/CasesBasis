@@ -12,6 +12,7 @@ contract or the endpoints that consume it.
 from __future__ import annotations
 
 import secrets
+import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -45,6 +46,15 @@ class VoiceSession:
     patient_history: list[dict] = field(default_factory=list)  # patient channel
     cards: list[dict] = field(default_factory=list)            # diagnostics-drawer cards
     last_tick: float = field(default_factory=time.monotonic)
+    # Live status, mirrored from the parked DB row so the Session Runtime can tell
+    # which sessions to advance. A paused run stays in the live cache (so resume is
+    # instant) but must NOT tick — its clock would deteriorate a parked patient.
+    status: str = "active"                                     # active | paused | ended
+    # Serialises a runtime tick against a concurrent REST turn on the same session,
+    # so a clock advance never interleaves with a turn's engine mutation. A plain
+    # threading.Lock works across both FastAPI's sync threadpool and the runtime's
+    # executor thread. Excluded from equality (it's transient, never serialised).
+    lock: threading.Lock = field(default_factory=threading.Lock, compare=False, repr=False)
 
 
 # Live-session LRU. Bounded because every session is also parked to the DB and
@@ -131,7 +141,12 @@ def get_session(session_id: str, resident_id: str) -> VoiceSession:
 
 
 def persist_session(session: VoiceSession, status: str = "active") -> None:
-    """Write the session's current state through to durable storage (best-effort)."""
+    """Write the session's current state through to durable storage (best-effort).
+
+    Also mirrors ``status`` onto the live object so the Session Runtime sees
+    pause/resume/end without a DB read — pause parks as ``paused`` and must not tick.
+    """
+    session.status = status
     from backend import voice_persistence
     voice_persistence.save(session, status)
 

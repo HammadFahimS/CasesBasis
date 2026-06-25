@@ -123,8 +123,14 @@ async def lifespan(app: FastAPI):
     await asyncio.get_event_loop().run_in_executor(None, _faiss_index._load)
     logger.info("CXR FAISS index ready")
 
+    # Autonomous clock for the live voice sim (F1+F2). No-op unless LIVE_RUNTIME is
+    # set, so existing deployments are unaffected until we opt in.
+    from backend.session_runtime import start_runtime, stop_runtime
+    await start_runtime()
+
     yield
 
+    await stop_runtime()
     _faiss_index._model = None
     gc.collect()
 
