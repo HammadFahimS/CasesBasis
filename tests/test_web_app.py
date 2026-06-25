@@ -153,9 +153,13 @@ def test_web_evaluation_preserves_exact_diagnosis_guess(monkeypatch: object) -> 
 
 
 def test_web_ui_includes_loading_states_for_async_actions() -> None:
+    from pathlib import Path
+
     from backend import web_app
 
-    html = web_app.HTML_PAGE
+    # The simulator workbench markup was extracted from an inline HTML_PAGE
+    # constant to its own static file (F3); the page is served from there.
+    html = (Path(web_app.__file__).parent / "static" / "simulator.html").read_text()
 
     assert 'id="askBtn"' in html
     assert 'id="invBtn"' in html
