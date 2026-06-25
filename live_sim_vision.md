@@ -234,6 +234,27 @@ The room currently works; these make it feel like a product:
 - Case-constitution **validator** gate before a case goes live.
 - ElevenAgents **spike** (engine-as-tools) as an alternative voice-I/O runtime — evaluate, don't commit.
 
+**Foundation hardening (carry through the phases, not a separate phase).** These are the
+`foundations.md` F6–F8 items; they aren't features but they unblock the schema and agent growth above,
+so schedule them deliberately as each phase touches the relevant surface.
+
+- **F6 · Engine snapshot versioning 🟡** — `engine.snapshot()`/`restore()` is unversioned JSON, so a
+  change to the engine's internal shape **breaks parked sessions on resume**. Add a `snapshot_version`
+  + a tiny upgrade path *before* the Director/emotional-engine work (Phase 2) starts mutating engine
+  state, so a deploy never strands in-flight runs.
+- **F7 · Case-schema migration/backfill 🟡** — the cast/voice/emotion work adds fields to the case
+  schema (`voice_id`, `voice_settings`, per-state emotional arcs on `ActorRole`), but each case is one
+  stored `case_json` blob, so old rows lack the new fields. Add a **case-migration step** (the
+  migrations-runner concept applied to `case_json` content) alongside `reseed_case.py` (F4), and keep
+  Pydantic defaults generous so old blobs still validate. Land this **with** the first schema addition
+  (Phase 1 `voice_id`/`voice_settings`) rather than after, so growth never silently breaks live cases.
+- *(F8 · latency budget is already folded into the phases above — "Latency telemetry" in Phase 1 and
+  the async/streamed turn chain in Phase 2.)*
+
+> Throughline (from `foundations.md`): the **engine stays deterministic truth**; F6 keeps its parked
+> state durable across deploys and F7 keeps its case data forward-compatible as the vision grows the
+> schema. Neither is urgent on its own — both become urgent the moment the phase that needs them lands.
+
 ---
 
 ## 10 · Risks & guardrails
