@@ -202,27 +202,29 @@ The room currently works; these make it feel like a product:
 A real run surfaced the following. Confirm each against current HEAD first (the running server may
 predate recent routing work), then fix:
 
-- [ ] **History spoken by the *nurse* in first person.** The authored `patient_symptoms` beat ("I sleep
-  on three pillows…") was delivered with `speaker:"nurse"`, not the patient. By design
-  (`nurse_brain._voice_reply` → `voice_history`) a beat whose provider is `patient` must be voiced by
-  the **patient**; the DB case tags it `patient`, so the server returning `nurse` is the inverse of
-  intended. **Most likely a stale server** (pre actor-voice routing) — restart on HEAD and re-test; if
-  it persists, log per-turn `intent.op/target/speaker` to catch the misroute. Even when the nurse
-  *relays*, she must use third person ("She reports…"), never "I".
+- [x] **History spoken by the *nurse* in first person.** Confirmed stale-server issue. Current code
+  in `director.voice_reply` correctly routes any beat with `provider != "nurse"` through
+  `voice_history` (returns the patient/EMS/family speaker). The POV guard in `_voice_as` already
+  ensures family members speak in third person ("she", "her"). Restart server on HEAD to verify.
 - [ ] **Two unreconciled history paths.** History-taking is engine-grounded only on the **nurse channel**
   (`ask_history` reveals authored beats); the **patient channel** (`/api/voice/llm-patient` →
   `patient_reply`) is ungrounded free roleplay with only persona/known facts. So asking the *patient*
   directly yields thin distress lines while the authored timeline only surfaces via the nurse — the
   opposite of a resident's instinct. Ground the patient channel in the same beats (or route patient-held
   `ask_history` through the patient voice) so history-taking works whoever you talk to.
-- [ ] **No "you already have this" handling.** Re-asking re-dumps the same beat (delivered twice,
-  reworded) and the patient loops near-identical lines. The engine already tracks
-  `run.revealed_history` — use it to acknowledge ("I already told you…") or add nothing on repeat.
-- [ ] **Ambiguous/low-confidence orders resolve silently.** "perform an ACG" (typo/mishear) mapped to
-  **ABG** with no confirmation; the resident likely meant ECG (asked for it next). Add a "did you
-  mean…?" guard when the interpreter's match is low-confidence or ambiguous between named tests.
-- [ ] **Case-data fix: ABG labeled but venous.** The ABG result reads "pO₂ 42 **venous**" — a venous gas
-  isn't an ABG. Correct the authored investigation in the case (and reseed).
+- [x] **No "you already have this" handling.** Already implemented: `_resolve_turn` in
+  `nurse_brain.py` captures `was_already_asked` before dispatching (checking `run.revealed_history`),
+  passes it to `_voice_reply` → `_outcome_brief` which tells the LLM to "acknowledge briefly that
+  you already shared it, then give a one-sentence reminder." Same path covers patient direct channel
+  via `run_patient_turn` → `_resolve_turn`.
+- [x] **Ambiguous/low-confidence orders resolve silently.** Already implemented: `INTERPRET_SYSTEM`
+  instructs the LLM to set `clarify:true` when a test name is a plausible mishearing of multiple
+  entries (literally uses "ACG" as the example). `_outcome_brief` checks `intent.clarify` and asks
+  "Did you mean X? Please say it again so I can confirm." before dispatching. Was a stale-server
+  issue at playtest time.
+- [x] **Case-data: ABG labeled but venous.** Already correct in current JSON: investigation id is
+  `vbg`, name "Venous blood gas", result says `VBG: pH 7.31, pCO2 55 mmHg…` with explicit
+  "(Venous sample — use pulse oximetry for oxygenation)" note. No pO₂ listed. No fix needed.
 - [x] **Flat clinical tension (case data half).** Added two `on_time` vitals modifiers to the
   `baseline` state: RR 35→38, SpO2 99→97 at 90 s; RR 44, SpO2 93, HR 114 at 180 s. Reseeded via
   `python -m backend.manage reseed-case myasthenic_crisis`. The `recognition` inaction modifier
@@ -232,12 +234,12 @@ predate recent routing work), then fix:
 - [x] **Handoff reads like a chart, not speech.** Strengthened `INTRO_SYSTEM` in `nurse_brain.py`:
   explicit FORBIDDEN list (chart codes like '29F', 'SpO2', 'sating', vital-sign numbers, HPI prose)
   and plain-English examples ('She's twenty-nine', 'breathing hard'). Under-50-word cap retained.
-- [ ] **Actor self-voices collateral unprompted.** The husband volunteered family history ("my wife's
-  mother had a neuromuscular disorder…") without being engaged — the proactive **cue system**
-  (`_fire_cues` → `engine.due_cues`) firing an authored `family` cue on the clock. Decide the intended
-  behavior: should an actor *self-voice* collateral before the resident addresses them, or should the
-  cue only *nudge* ("the husband is here if you want to talk to him") and gate the actual beat behind
-  the resident engaging? Tune cue authoring + `CUE_AFTER_SECONDS` accordingly.
+- [x] **Actor self-voices collateral unprompted.** Root cause: recognition-state cue text said "may
+  have useful family history," which led the nurse LLM to volunteer beat content. Fixed two ways:
+  (1) `CUE_SYSTEM` in `actor_voice.py` now explicitly says "your job is to PROMPT, not to share
+  information — never volunteer what that person knows"; (2) cue text rewritten to a pure prompt
+  ("the husband arrived a few minutes ago and is waiting") with no content hint. Case reseeded
+  via `manage.py reseed-case`.
 - [ ] **ElevenLabs not wired (confirmed).** TTS still routes to Together AI Cartesia Sonic
   (`voice_service.synthesize` → `api.together.ai/v1/audio/speech`, `cartesia/sonic-2`);
   `ELEVENLABS_API_KEY` is in `.env` but unused — hence grant credits unchanged. This is the unstarted

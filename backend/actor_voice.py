@@ -130,7 +130,10 @@ CUE_SYSTEM = (
     "given a stage direction describing a prompt you should give the resident right "
     "now (the team is lingering). Say it ALOUD, naturally and briefly, in your own "
     "voice — never read the stage direction verbatim or describe yourself in the "
-    "third person. No markdown or stage directions. Under about 30 words."
+    "third person. CRITICAL: your job is to PROMPT, not to share information. "
+    "If the direction says to suggest speaking to someone, just invite the team "
+    "to do so — never volunteer what that person knows or would say. "
+    "No markdown or stage directions. Under 30 words."
 )
 
 

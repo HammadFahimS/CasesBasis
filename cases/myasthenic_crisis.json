@@ -370,7 +370,7 @@
       ],
       "cues": [
         {
-          "text": "The team seems unsure of the cause. The nurse suggests speaking with the husband, who has arrived and may have useful family history.",
+          "text": "The team seems stuck on the diagnosis. Prompt the resident to speak with the husband — he arrived a few minutes ago and is waiting, but hasn't been asked anything yet.",
           "actor_id": "nurse",
           "when": "team unsure of diagnosis"
         }
