@@ -206,12 +206,15 @@ predate recent routing work), then fix:
   in `director.voice_reply` correctly routes any beat with `provider != "nurse"` through
   `voice_history` (returns the patient/EMS/family speaker). The POV guard in `_voice_as` already
   ensures family members speak in third person ("she", "her"). Restart server on HEAD to verify.
-- [ ] **Two unreconciled history paths.** History-taking is engine-grounded only on the **nurse channel**
-  (`ask_history` reveals authored beats); the **patient channel** (`/api/voice/llm-patient` →
-  `patient_reply`) is ungrounded free roleplay with only persona/known facts. So asking the *patient*
-  directly yields thin distress lines while the authored timeline only surfaces via the nurse — the
-  opposite of a resident's instinct. Ground the patient channel in the same beats (or route patient-held
-  `ask_history` through the patient voice) so history-taking works whoever you talk to.
+- [x] **Two unreconciled history paths.** Fixed in two layers:
+  1. *Grounded path* (`run_patient_turn`): interpreter `ask_history` for patient-held beats already
+     routed through the engine; added a keyword-fallback so "how are you feeling?" / "what's wrong?"
+     style chitchat is also matched to the first unrevealed patient beat instead of falling through.
+  2. *Free-roleplay fallback* (`patient_voice._persona`): rewrote the background-facts instruction
+     from "ONLY reveal when touched on" to "give a real answer when asked about symptoms, broken into
+     breathless fragments — don't volunteer everything at once." Ensures direct patient questions get
+     substantive answers, not thin distress lines. Engine `revealed_history` still only updated on
+     the grounded path.
 - [x] **No "you already have this" handling.** Already implemented: `_resolve_turn` in
   `nurse_brain.py` captures `was_already_asked` before dispatching (checking `run.revealed_history`),
   passes it to `_voice_reply` → `_outcome_brief` which tells the LLM to "acknowledge briefly that

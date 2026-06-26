@@ -602,25 +602,51 @@ def _action_label(session: VoiceSession, op: str, target: str | None) -> str:
     return target or op
 
 
+_SYMPTOM_WORDS = frozenset({
+    "feel", "feeling", "felt", "symptom", "symptoms", "tell", "happened",
+    "wrong", "bothering", "complain", "complaint", "breath", "breathe",
+    "breathing", "weak", "weakness", "trouble", "problem", "since", "long",
+    "started", "begin", "began", "worse", "worsen", "history", "going on",
+    "what brought", "why are", "why did",
+})
+
+
 def run_patient_turn(session: VoiceSession, transcript: str) -> NurseTurn | None:
     """Grounded patient-addressed turn for ask_history beats held by the patient.
 
     When the resident speaks directly to the patient and the utterance maps to a
     patient-held history beat, runs it through the engine (grounding the reveal in
     ``run.revealed_history``) and voices it through the patient character. Returns
-    ``None`` to signal "this is conversational — fall through to patient_reply"."""
+    ``None`` to signal "this is conversational — fall through to patient_reply".
+
+    Falls back to the first unrevealed patient beat when the interpreter classifies
+    the utterance as chitchat but it uses symptom-directed language — catches "how
+    are you feeling?" and similar direct-symptom questions the LLM interpreter
+    may under-classify."""
     with session.lock:
         clock = advance_clock(session)
         intent = interpret(transcript, session.engine, session.history)
-        if intent.op != "ask_history" or not intent.target:
-            return None
-        beat = next((h for h in session.engine.case.history if h.id == intent.target), None)
-        if beat is None:
-            return None
         from backend.actor_voice import provider_speaker
-        if provider_speaker(beat.provider) != "patient":
-            return None
-        return _resolve_turn(session, intent, transcript, clock)
+        patient_beats = [
+            h for h in session.engine.case.history
+            if provider_speaker(h.provider) == "patient"
+        ]
+        # Direct match: interpreter returned ask_history for a patient-held beat.
+        if intent.op == "ask_history" and intent.target:
+            beat = next((h for h in patient_beats if h.id == intent.target), None)
+            if beat is not None:
+                return _resolve_turn(session, intent, transcript, clock)
+        # Fallback: interpreter said chitchat but transcript sounds like a symptom
+        # question AND there's at least one unrevealed patient beat.
+        if intent.op == "chitchat" and patient_beats:
+            words = set(transcript.lower().split())
+            if words & _SYMPTOM_WORDS:
+                unrevealed = [h for h in patient_beats
+                              if h.id not in session.engine.run.revealed_history]
+                if unrevealed:
+                    intent = NurseIntent(op="ask_history", target=unrevealed[0].id)
+                    return _resolve_turn(session, intent, transcript, clock)
+        return None
 
 
 def run_action(

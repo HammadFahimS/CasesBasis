@@ -69,9 +69,12 @@ def _persona(case) -> str:
     known = [h.content for h in case.history if h.provider == "patient" and h.content]
     if known:
         bits.append(
-            "Background facts about your illness you may draw on — but ONLY reveal a "
-            "fact when the doctor's question actually touches on it; never recite "
-            "this list or dump it all at once: " + " ".join(known)
+            "Facts about your illness — when the doctor asks about a symptom or timeline, "
+            "give them a real answer drawn from these facts (broken into short breathless "
+            "fragments). Do NOT volunteer everything at once or dump the list; answer what "
+            "is asked. But when asked 'how are you feeling' or 'tell me what's wrong', "
+            "share the most prominent fact (your breathing, your weakness) — not 'I don't "
+            "know'. Facts: " + " ".join(known)
         )
     bits.append(f"Your main complaint, if asked what's wrong: {case.presentation.chief_complaint}.")
     return "\n".join(bits)
