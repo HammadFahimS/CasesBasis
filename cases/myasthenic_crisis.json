@@ -292,7 +292,28 @@
         "Focused neurological exam",
         "ECG, CXR and labs including a blood gas"
       ],
-      "modifiers": [],
+      "modifiers": [
+        {
+          "description": "Respiratory muscles begin to tire: rate climbs and oxygenation slips despite supplemental O2.",
+          "when": "on_time",
+          "after_seconds": 90,
+          "set_vitals": {
+            "respiratory_rate": 38,
+            "oxygen_saturation": 97,
+            "heart_rate": 108
+          }
+        },
+        {
+          "description": "Continued respiratory fatigue: SpO2 falling on high-flow O2, accessory muscle use visible.",
+          "when": "on_time",
+          "after_seconds": 180,
+          "set_vitals": {
+            "respiratory_rate": 44,
+            "oxygen_saturation": 93,
+            "heart_rate": 114
+          }
+        }
+      ],
       "cues": [
         {
           "text": "If no collateral history is taken, the nurse prompts the team to speak with the husband.",

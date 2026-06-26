@@ -223,12 +223,15 @@ predate recent routing work), then fix:
   mean…?" guard when the interpreter's match is low-confidence or ambiguous between named tests.
 - [ ] **Case-data fix: ABG labeled but venous.** The ABG result reads "pO₂ 42 **venous**" — a venous gas
   isn't an ABG. Correct the authored investigation in the case (and reseed).
-- [ ] **Flat clinical tension.** Crisis physiology (pH 7.31, pCO₂ 55, hypoxia) but no deterioration
-  cue/state change and a static-repetitive patient affect across the run. Confirm `LIVE_RUNTIME` is on
-  and wire the **emotional/deterioration arc** (Phase 1) so distress escalates with the clock.
-- [ ] **Handoff reads like a chart, not speech.** Opening narration ("currently on 6 L via face mask
-  with SpO₂ 97%, sitting upright and unable to speak full sentences") is HPI prose; tighten
-  `INTRO_SYSTEM` toward spoken bedside handoff.
+- [x] **Flat clinical tension (case data half).** Added two `on_time` vitals modifiers to the
+  `baseline` state: RR 35→38, SpO2 99→97 at 90 s; RR 44, SpO2 93, HR 114 at 180 s. Reseeded via
+  `python -m backend.manage reseed-case myasthenic_crisis`. The `recognition` inaction modifier
+  (RR 38, SpO2 90 after 180 s of not intubating) was already correct. The autonomous clock
+  (`LIVE_RUNTIME=1`) must be set for these to fire in real time — that is a server-config item.
+  Emotional/affect arc (patient voice getting shorter/more distressed) is the Phase 1 remainder.
+- [x] **Handoff reads like a chart, not speech.** Strengthened `INTRO_SYSTEM` in `nurse_brain.py`:
+  explicit FORBIDDEN list (chart codes like '29F', 'SpO2', 'sating', vital-sign numbers, HPI prose)
+  and plain-English examples ('She's twenty-nine', 'breathing hard'). Under-50-word cap retained.
 - [ ] **Actor self-voices collateral unprompted.** The husband volunteered family history ("my wife's
   mother had a neuromuscular disorder…") without being engaged — the proactive **cue system**
   (`_fire_cues` → `engine.due_cues`) firing an authored `family` cue on the clock. Decide the intended
@@ -239,6 +242,51 @@ predate recent routing work), then fix:
   (`voice_service.synthesize` → `api.together.ai/v1/audio/speech`, `cartesia/sonic-2`);
   `ELEVENLABS_API_KEY` is in `.env` but unused — hence grant credits unchanged. This is the unstarted
   **Phase 1** swap, called out here so it isn't mistaken for a regression.
+
+### 7.2 Input-pipeline hardening — eliminating STT false positives
+
+**Problem.** Ambient noise (table bumps, key presses, background voices) is picked up as speech
+and Whisper produces phantom words (e.g. "you", "the") that the room responds to — burning LLM
+turns and breaking immersion mid-case.
+
+**Root cause.** Every non-silent audio chunk POSTed to Together Whisper is transcribed, even
+if it contains no speech. A single table knock is ~80 ms; Whisper is aggressively good at finding
+words in short, noisy bursts.
+
+**Layered fix — cheapest first, credits only where justified:**
+
+- [ ] **Tier 1 — Browser-side VAD + noise gate (zero cost, immediate win).**
+  Add a preprocessing stage in `voice_room.html` before the audio blob is POSTed:
+  1. **High-pass filter** at 200–300 Hz via `BiquadFilterNode` — strips mechanical thumps
+     (table bumps, footsteps, mic handling) which live in the sub-200 Hz band.
+  2. **RMS-energy gate** — compute per-chunk RMS; skip the POST entirely when the chunk is
+     below ~−42 dBFS. Single-knock impulses are high-amplitude but ultra-short; most speech
+     averages higher over the chunk window.
+  3. **Minimum-duration guard** — require ≥ 300 ms of above-threshold audio before submitting;
+     eliminates the "one loud tap → one token" pattern without cutting off clipped utterances.
+  Handles 70–80 % of false positives, no API cost, < 5 ms added latency.
+
+- [ ] **Tier 2 — ElevenLabs Voice Isolator (selective, credit-aware).**
+  ElevenLabs exposes an audio isolation endpoint (`POST /v1/audio/isolation`) that removes
+  background noise and returns a cleaned audio file before transcription. **Do not apply
+  to every chunk** — this adds ~200–400 ms round-trip and consumes credits proportional to
+  audio duration. Apply it only when the browser-side signal is *ambiguous*: energy is in the
+  "uncertain" band (above the gate floor but below clear-speech level, e.g. −42 to −30 dBFS).
+  Integration point: `backend/voice_service.py` — add an `isolate_audio(audio: bytes) -> bytes`
+  helper and call it from `transcribe()` when an `ENABLE_VOICE_ISOLATION=true` env flag is set.
+  Use the same `httpx` client pattern already in that file. Degrade gracefully (log + skip on
+  non-200 so the transcription still proceeds on raw audio). Cost: billed per second of audio
+  processed — per ElevenLabs grant terms; keep logs to track consumption.
+
+- [ ] **Tier 3 — ElevenLabs Scribe STT (natural convergence with Phase 1).**
+  Once the ElevenLabs TTS swap lands (Phase 1), evaluate replacing Together Whisper with
+  ElevenLabs Scribe v2 Realtime. Scribe's VAD filters non-speech before processing natively —
+  this noise class mostly disappears without extra preprocessing calls. Benchmark against
+  Whisper on the gold case: accuracy on medical vocabulary, false-positive rate, latency.
+
+**Conservative deployment rule.** Ship Tier 1 as part of the next frontend pass (zero cost,
+no flag). Gate Tier 2 behind `ENABLE_VOICE_ISOLATION` and only enable it in the known-noisy
+environment (laptop mic, shared space). Tier 3 is the long-term answer once ElevenLabs is live.
 
 ---
 

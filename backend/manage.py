@@ -48,6 +48,28 @@ def cmd_migrate_cases(dry_run: bool = False) -> int:
     return 0
 
 
+def cmd_reseed_case(case_id: str) -> int:
+    """Overwrite one gold case's DB row from its cases/*.json file.
+
+    Use this after editing a gold case JSON so the live sim picks up the changes.
+    The live sim always reads from the DB (``get_case``), never from the file directly."""
+    from backend.simulated_case_repo import CaseValidationError, reseed_gold_case
+    try:
+        found = reseed_gold_case(case_id)
+    except CaseValidationError as exc:
+        print(f"Validation error — JSON did not match schema: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    if not found:
+        print(f"Case '{case_id}' not in DB. Run seed_gold_cases first (server startup does this).",
+              file=sys.stderr)
+        return 1
+    print(f"Reseeded '{case_id}' from cases/{case_id}.json.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
     parser = argparse.ArgumentParser(prog="python -m backend.manage")
@@ -58,9 +80,15 @@ def main(argv: list[str] | None = None) -> int:
     p_migrate.add_argument("--dry-run", action="store_true",
                            help="Show what would change without writing")
 
+    p_reseed = sub.add_parser("reseed-case",
+                               help="Overwrite a gold case DB row from its cases/*.json file")
+    p_reseed.add_argument("case_id", help="The case id (e.g. myasthenic_crisis)")
+
     args = parser.parse_args(argv)
     if args.command == "migrate-cases":
         return cmd_migrate_cases(dry_run=args.dry_run)
+    if args.command == "reseed-case":
+        return cmd_reseed_case(args.case_id)
 
     parser.print_help()
     return 1

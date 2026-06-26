@@ -2892,7 +2892,13 @@
     if (!analyser){
       analyser = audioCtx.createAnalyser(); analyser.fftSize = 512;
       micSource = audioCtx.createMediaStreamSource(stream);
-      micSource.connect(analyser);
+      // High-pass filter on VAD path only — cuts sub-250 Hz mechanical noise
+      // (table bumps, footsteps, mic handling) so they don't trip the RMS gate.
+      // The MediaRecorder captures the raw stream; Whisper still gets full audio.
+      const vadHp = audioCtx.createBiquadFilter();
+      vadHp.type = 'highpass'; vadHp.frequency.value = 250; vadHp.Q.value = 0.7;
+      micSource.connect(vadHp);
+      vadHp.connect(analyser);
     }
     listening = true; voiced = false; silenceAt = 0;
     setMic('listen'); selectState('listening');
