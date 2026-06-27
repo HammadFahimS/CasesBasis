@@ -15,7 +15,7 @@ from backend.doctor_consult import DoctorConsultService
 from backend.investigations import InvestigationService
 from backend.patient_response import PatientResponseService
 from backend.service import ClinicalCaseSimulator
-from backend.web_app import case_preview, student_facing_investigation_result
+from backend.sim_core import case_preview, student_facing_investigation_result
 from schemas.clinical_case import ClinicalCase
 from schemas.doctor_consult import DoctorConsultResponse
 from schemas.evaluation import ClinicalEvaluation

@@ -28,7 +28,7 @@ def test_medical_validation_rejects_mismatched_body_system_symptoms() -> None:
         {
             "diagnosis": "pneumonia",
             "symptoms": ["headache", "photophobia", "neck stiffness"],
-            "exam_findings": ["normal breath sounds"],
+            "exam_findings": {"Respiratory": ["normal breath sounds"]},
             "progression": [{"time_min": 0, "description": "Neurologic symptoms worsen."}],
         }
     )
@@ -80,7 +80,7 @@ def test_medical_validation_rejects_unjustified_unrelated_symptom_systems() -> N
                 "respiratory_rate": 20,
                 "oxygen_saturation": 96,
             },
-            "exam_findings": ["diaphoretic", "normal skin exam"],
+            "exam_findings": {"General": ["diaphoretic"], "Dermatological": ["normal skin exam"]},
             "progression": [
                 {"time_min": 0, "description": "Chest pressure begins with exertion."},
                 {"time_min": 20, "description": "Chest pressure worsens and patient becomes sweaty."},

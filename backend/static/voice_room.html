@@ -1,0 +1,3028 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CasesBasis — Voice Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink-950:#0a0f17; --ink-900:#111824; --ink-800:#1a2332;
+    --ink-700:#273347; --ink-600:#3b4a63; --ink-500:#5b6b85;
+    --ink-400:#8696b0; --ink-300:#b3becf; --ink-200:#d6dde7; --ink-100:#e9edf2;
+    --teal:#3aa7ba; --teal-deep:#0e8a9e; --teal-glow:#5fd8e6;
+    --amber:#d99a3c; --amber-deep:#b76e00;
+    --glow: 14,138,158;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: radial-gradient(130% 120% at 50% 42%, #111a27 0%, #0c121d 45%, #080c14 100%);
+    color: var(--ink-200);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    position: relative;
+  }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  /* full-screen room */
+  .room {
+    position: fixed; inset: 0;
+    display: grid; place-items: center;
+  }
+
+  /* ambient color wash behind orb, driven by state */
+  .wash {
+    position: absolute; inset: 0;
+    background: radial-gradient(closest-side at 50% 47%, rgba(var(--glow), 0.16), rgba(var(--glow), 0.05) 45%, transparent 72%);
+    transition: background 1.2s ease;
+    pointer-events: none;
+  }
+  /* faint floor reflection / vignette */
+  .vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(120% 80% at 50% 120%, rgba(var(--glow),0.10), transparent 55%),
+      radial-gradient(140% 120% at 50% 50%, transparent 60%, rgba(4,7,12,0.55) 100%);
+    transition: background 1.2s ease;
+  }
+
+  /* exit affordance */
+  .exit {
+    position: fixed; top: 28px; left: 50%; transform: translateX(-50%); z-index: 7;
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-500); text-decoration: none; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.06); background: rgba(13,20,31,0.4); backdrop-filter: blur(8px);
+    transition: color .2s, border-color .2s;
+  }
+  .exit:hover { color: var(--teal-glow); border-color: rgba(95,216,230,0.3); }
+
+  /* ===== Freed central results space ===== */
+  .stage-empty {
+    position: absolute; left: 50%; top: 47%; transform: translate(-50%,-50%);
+    text-align: center; pointer-events: none; z-index: 1;
+    max-width: 480px; padding: 0 20px;
+  }
+  .stage-empty .se-label {
+    font-family:'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.26em; text-transform: uppercase;
+    color: var(--ink-500); display:inline-flex; align-items:center; gap:9px;
+  }
+  .stage-empty .se-label::before {
+    content:''; width:6px; height:6px; border-radius:50%; background: rgba(95,216,230,0.55);
+    box-shadow:0 0 10px rgba(95,216,230,0.6); animation: blip 2.4s ease-in-out infinite;
+  }
+  @keyframes blip { 0%,100%{opacity:.3;} 50%{opacity:1;} }
+  .stage-empty .se-hint {
+    margin-top: 16px; font-family:'Instrument Serif', Georgia, serif; font-style: italic;
+    font-size: 19px; line-height: 1.5; color: var(--ink-600);
+  }
+  .stage-empty .se-hint b { color: var(--ink-400); font-weight: 400; font-style: normal; }
+
+  /* ===== Small live orb inside bottom panel ===== */
+  .nurse { display:flex; align-items:center; gap:13px; padding: 0 18px 0 6px; }
+  .nurse-orb { width: 58px; height: 58px; flex-shrink:0; position:relative; }
+  .nurse-orb canvas { width:100%; height:100%; display:block; }
+  .nurse-info { display:flex; flex-direction:column; gap:6px; }
+  .nurse-info .state {
+    font-family:'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 600;
+    color: var(--teal-glow); transition: color .6s ease;
+  }
+  .mic { display:inline-flex; align-items:center; gap:8px; color: var(--ink-400); font-size: 11px; letter-spacing: 0.02em; }
+  .mic svg { color: var(--teal-glow); }
+  .mic .bars { display:inline-flex; align-items:flex-end; gap:2px; height:11px; }
+  .mic .bars i {
+    width:2.5px; background:var(--teal-glow); border-radius:2px;
+    animation: eq .9s ease-in-out infinite; box-shadow:0 0 6px rgba(95,216,230,0.6);
+  }
+  .mic .bars i:nth-child(1){height:40%;animation-delay:0s;}
+  .mic .bars i:nth-child(2){height:90%;animation-delay:.12s;}
+  .mic .bars i:nth-child(3){height:60%;animation-delay:.24s;}
+  .mic .bars i:nth-child(4){height:100%;animation-delay:.36s;}
+  .mic .bars i:nth-child(5){height:50%;animation-delay:.48s;}
+  @keyframes eq { 0%,100%{ transform: scaleY(0.35); } 50%{ transform: scaleY(1); } }
+  .vsep { width:1px; align-self:stretch; margin:8px 0; background: rgba(255,255,255,0.08); }
+
+  /* ===== Corner HUD ===== */
+  .hud { position: fixed; z-index: 5; }
+  .hud-tl { top: 30px; left: 34px; }
+  .hud-tr { top: 30px; right: 34px; text-align: right; }
+
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .brand-mark {
+    width: 24px; height: 24px; border-radius: 6px; position: relative;
+    background: linear-gradient(135deg, var(--teal-glow), var(--teal-deep));
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18), 0 0 16px rgba(95,216,230,0.35);
+  }
+  .brand-mark::before, .brand-mark::after { content:''; position:absolute; background:#06222a; border-radius:1px; }
+  .brand-mark::before { width:11px; height:2px; left:50%; top:50%; transform:translate(-50%,-50%); }
+  .brand-mark::after  { width:2px; height:11px; left:50%; top:50%; transform:translate(-50%,-50%); }
+  .brand-name { font-size: 13px; font-weight: 600; letter-spacing: 0.01em; color: var(--ink-200); }
+  .brand-name .lc { color: var(--teal-glow); font-weight: 500; }
+
+  .pt-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-500); margin-bottom: 7px;
+  }
+  .pt-id { display: flex; align-items: center; gap: 10px; }
+  .pt-id .mono-id { font-family:'JetBrains Mono', monospace; font-size: 19px; font-weight: 600; color: var(--ink-100); letter-spacing: 0.02em; }
+  .pt-id .age { font-size: 13px; color: var(--ink-400); }
+  .pt-cc {
+    font-family: 'Instrument Serif', Georgia, serif; font-style: italic;
+    font-size: 19px; color: var(--ink-300); margin-top: 5px;
+  }
+  .pt-meta { font-size: 11px; color: var(--ink-500); margin-top: 10px; letter-spacing: 0.02em; }
+  .pt-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .pt-chip { font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04); color: var(--ink-300); }
+  .pt-chip.intubated { border-color: rgba(95,216,230,0.4); color: var(--teal-glow); background: rgba(45,212,191,0.08); }
+  .pt-chip.dx { border-color: rgba(192,140,240,0.4); color: #c8a4f0; background: rgba(192,140,240,0.08); text-transform: none; letter-spacing: 0; }
+
+  .timer { font-family:'JetBrains Mono', monospace; font-size: 27px; font-weight: 600; color: var(--ink-100); letter-spacing: 0.04em; line-height: 1; white-space: nowrap; }
+  .timer-label { font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-500); margin-bottom: 8px; }
+  .rec { display:inline-flex; align-items:center; gap:7px; margin-top: 14px; font-family:'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; font-weight: 600; color:#e0573f; }
+  .rec .dot { width: 8px; height: 8px; border-radius:50%; background:#e0573f; box-shadow: 0 0 0 0 rgba(224,87,63,0.5); animation: rec 1.7s ease-out infinite; }
+  @keyframes rec { 0%{ box-shadow:0 0 0 0 rgba(224,87,63,0.5);} 70%,100%{ box-shadow:0 0 0 7px rgba(224,87,63,0);} }
+  .case-tag { font-size: 11px; color: var(--ink-500); margin-top: 13px; letter-spacing: 0.02em; }
+  .case-tag b { color: var(--ink-300); font-weight: 500; }
+  /* top-center case bar — one flat line so it never hides behind the chat panels */
+  .hud-bar {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 7;
+    display: flex; align-items: center; gap: 14px;
+    padding: 8px 10px 8px 17px; border-radius: 12px;
+    background: rgba(13,20,31,0.62); border: 1px solid rgba(255,255,255,0.07);
+    backdrop-filter: blur(12px); box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  }
+  .hud-bar .rec { margin-top: 0; }
+  .hb-clock { font-family:'JetBrains Mono', monospace; font-size: 18px; font-weight: 600; color: var(--ink-100); letter-spacing: 0.05em; }
+  .hb-sep { width: 1px; height: 16px; background: rgba(255,255,255,0.12); }
+  .hb-session { font-family:'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-500); letter-spacing: 0.02em; white-space: nowrap; }
+  .hb-session b { color: var(--ink-300); font-weight: 500; }
+  .hb-btn { padding: 7px 13px; border-radius: 8px; cursor: pointer; font-family:'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+  .hb-btn.pause { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.14); color: var(--ink-200); }
+  .hb-btn.pause:hover { background: rgba(255,255,255,0.10); }
+  .hb-btn.end { background: rgba(217,154,60,0.10); border: 1px solid rgba(217,154,60,0.35); color: var(--amber); }
+  .hb-btn.end:hover { background: rgba(217,154,60,0.18); }
+  .hb-btn.ambience { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); color: var(--ink-400); padding: 7px 10px; }
+  .hb-btn.ambience:hover { background: rgba(255,255,255,0.09); color: var(--ink-200); }
+  .hb-btn.ambience.muted { color: var(--ink-600); }
+  @media (max-width: 860px) { .hb-session, .hb-sep { display: none; } }
+
+  /* ===== Vitals strip (bottom center) ===== */
+  .vitals {
+    position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
+    z-index: 5;
+    display: flex; align-items: center; gap: 0;
+    padding: 11px 6px;
+    border-radius: 16px;
+    background: rgba(13,20,31,0.55);
+    border: 1px solid rgba(255,255,255,0.06);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 16px 50px rgba(0,0,0,0.45);
+  }
+  .vital { padding: 0 22px; min-width: 96px; text-align: left; position: relative; }
+  .vital + .vital::before { content:''; position:absolute; left:0; top:8%; bottom:8%; width:1px; background: rgba(255,255,255,0.07); }
+  .v-label { font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-500); font-weight: 600; display:flex; align-items:center; gap:6px; }
+  .v-label sub { font-size: 7px; }
+  .v-val { font-family:'JetBrains Mono', monospace; font-size: 25px; font-weight: 600; color: var(--ink-100); line-height: 1.05; margin-top: 5px; display:flex; align-items:baseline; gap:4px; }
+  .v-val .u { font-size: 11px; color: var(--ink-500); font-weight: 500; }
+  .vital.warn .v-label, .vital.warn .v-val { color: var(--amber); }
+  .vital.warn .v-val .u { color: rgba(217,154,60,0.6); }
+  .vital.critical .v-label, .vital.critical .v-val { color: #e0573f; }
+  .vital.critical .v-val .u { color: rgba(224,87,63,0.55); }
+  .v-trend { font-family:'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-500); margin-top: 4px; display:flex; align-items:center; gap:4px; }
+  .vital.warn .v-trend { color: var(--amber); }
+  .vital.critical .v-trend { color: #e0573f; }
+
+  /* ===== Live caption bar (appears during TTS playback) ===== */
+  .caption-bar {
+    position: fixed; bottom: 178px; left: 50%; transform: translateX(-50%); z-index: 6;
+    max-width: 580px; width: calc(100vw - 48px); pointer-events: none;
+    text-align: center; padding: 9px 18px; border-radius: 12px;
+    background: rgba(10,15,23,0.72); border: 1px solid rgba(255,255,255,0.07);
+    backdrop-filter: blur(10px);
+    font-size: 14px; line-height: 1.45; color: var(--ink-200);
+    opacity: 0; transition: opacity 0.25s ease;
+  }
+  .caption-bar.visible { opacity: 1; }
+  .caption-bar .cap-who {
+    font-family:'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.18em;
+    text-transform: uppercase; margin-bottom: 4px;
+  }
+  .caption-bar .cap-text { font-family:'Instrument Serif', Georgia, serif; font-style: italic; }
+  .spark { display:block; }
+  /* live lead-II monitor — wakes when an ECG is generated (bedside-monitor style) */
+  .ecg-mon { display: flex; align-items: center; gap: 11px; padding: 0 14px 0 20px; }
+  .ecg-mon canvas { width: 230px; height: 52px; display: block; }
+  .ecg-mon-meta { display: flex; flex-direction: column; gap: 3px; font-family:'JetBrains Mono', monospace; }
+  .ecg-mon-lead { color: #39e98f; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; }
+  .ecg-mon-rhythm { color: var(--ink-500); font-size: 8.5px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
+  .ecg-mon[hidden], .mon-sep[hidden] { display: none; }
+  @media (max-width: 900px) { .ecg-mon, .mon-sep { display: none !important; } }
+
+  /* ===== State switcher (bottom left) ===== */
+  .switcher {
+    position: fixed; bottom: 164px; left: 50%; transform: translateX(-50%); z-index: 5;
+    display: flex; gap: 26px;
+  }
+  .sw {
+    background: transparent; border: 0; padding: 0; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    opacity: 0.5; transition: opacity 0.3s ease;
+  }
+  .sw:hover { opacity: 0.85; }
+  .sw.active { opacity: 1; }
+  .sw canvas { width: 46px; height: 46px; display: block; border-radius: 50%; }
+  .sw .sw-ring {
+    width: 50px; height: 50px; border-radius: 50%; display: grid; place-items:center;
+    border: 1px solid transparent; transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+  .sw.active .sw-ring { border-color: rgba(95,216,230,0.5); box-shadow: 0 0 18px rgba(95,216,230,0.22); }
+  .sw .sw-name { font-family:'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-500); }
+  .sw.active .sw-name { color: var(--teal-glow); }
+  .switcher-note {
+    /* sits in the open gap between the talk button (268px) and the switcher
+       (~234px top). The whole mic cluster sits 36px above its old position to
+       free a slot for the addressee chips (114px) above the vitals panel. */
+    position: fixed; bottom: 242px; left: 50%; transform: translateX(-50%); z-index: 5;
+    white-space: nowrap;
+    font-family:'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-600);
+  }
+
+  /* ===== Push-to-talk button ===== */
+  .talk {
+    position: fixed; bottom: 268px; left: 50%; transform: translateX(-50%); z-index: 6;
+    display:inline-flex; align-items:center; gap:10px; padding: 13px 24px; border-radius: 999px;
+    font-family:'JetBrains Mono', monospace; font-size: 11.5px; letter-spacing:0.16em; text-transform:uppercase; font-weight:600;
+    color: var(--ink-100); background: rgba(14,138,158,0.16); border: 1px solid rgba(95,216,230,0.38);
+    cursor: pointer; backdrop-filter: blur(8px); user-select:none;
+    transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+  }
+  .talk:hover { background: rgba(14,138,158,0.26); }
+  .talk.live { background: rgba(14,138,158,0.26); border-color: rgba(95,216,230,0.6); color:#dff7fb; box-shadow: 0 0 26px rgba(95,216,230,0.22); animation: talkPulse 2.4s ease-in-out infinite; }
+  .talk.rec { background: rgba(224,87,63,0.2); border-color: rgba(224,87,63,0.6); color:#ffd9d2; box-shadow: 0 0 26px rgba(224,87,63,0.28); animation: none; }
+  .talk.busy { opacity:.7; pointer-events:none; animation: none; }
+  @keyframes talkPulse { 0%,100%{ box-shadow: 0 0 18px rgba(95,216,230,0.14); } 50%{ box-shadow: 0 0 30px rgba(95,216,230,0.34); } }
+
+  /* ===== Voice-mode modal (shown when the resident begins) ===== */
+  .modal-back {
+    position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center;
+    background: rgba(6,10,16,0.62); backdrop-filter: blur(6px);
+  }
+  .modal-back.open { display: flex; }
+  .modal {
+    width: min(440px, calc(100vw - 48px)); padding: 26px 26px 22px;
+    border-radius: 18px; border: 1px solid rgba(95,216,230,0.18);
+    background: linear-gradient(180deg, rgba(26,35,50,0.96), rgba(17,24,36,0.96));
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5); text-align: center;
+  }
+  .modal h2 { margin: 0 0 4px; font-size: 16px; letter-spacing: 0.02em; color: var(--ink-100); }
+  .modal p  { margin: 0 0 20px; font-size: 12.5px; line-height: 1.5; color: var(--ink-400); }
+  .modal-opts { display: flex; flex-direction: column; gap: 11px; }
+  .vm-opt {
+    display: flex; align-items: center; gap: 14px; text-align: left; padding: 14px 16px;
+    border-radius: 13px; border: 1px solid rgba(255,255,255,0.08); background: rgba(13,20,31,0.5);
+    cursor: pointer; transition: background .14s, border-color .14s, box-shadow .14s;
+  }
+  .vm-opt:hover { border-color: rgba(95,216,230,0.5); background: rgba(14,138,158,0.14); box-shadow: 0 0 22px rgba(95,216,230,0.12); }
+  .vm-ic { flex: 0 0 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+    background: rgba(14,138,158,0.16); border: 1px solid rgba(95,216,230,0.3); color: var(--teal-glow); }
+  .vm-opt.cost .vm-ic { background: rgba(217,154,60,0.14); border-color: rgba(217,154,60,0.4); color: var(--amber); }
+  .vm-tt { font-size: 13px; font-weight: 600; color: var(--ink-100); }
+  .vm-sub { font-size: 11px; color: var(--ink-400); margin-top: 2px; line-height: 1.4; }
+  .vm-tag { margin-left: auto; font-family:'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.12em;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 999px; color: var(--teal-glow); border: 1px solid rgba(95,216,230,0.3); }
+  .vm-opt.cost .vm-tag { color: var(--amber); border-color: rgba(217,154,60,0.4); }
+  .modal-foot { margin-top: 16px; font-size: 10px; color: var(--ink-600); line-height: 1.5; }
+
+  /* ===== Transcript channels (right edge — Nurse top, Patient bottom) ===== */
+  .transcript {
+    position: fixed; right: 0; z-index: 6; display: flex; align-items: stretch;
+    transition: transform 0.45s cubic-bezier(.2,.7,.1,1);
+  }
+  .transcript.ch-nurse   { top: 4vh; }
+  /* lifted clear of the bottom vitals strip + live ECG monitor (toward the nurse box) */
+  .transcript.ch-patient { bottom: 122px; }
+  /* unified Room log: one tall panel spanning the right edge */
+  .transcript.ch-room { top: 4vh; bottom: 122px; }
+  .transcript.collapsed { transform: translateX(calc(100% - 38px)); }
+  .tr-tab {
+    width: 38px; flex-shrink: 0;
+    background: rgba(13,20,31,0.6);
+    border: 1px solid rgba(255,255,255,0.07); border-right: 0;
+    border-radius: 12px 0 0 12px;
+    backdrop-filter: blur(10px);
+    cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    color: var(--ink-400);
+  }
+  .tr-tab:hover { color: var(--teal-glow); }
+  .ch-patient .tr-tab:hover { color: #e0a85f; }
+  .tr-tab .tr-tab-label {
+    writing-mode: vertical-rl; text-orientation: mixed;
+    font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    transform: rotate(180deg);
+  }
+  .tr-tab .chev { transition: transform 0.45s ease; }
+  .transcript:not(.collapsed) .tr-tab .chev { transform: rotate(180deg); }
+  .tr-panel {
+    width: 326px; max-height: 42vh; display: flex; flex-direction: column; overflow: hidden;
+    background: rgba(11,17,26,0.72);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px 0 0 12px;
+    backdrop-filter: blur(16px);
+    box-shadow: -20px 0 60px rgba(0,0,0,0.45);
+    padding: 16px 16px 16px;
+    margin-right: -1px;
+  }
+  .ch-room .tr-panel { max-height: none; }   /* the room log fills the full right edge */
+  .tr-head {
+    display:flex; align-items:center; gap:8px; margin-bottom: 12px; flex-shrink: 0;
+    font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-500);
+  }
+  .tr-head::after { content:''; flex:1; height:1px; background: rgba(255,255,255,0.08); }
+  .tr-head .live { color:#5ad6a0; }
+  .ch-patient .tr-head .live { color:#e0a85f; }
+  .tr-scroll { overflow-y: auto; flex: 1; display: flex; flex-direction: column; padding-right: 4px; }
+  .tr-scroll::-webkit-scrollbar { width: 5px; }
+  .tr-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+  .turn { margin-bottom: 14px; }
+  .turn .who { font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; display:flex; align-items:center; gap:7px; }
+  .turn.res .who { color: var(--ink-400); }
+  .turn.nurse .who { color: var(--teal-glow); }
+  .turn.patient .who { color: #e0a85f; }
+  .turn.ems .who { color: #8ab4f0; }
+  .turn.family .who { color: #e7b35a; }
+  .turn.rt .who { color: #6fd3c2; }
+  .turn.consult .who { color: #c08cf0; }
+  .turn .who .ava { width:18px; height:18px; border-radius:50%; display:grid; place-items:center; font-size:8px; font-weight:700; color:#06222a; }
+  .turn.res .who .ava { background: linear-gradient(140deg,#5b6b85,#3b4a63); color:#dde4ee; }
+  .turn.nurse .who .ava { background: linear-gradient(140deg, var(--teal-glow), var(--teal-deep)); }
+  .turn.patient .who .ava { background: linear-gradient(140deg,#e0a85f,#b9772f); }
+  .turn.ems .who .ava { background: linear-gradient(140deg,#8ab4f0,#4d6fb0); color:#0a1428; }
+  .turn.family .who .ava { background: linear-gradient(140deg,#e7b35a,#b9772f); }
+  .turn.rt .who .ava { background: linear-gradient(140deg,#6fd3c2,#2f8f7e); }
+  .turn.consult .who .ava { background: linear-gradient(140deg,#c08cf0,#7e4fb0); color:#f0e8fa; }
+  .turn .line { font-size: 13.5px; line-height: 1.5; color: var(--ink-200); }
+  .turn.nurse .line { color: #cfe9ee; }
+  .turn.patient .line { color: #f0dcc0; }
+  .turn .tstamp { font-family:'JetBrains Mono', monospace; font-size: 9px; color: var(--ink-600); margin-top: 5px; }
+  .tr-now {
+    margin-top: 2px; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,0.08);
+    display:flex; align-items:center; gap:9px; flex-shrink: 0;
+    font-size: 12px; font-style: italic; color: var(--ink-400);
+    font-family: 'Instrument Serif', Georgia, serif;
+  }
+  .tr-now .dots { display:inline-flex; gap:3px; }
+  .tr-now .dots i { width:4px; height:4px; border-radius:50%; background: var(--teal-glow); animation: td 1.2s infinite; }
+  .tr-now .dots i:nth-child(2){ animation-delay:.2s; }
+  .tr-now .dots i:nth-child(3){ animation-delay:.4s; }
+  @keyframes td { 0%,60%,100%{ opacity:.3; } 30%{ opacity:1; } }
+
+  /* ===== Diagnostics drawer (left edge, collapsible — mirrors transcript) ===== */
+  .drawer {
+    position: fixed; top: 50%; left: 0; transform: translateY(-50%);
+    z-index: 6; display: flex; align-items: stretch; max-height: 88vh;
+    transition: transform 0.45s cubic-bezier(.2,.7,.1,1);
+  }
+  .drawer.collapsed { transform: translate(calc(-100% + 38px), -50%); }
+  .dr-panel {
+    width: clamp(360px, 36vw, 520px); display: flex; flex-direction: column; overflow: hidden;
+    background: rgba(11,17,26,0.72);
+    border: 1px solid rgba(255,255,255,0.07); border-left: 0;
+    border-radius: 0 12px 12px 0;
+    backdrop-filter: blur(16px);
+    box-shadow: 20px 0 60px rgba(0,0,0,0.45);
+    padding: 20px 18px;
+  }
+  /* tab strip — four functional panes (mirrors the manual simulator) */
+  .dr-tabs {
+    display: flex; gap: 4px; margin-bottom: 12px; flex-shrink: 0;
+    overflow-x: auto; scrollbar-width: none; padding-bottom: 2px;
+  }
+  .dr-tabs::-webkit-scrollbar { display: none; }
+  .dr-t {
+    flex: 0 0 auto; cursor: pointer; background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07); border-radius: 8px;
+    padding: 6px 9px; color: var(--ink-400); white-space: nowrap;
+    font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 6px; transition: color .15s, border-color .15s, background .15s;
+  }
+  .dr-t:hover { color: var(--ink-200); }
+  .dr-t.active { color: var(--teal-glow); border-color: rgba(45,212,191,0.4); background: rgba(45,212,191,0.07); }
+  .dr-t .dr-t-n {
+    display: none; min-width: 15px; text-align: center; padding: 0 4px; border-radius: 999px;
+    background: rgba(45,212,191,0.18); color: var(--teal-glow); font-size: 9px;
+  }
+  .dr-t.has .dr-t-n { display: inline-block; }
+  .dr-stack { flex: 1; min-height: 0; display: flex; }
+  .dr-cards { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 9px; padding-right: 4px; }
+  .dr-cards[hidden] { display: none; }
+  .dr-card-b .dr-img, .dr-card-b img { cursor: zoom-in; }
+  .dr-cards::-webkit-scrollbar { width: 5px; }
+  .dr-cards::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+  .dr-empty { font-size: 12px; line-height:1.55; color: var(--ink-500); font-style: italic; font-family:'Instrument Serif', Georgia, serif; padding: 4px 2px; }
+  .dr-card { border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; background: rgba(255,255,255,0.02); overflow: hidden; }
+  .dr-card-h {
+    display:flex; align-items:center; gap:8px; padding: 9px 11px; cursor: pointer; user-select:none;
+    font-family:'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; color: var(--ink-200);
+  }
+  .dr-card-h:hover { background: rgba(255,255,255,0.03); }
+  .dr-card-h .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--ink-500); }
+  .dr-card-h .dot.ecg { background: #5ad6a0; }
+  .dr-card-h .dot.cxr { background: #7aa2f7; }
+  .dr-card-h .dot.exam { background: #d99a3c; }
+  .dr-card-h .dot.consult { background: #c08cf0; }
+  .dr-card-h .dot.report { background: #8aa0b8; }
+  .dr-card-h .dot.order { background: #4cc9f0; }
+  /* medication order card: confirm affordance + status tags */
+  .dr-card-b .ord-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 9px; }
+  .dr-card-b .ord-confirm input {
+    flex: 1; min-width: 110px; padding: 6px 9px; font-size: 12px; color: var(--ink-100);
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 7px;
+  }
+  .dr-card-b .ord-confirm input::placeholder { color: var(--ink-500); }
+  .dr-card-b .warn-tag {
+    font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: #e7b35a;
+    border: 1px solid rgba(231,179,90,0.4); background: rgba(231,179,90,0.08);
+    padding: 2px 7px; border-radius: 999px;
+  }
+  .dr-card-b .ok-tag { margin-top: 8px; font-size: 11px; color: #5ad6a0; }
+  .dr-card-h .title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dr-card-h .tag { margin-left: auto; font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-500); padding: 2px 6px; border:1px solid rgba(255,255,255,0.1); border-radius: 999px; flex-shrink:0; }
+  .dr-card-h .chev { flex-shrink:0; transition: transform 0.3s ease; color: var(--ink-500); }
+  .dr-card.collapsed .dr-card-h .chev { transform: rotate(-90deg); }
+  .dr-card-b { padding: 0 11px 11px; }
+  .dr-card.collapsed .dr-card-b { display: none; }
+  .dr-card-b .dr-img { background:#fff; border-radius: 6px; padding: 6px; overflow:auto; }
+  .dr-card-b .dr-img svg { width: 100%; height: auto; display:block; }
+  .dr-card-b img { width: 100%; border-radius: 6px; display:block; }
+  .dr-card-b .rep { font-size: 12.5px; line-height: 1.5; color: var(--ink-200); white-space: pre-line; margin-top: 8px; }
+  /* ===== Per-tab control strips (click-to-order, mirrors voice commands) ===== */
+  .dr-ctl { flex-shrink: 0; margin-bottom: 11px; }
+  .dr-ctl:empty { display: none; }
+  .dr-ctl-h {
+    font-family:'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-500); margin: 0 0 7px;
+  }
+  .dr-list { display: flex; flex-direction: column; gap: 9px; }
+  /* exam checklist */
+  .ex-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 9px; }
+  .ex-row {
+    display: flex; align-items: center; gap: 7px; padding: 7px 8px; cursor: pointer; user-select: none;
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; font-size: 11.5px; color: var(--ink-200);
+  }
+  .ex-row:hover { background: rgba(255,255,255,0.03); }
+  .ex-row.sel { border-color: rgba(45,212,191,0.4); background: rgba(45,212,191,0.08); color: var(--ink-100); }
+  .ex-box {
+    width: 15px; height: 15px; border-radius: 4px; flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.25); display: grid; place-items: center; color: transparent;
+  }
+  .ex-row.sel .ex-box { background: var(--teal-glow); border-color: var(--teal-glow); color: #04221c; }
+  .ex-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .ex-n { font-size: 10.5px; color: var(--ink-500); }
+  /* quick-order / consult chips */
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
+  .chip, .ex-do {
+    padding: 6px 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 999px;
+    background: rgba(255,255,255,0.03); color: var(--ink-200); font-size: 11.5px; cursor: pointer;
+    white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-family: inherit;
+  }
+  .chip:hover, .ex-do:not(:disabled):hover { border-color: rgba(45,212,191,0.45); color: var(--teal-glow); }
+  .chip:disabled, .ex-do:disabled { opacity: 0.45; cursor: default; }
+  .ex-do { border-radius: 8px; }
+  /* free-text order */
+  .ord-row { display: flex; gap: 6px; }
+  .ord-row input {
+    flex: 1; min-width: 0; padding: 7px 9px; font-size: 12px; color: var(--ink-100);
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 7px;
+  }
+  .ord-row input::placeholder { color: var(--ink-500); }
+  .ord-go { padding: 7px 11px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04); color: var(--ink-200); font-size: 11.5px; cursor: pointer; flex-shrink: 0; }
+  .ord-go:hover { border-color: rgba(45,212,191,0.45); color: var(--teal-glow); }
+
+  .dr-tab {
+    width: 38px; flex-shrink: 0;
+    background: rgba(13,20,31,0.6);
+    border: 1px solid rgba(255,255,255,0.07); border-left: 0;
+    border-radius: 0 12px 12px 0;
+    backdrop-filter: blur(10px);
+    cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    color: var(--ink-400);
+  }
+  .dr-tab:hover { color: var(--teal-glow); }
+  .dr-tab .dr-tab-label {
+    writing-mode: vertical-rl; text-orientation: mixed;
+    font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase;
+  }
+  .dr-tab .chev { transition: transform 0.45s ease; }
+  .drawer:not(.collapsed) .dr-tab .chev { transform: rotate(180deg); }
+
+  /* ===== Image lightbox (click any tracing/film to read it full-size) ===== */
+  .lightbox {
+    position: fixed; inset: 0; z-index: 40; display: none;
+    background: rgba(4,7,11,0.92); backdrop-filter: blur(6px);
+    flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px;
+  }
+  .lightbox.open { display: flex; }
+  .lb-stage {
+    background: #fff; border-radius: 8px; padding: 10px; overflow: auto;
+    max-width: 96vw; max-height: 88vh; box-shadow: 0 30px 90px rgba(0,0,0,0.6);
+  }
+  /* the ECG SVG ships an inline width:100% — give the stage a real, wide box so
+     the 12-lead actually scales up instead of collapsing to nothing. */
+  .lb-stage.ecg { width: min(94vw, 1180px); }
+  .lb-stage svg { display: block; width: 100%; height: auto; }
+  .lb-stage img { display: block; width: auto; height: auto; max-width: 94vw; max-height: 84vh; margin: 0 auto; }
+  .lb-cap {
+    max-width: 720px; text-align: center; color: var(--ink-200);
+    font-size: 13.5px; line-height: 1.55; white-space: pre-line;
+  }
+  .lb-close {
+    position: fixed; top: 22px; right: 24px; width: 38px; height: 38px; border-radius: 50%;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
+    color: var(--ink-100); cursor: pointer; display: grid; place-items: center; font-size: 18px; line-height: 1;
+  }
+  .lb-close:hover { background: rgba(255,255,255,0.16); }
+
+  /* End-case control (top-right HUD) */
+  .end-case {
+    margin-top: 10px; padding: 6px 12px; cursor: pointer;
+    background: rgba(217,154,60,0.10); border: 1px solid rgba(217,154,60,0.35);
+    border-radius: 8px; color: var(--amber);
+    font-family:'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .end-case:hover { background: rgba(217,154,60,0.18); }
+
+  /* ===== End-of-case debrief overlay ===== */
+  .debrief {
+    position: fixed; inset: 0; z-index: 50; display: none;
+    background: rgba(4,7,11,0.93); backdrop-filter: blur(8px);
+    align-items: flex-start; justify-content: center; padding: 5vh 20px; overflow-y: auto;
+  }
+  .debrief.open { display: flex; }
+  .db-card {
+    width: 100%; max-width: 720px; background: rgba(13,20,31,0.94);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;
+    box-shadow: 0 40px 120px rgba(0,0,0,0.6); padding: 28px 30px 24px;
+  }
+  .db-head-row { display: flex; align-items: flex-start; gap: 20px; }
+  .db-head-text { flex: 1; min-width: 0; }
+  .db-kicker { font-family:'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--teal-glow); }
+  .db-title { font-family:'Instrument Serif', Georgia, serif; font-size: 27px; color: var(--ink-100); margin-top: 6px; line-height: 1.2; }
+  .db-outcome { margin-top: 10px; display: inline-block; padding: 5px 11px; border-radius: 999px;
+    font-family:'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.04em;
+    background: rgba(90,214,160,0.12); color: #5ad6a0; border: 1px solid rgba(90,214,160,0.3); }
+  .db-outcome.bad { background: rgba(224,108,95,0.12); color: #e06c5f; border-color: rgba(224,108,95,0.3); }
+  .db-outcome.early { background: rgba(217,154,60,0.12); color: var(--amber); border-color: rgba(217,154,60,0.3); }
+  /* score donut */
+  .db-donut { flex-shrink: 0; width: 76px; height: 76px; display: none; position: relative; }
+  .db-donut.visible { display: block; }
+  .db-donut svg { width: 100%; height: 100%; }
+  .db-donut-num {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family:'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; color: var(--ink-100);
+    line-height: 1;
+  }
+  .db-donut-num span { font-size: 8px; color: var(--ink-500); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 1px; }
+  .db-body { margin-top: 22px; display: flex; flex-direction: column; gap: 20px; }
+  .db-sec-h { font-family:'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-500); margin-bottom: 9px; display: flex; align-items: center; gap: 8px; }
+  .db-coach-wrap { position: relative; }
+  .db-coach { font-size: 14.5px; line-height: 1.6; color: var(--ink-100);
+    background: rgba(45,212,191,0.06); border-left: 2px solid var(--teal-glow); border-radius: 0 8px 8px 0; padding: 13px 15px; }
+  .db-coach-play {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(95,216,230,0.3);
+    background: rgba(95,216,230,0.08); cursor: pointer; color: var(--teal-glow);
+    margin-left: auto; flex-shrink: 0; transition: background .15s, border-color .15s;
+  }
+  .db-coach-play:hover { background: rgba(95,216,230,0.18); border-color: var(--teal-glow); }
+  .db-coach-play.playing { background: rgba(95,216,230,0.22); border-color: var(--teal-glow); }
+  .db-stats { display: flex; flex-wrap: wrap; gap: 7px; }
+  .db-stat { padding: 6px 11px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+    font-family:'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-200); }
+  .db-stat b { color: var(--ink-100); font-weight: 600; }
+  /* timeline */
+  .db-timeline { display: flex; flex-direction: column; gap: 0; }
+  .db-tl-item { display: flex; align-items: flex-start; gap: 10px; }
+  .db-tl-spine { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 20px; }
+  .db-tl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal-glow); border: 2px solid var(--ink-900); flex-shrink: 0; margin-top: 3px; }
+  .db-tl-item:last-child .db-tl-dot { background: #5ad6a0; }
+  .db-tl-line { width: 1px; background: rgba(255,255,255,0.08); flex: 1; min-height: 16px; }
+  .db-tl-item:last-child .db-tl-line { display: none; }
+  .db-tl-label { font-size: 12.5px; color: var(--ink-200); padding-bottom: 14px; line-height: 1.3; }
+  .db-tl-label b { font-family:'JetBrains Mono', monospace; font-size: 9px; color: var(--ink-500); display: block; margin-bottom: 1px; }
+  .db-tl-more { font-family:'JetBrains Mono', monospace; font-size: 10px; color: var(--teal-glow); cursor: pointer; letter-spacing: 0.05em; padding: 2px 0 0 30px; }
+  .db-tl-more:hover { text-decoration: underline; }
+  .db-crits { display: flex; flex-direction: column; gap: 7px; }
+  .db-crit { display: flex; align-items: baseline; gap: 9px; padding: 9px 12px; border-radius: 8px;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); }
+  .db-crit-mark { font-size: 13px; flex-shrink: 0; width: 14px; text-align: center; }
+  .db-crit.met { border-color: rgba(45,212,191,0.3); }
+  .db-crit.met .db-crit-mark { color: var(--teal-glow); }
+  .db-crit.miss { border-color: rgba(224,108,95,0.28); }
+  .db-crit.miss .db-crit-mark { color: #e89a90; }
+  .db-crit-label { font-size: 13px; color: var(--ink-100); flex-shrink: 0; }
+  .db-crit-detail { font-size: 11.5px; color: var(--ink-500); margin-left: auto; text-align: right; }
+  .db-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .db-chip { padding: 5px 10px; border-radius: 999px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); font-size: 11.5px; color: var(--ink-200); }
+  .db-chip.none { color: var(--ink-500); font-style: italic; }
+  .db-chip.err { background: rgba(224,108,95,0.1); border-color: rgba(224,108,95,0.3); color: #e89a90; }
+  .db-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 7px; }
+  .db-list li { font-size: 13.5px; line-height: 1.5; color: var(--ink-200); padding-left: 16px; position: relative; }
+  .db-list li::before { content: '›'; position: absolute; left: 0; color: var(--teal-glow); }
+  .db-list.errs li::before { content: '!'; color: #e06c5f; }
+  .db-refs { font-size: 12px; color: var(--ink-500); line-height: 1.6; }
+  .db-foot { margin-top: 26px; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+  .db-new, .db-close, .db-print { padding: 9px 16px; border-radius: 9px; cursor: pointer; font-size: 12.5px; font-family: inherit; }
+  .db-new { background: var(--teal-glow); border: 0; color: #04221c; font-weight: 600; }
+  .db-new:hover { filter: brightness(1.08); }
+  .db-close { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--ink-200); }
+  .db-close:hover { background: rgba(255,255,255,0.1); }
+  .db-print { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); color: var(--ink-300); margin-right: auto; }
+  .db-print:hover { background: rgba(255,255,255,0.09); }
+  @media print {
+    body > *:not(.debrief) { display: none !important; }
+    .debrief { position: static; background: #fff; display: block !important; padding: 0; }
+    .db-card { box-shadow: none; border: none; background: #fff; color: #111; max-width: 100%; }
+    .db-foot, .db-kicker { display: none; }
+    .db-title, .db-body { color: #111; }
+    .db-coach { border-left-color: #333; background: #f5f5f5; }
+    .db-sec-h { color: #555; }
+    .db-crit, .db-stat, .db-chip { border-color: #ccc; background: #f9f9f9; color: #111; }
+  }
+
+  /* ===== State transition toast ===== */
+  .state-toast {
+    position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%);
+    z-index: 20; pointer-events: none;
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 14px; border-radius: 999px;
+    background: rgba(13,20,31,0.85); backdrop-filter: blur(10px);
+    border: 1px solid rgba(95,216,230,0.22);
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.07em;
+    color: var(--teal-glow); white-space: nowrap;
+    opacity: 0; transition: opacity 0.25s ease;
+  }
+  .state-toast.visible { opacity: 1; }
+  .state-toast.critical { border-color: rgba(217,154,60,0.4); color: var(--amber); }
+  .state-toast .st-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+  /* ===== Pause overlay ===== */
+  .pause-modal {
+    position: fixed; inset: 0; z-index: 60; display: none;
+    background: rgba(4,7,11,0.93); backdrop-filter: blur(8px);
+    align-items: center; justify-content: center; padding: 20px;
+  }
+  .pause-modal.open { display: flex; }
+  .pm-card {
+    width: 100%; max-width: 420px; text-align: center;
+    background: rgba(13,20,31,0.94); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px; box-shadow: 0 40px 120px rgba(0,0,0,0.6); padding: 34px 32px 28px;
+  }
+  .pm-icon { font-size: 30px; color: var(--teal-glow); margin-bottom: 14px; }
+  .pm-title { font-family:'Instrument Serif', Georgia, serif; font-size: 26px; color: var(--ink-100); margin-top: 6px; line-height: 1.2; }
+  .pm-note { margin-top: 12px; font-size: 13.5px; line-height: 1.6; color: var(--ink-300); }
+  .pm-foot { margin-top: 26px; display: flex; flex-direction: column; gap: 10px; }
+  .pm-resume, .pm-home { padding: 11px 16px; border-radius: 9px; cursor: pointer; font-size: 13px; font-family: inherit; }
+  .pm-resume { background: var(--teal-glow); border: 0; color: #04221c; font-weight: 600; }
+  .pm-resume:hover { filter: brightness(1.08); }
+  .pm-home { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--ink-200); }
+  .pm-home:hover { background: rgba(255,255,255,0.1); }
+
+  /* ===== Actor roster (presence strip, top-centre) ===== */
+  .roster {
+    position: fixed; top: 72px; left: 50%; transform: translateX(-50%); z-index: 5;
+    display: flex; align-items: flex-start; gap: 4px;
+    padding: 10px 16px 11px; border-radius: 18px;
+    background: rgba(13,20,31,0.42);
+    border: 1px solid rgba(255,255,255,0.055);
+    backdrop-filter: blur(9px);
+    box-shadow: 0 14px 44px rgba(0,0,0,0.4);
+  }
+  .roster:empty { display: none; }
+  .roster-head {
+    align-self: center; margin-right: 8px; padding-right: 14px;
+    border-right: 1px solid rgba(255,255,255,0.07);
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .roster-head .rh-1 { font-family:'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-500); }
+  .roster-head .rh-2 { font-family:'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; color: var(--ink-600); display:flex; align-items:center; gap:5px; }
+  .roster-head .rh-2 .cnt { color: var(--teal-glow); font-weight: 600; }
+
+  .actor {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    width: 60px; position: relative; cursor: default; transition: opacity .6s ease;
+  }
+  .ava-wrap { position: relative; width: 46px; height: 46px; }
+  .actor .ava {
+    width: 46px; height: 46px; border-radius: 50%;
+    background: linear-gradient(140deg, var(--ac), var(--ac2));
+    display: grid; place-items: center;
+    font-family:'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: #0b1119;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+    transition: box-shadow .5s ease, filter .6s ease, transform .5s ease;
+    position: relative; overflow: visible;
+  }
+  .actor .ring { position: absolute; inset: -4px; border-radius: 50%; border: 1.5px solid var(--ac); opacity: 0; pointer-events: none; }
+  .actor .badge {
+    position: absolute; right: -2px; bottom: -2px; width: 17px; height: 17px; border-radius: 50%;
+    background: #0c131e; border: 1px solid rgba(255,255,255,0.12);
+    display: grid; place-items: center; color: var(--ac); box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  }
+  .actor .nm { font-family:'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-400); transition: color .5s ease; white-space: nowrap; }
+  .actor .tag {
+    display: none; align-items: center; gap: 4px;
+    font-family:'JetBrains Mono', monospace; font-size: 7.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ac); margin-top: -3px;
+  }
+  .actor .tag .tdot { width: 4px; height: 4px; border-radius: 50%; background: var(--ac); animation: enroute-dot 1.4s ease-in-out infinite; }
+  @keyframes enroute-dot { 0%,100%{ opacity:.25; transform: translateX(0);} 50%{ opacity:1; transform: translateX(2px);} }
+
+  /* present-idle: calm full colour with a soft accent breathing glow */
+  .actor.idle .ava { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 13px -3px var(--ac); animation: breathe-soft 4.5s ease-in-out infinite; }
+  @keyframes breathe-soft { 0%,100%{ box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 11px -4px var(--ac);} 50%{ box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 16px -2px var(--ac);} }
+
+  /* speaking: illuminated + pulsing (mirrors the orb's RESPONDING glow) */
+  .actor.speaking .ava { animation: speak-glow 1.05s ease-in-out infinite; transform: translateY(-2px) scale(1.07); }
+  .actor.speaking .nm { color: var(--ac); }
+  .actor.speaking .ring { animation: speak-ring 1.05s ease-out infinite; }
+  @keyframes speak-glow {
+    0%,100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4), 0 0 16px 1px var(--ac); }
+    50%     { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 30px 6px var(--ac); }
+  }
+  @keyframes speak-ring { 0%{ transform: scale(.82); opacity: .8; } 100%{ transform: scale(1.45); opacity: 0; } }
+
+  /* en route: dim desaturated ghost with a pulsing "En route" tag */
+  .actor.enroute { opacity: .42; }
+  .actor.enroute .ava { filter: grayscale(.72) brightness(.62); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07); animation: none; }
+  .actor.enroute .nm { color: var(--ink-600); }
+  .actor.enroute .badge { color: var(--ink-500); }
+  .actor.enroute .tag { display: flex; }
+
+  /* arrival: en-route → present settle-in */
+  .actor.arriving { animation: arrive 1.25s cubic-bezier(.2,.75,.15,1); }
+  .actor.arriving .ava { animation: arrive-ava 1.25s cubic-bezier(.2,.75,.15,1); }
+  @keyframes arrive { 0%{ opacity:.42; transform: translateY(7px) scale(.92);} 55%{ opacity:1; transform: translateY(-3px) scale(1.1);} 100%{ opacity:1; transform: translateY(0) scale(1);} }
+  @keyframes arrive-ava {
+    0%   { filter: grayscale(.72) brightness(.62); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07), 0 0 0 0 var(--ac); }
+    55%  { filter: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5), 0 0 34px 8px var(--ac); }
+    100% { filter: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 14px -3px var(--ac); }
+  }
+
+  /* arrival toast */
+  .toast {
+    position: fixed; top: 188px; left: 50%; transform: translate(-50%, -8px); z-index: 7; pointer-events: none;
+    display: inline-flex; align-items: center; gap: 9px; padding: 9px 16px; border-radius: 99px;
+    background: rgba(16,24,36,0.82); border: 1px solid rgba(231,179,90,0.4);
+    backdrop-filter: blur(10px); box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+    font-size: 12px; letter-spacing: 0.01em; color: var(--ink-200);
+    opacity: 0; transition: opacity .5s ease, transform .5s ease;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast .t-dot { width: 8px; height: 8px; border-radius: 50%; background: #e7b35a; box-shadow: 0 0 12px #e7b35a; }
+  .toast b { color: #f0c87a; font-weight: 600; }
+
+  @media (max-width: 720px) {
+    .switcher { gap: 9px; }
+    .sw canvas { width: 38px; height: 38px; }
+    .sw .sw-ring { width: 42px; height: 42px; }
+    .roster { gap: 0; padding: 9px 10px; }
+    .roster-head { display: none; }
+    .actor { width: 50px; }
+  }
+
+  /* ── Addressee chips ── */
+  .addr-chips {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    position: fixed; bottom: 114px; left: 50%; transform: translateX(-50%);
+    z-index: 6; padding: 6px 12px 6px 10px; border-radius: 22px;
+    background: rgba(10,15,23,0.72); border: 1px solid rgba(255,255,255,0.07);
+    backdrop-filter: blur(10px);
+    transition: opacity 0.2s ease, border-color 0.2s ease;
+  }
+  .addr-chips.ask-mode {
+    border-color: rgba(255,255,255,0.22);
+    animation: addr-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes addr-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.06); }
+    50%       { box-shadow: 0 0 0 5px rgba(255,255,255,0.00); }
+  }
+  .addr-prompt {
+    font-family: 'JetBrains Mono', monospace; font-size: 8px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-500); margin-right: 2px; white-space: nowrap;
+  }
+  .addr-chip {
+    font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 3px 10px; border-radius: 14px; border: 1px solid;
+    cursor: pointer; transition: opacity 0.15s, background 0.15s, transform 0.1s;
+    opacity: 0.55;
+  }
+  .addr-chip:hover { opacity: 0.85; transform: translateY(-1px); }
+  .addr-chip.selected { opacity: 1; }
+  /* per-speaker colours */
+  .addr-chip[data-sp="patient"]  { color:#e0a85f; border-color:rgba(224,168,95,0.4);  background:rgba(224,168,95,0.08); }
+  .addr-chip[data-sp="patient"].selected  { background:rgba(224,168,95,0.22); }
+  .addr-chip[data-sp="nurse"]    { color:var(--teal-glow); border-color:rgba(0,255,230,0.3); background:rgba(0,255,230,0.06); }
+  .addr-chip[data-sp="nurse"].selected    { background:rgba(0,255,230,0.16); }
+  .addr-chip[data-sp="ems"]      { color:#8ab4f0; border-color:rgba(138,180,240,0.35); background:rgba(138,180,240,0.07); }
+  .addr-chip[data-sp="ems"].selected      { background:rgba(138,180,240,0.20); }
+  .addr-chip[data-sp="family"]   { color:#e7b35a; border-color:rgba(231,179,90,0.35);  background:rgba(231,179,90,0.07); }
+  .addr-chip[data-sp="family"].selected   { background:rgba(231,179,90,0.20); }
+  .addr-chip[data-sp="consult"]  { color:#c08cf0; border-color:rgba(192,140,240,0.35); background:rgba(192,140,240,0.07); }
+  .addr-chip[data-sp="consult"].selected  { background:rgba(192,140,240,0.20); }
+  .addr-chip[data-sp="rt"]       { color:#6fd3c2; border-color:rgba(111,211,194,0.35); background:rgba(111,211,194,0.07); }
+  .addr-chip[data-sp="rt"].selected       { background:rgba(111,211,194,0.20); }
+</style>
+</head>
+<body>
+
+<a class="exit" href="/home" title="Leave the room">
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2H3v12h3"/><path d="M10 11l3-3-3-3M13 8H6"/></svg>
+  End session
+</a>
+
+<div class="room" data-screen-label="Voice Room — Listening">
+  <div class="wash" id="wash"></div>
+  <div class="vignette" id="vignette"></div>
+
+  <div class="stage-empty">
+    <div class="se-label" id="stageLabel">Awaiting results</div>
+    <div class="se-hint" id="stageHint">Order anything by voice — <b>“show me the blood gas,”</b> <b>“pull up the chest film”</b> — and it appears here.</div>
+  </div>
+</div>
+
+<!-- Corner HUD -->
+<div class="hud hud-tl">
+  <div class="brand">
+    <div class="brand-mark"></div>
+    <div class="brand-name">Cases<span class="lc">Basis</span></div>
+  </div>
+  <div class="pt-label">Patient</div>
+  <div class="pt-id"><span class="mono-id" id="ptName">EK</span><span class="age" id="ptAge">· 29F</span></div>
+  <div class="pt-cc" id="ptCC">“I can’t catch my breath”</div>
+  <div class="pt-meta" id="ptMeta">Respiratory distress · Resus bay 3 · onset ~40 min</div>
+  <div class="pt-chips">
+    <span class="pt-chip" id="airwayChip" hidden></span>
+    <span class="pt-chip dx" id="dxChip" hidden></span>
+  </div>
+</div>
+
+<!-- Actor roster / presence strip (built from the case roster on load) -->
+<div class="roster" id="roster" aria-label="People in the room"></div>
+
+<!-- Arrival toast (an actor who was en route joins the bedside) -->
+<div class="toast" id="arrivalToast"><span class="t-dot"></span> <b id="arrivalName">Someone</b>&nbsp;arrived at the bedside</div>
+
+<div class="hud-bar" id="hudBar">
+  <span class="hb-clock" id="timer">00:00</span>
+  <span class="rec"><span class="dot"></span> REC · LIVE</span>
+  <span class="hb-sep"></span>
+  <span class="hb-session" id="caseTag">Session <b>—</b></span>
+  <span class="hb-sep"></span>
+  <button class="hb-btn ambience" id="ambienceBtn" title="Toggle ambient sound">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M9.5 2.5v11a.5.5 0 0 1-.8.4L4.7 10H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2.7l4-3.9a.5.5 0 0 1 .8.4zm2.6 1.6a.5.5 0 0 1 .7.1 7 7 0 0 1 0 7.6.5.5 0 1 1-.8-.6 6 6 0 0 0 0-6.4.5.5 0 0 1 .1-.7z"/></svg>
+  </button>
+  <button class="hb-btn pause" id="pauseBtn" title="Park this case and resume later from home">⏸ Pause</button>
+  <button class="hb-btn end" id="endCaseBtn" title="Conclude the case and see your debrief">End &amp; debrief</button>
+</div>
+
+<!-- Vitals strip -->
+<div class="vitals" aria-label="Live nurse and vitals">
+  <div class="nurse">
+    <div class="nurse-orb"><canvas id="orb"></canvas></div>
+    <div class="nurse-info">
+      <div class="state" id="stateName">Listening</div>
+      <div class="mic">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="6" y="1.5" width="4" height="8.5" rx="2"/><path d="M3.5 7c0 2.6 2 4.5 4.5 4.5S12.5 9.6 12.5 7M8 11.5v3M5.5 14.5h5"/></svg>
+        <span id="micText">Hearing you</span>
+        <span class="bars"><i></i><i></i><i></i><i></i><i></i></span>
+      </div>
+    </div>
+  </div>
+  <div class="vsep"></div>
+  <div class="vital" id="hrCell">
+    <div class="v-label">HR</div>
+    <div class="v-val" id="hr">110<span class="u">bpm</span></div>
+    <div class="v-trend" id="hrTrend">sinus tachy</div>
+  </div>
+  <div class="vital" id="bpCell">
+    <div class="v-label">BP</div>
+    <div class="v-val" id="bp">126/84<span class="u">mmHg</span></div>
+    <div class="v-trend" id="bpTrend">MAP 98</div>
+  </div>
+  <div class="vital" id="rrCell">
+    <div class="v-label">RR</div>
+    <div class="v-val" id="rr">30<span class="u">/min</span></div>
+    <div class="v-trend" id="rrTrend">labored</div>
+  </div>
+  <div class="vital warn" id="spo2cell">
+    <div class="v-label">SpO<sub>2</sub></div>
+    <div class="v-val" id="spo2">92<span class="u">%</span></div>
+    <div class="v-trend" id="spo2Trend">
+      <svg class="spark" width="34" height="11" viewBox="0 0 34 11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1 2 L8 3 L15 4 L22 7 L28 8 L33 10"/></svg>
+      falling
+    </div>
+  </div>
+  <div class="vsep mon-sep" id="monSep" hidden></div>
+  <div class="ecg-mon" id="ecgMon" hidden>
+    <canvas id="ecgCanvas"></canvas>
+    <div class="ecg-mon-meta">
+      <span class="ecg-mon-lead">II</span>
+      <span class="ecg-mon-rhythm" id="ecgRhythm"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Live caption bar (shown during TTS playback) -->
+<div class="caption-bar" id="captionBar" aria-live="polite">
+  <div class="cap-who" id="captionWho"></div>
+  <div class="cap-text" id="captionText"></div>
+</div>
+
+<!-- Push-to-talk -->
+<button class="talk" id="talkBtn" title="Tap to start hands-free listening (or press Space). Just speak — say “Nurse, …” for orders, anything else talks to the patient.">
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="6" y="1.5" width="4" height="8.5" rx="2"/><path d="M3.5 7c0 2.6 2 4.5 4.5 4.5S12.5 9.6 12.5 7M8 11.5v3M5.5 14.5h5"/></svg>
+  <span class="talk-label">Tap to start</span>
+</button>
+
+<!-- Addressee chips — tap to direct your next utterance to a specific actor -->
+<div class="addr-chips" id="addrChips" aria-label="Address your query to" hidden>
+  <span class="addr-prompt" id="addrPrompt">Address to:</span>
+</div>
+
+<!-- Voice-mode chooser (shown once, when the resident begins the case) -->
+<div class="modal-back" id="voiceModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="vmTitle">
+    <h2 id="vmTitle">Choose how to run this case</h2>
+    <p>Pick a voice mode for the whole simulation. You can refresh to change it.</p>
+    <div class="modal-opts">
+      <button class="vm-opt" id="vmNative">
+        <span class="vm-ic">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="1.5" width="4" height="8" rx="2"/><path d="M3.5 7c0 2.5 2 4.4 4.5 4.4S12.5 9.5 12.5 7M8 11.4v3M5.5 14.4h5"/></svg>
+        </span>
+        <span>
+          <span class="vm-tt">Native</span>
+          <span class="vm-sub">Your browser’s built-in dictation &amp; voice. Works offline-ish, nothing billed.</span>
+        </span>
+        <span class="vm-tag">Zero cost</span>
+      </button>
+      <button class="vm-opt cost" id="vmModels">
+        <span class="vm-ic">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8c1.6-3.6 10.4-3.6 12 0M2 8c1.6 3.6 10.4 3.6 12 0"/><circle cx="8" cy="8" r="2"/></svg>
+        </span>
+        <span>
+          <span class="vm-tt">Speech models</span>
+          <span class="vm-sub">Whisper transcription + studio voices. Best accuracy for clinical terms.</span>
+        </span>
+        <span class="vm-tag">Costly</span>
+      </button>
+    </div>
+    <div class="modal-foot">Native uses your device/Chrome’s speech engine — no key, but lower accuracy on drug names. Speech models call our paid providers.</div>
+  </div>
+</div>
+
+<!-- State switcher -->
+<div class="switcher" id="switcher"></div>
+<div class="switcher-note">Tap the mic, then talk — address staff by name (“Nurse, …”, “Husband, …”, “RT, …”); anything else goes to the patient</div>
+
+<!-- Unified Room log (right edge): every voice in the room, tagged by speaker -->
+<div class="transcript ch-room collapsed" id="trRoom">
+  <div class="tr-tab" data-ch="trRoom">
+    <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 L5 8 L10 13"/></svg>
+    <span class="tr-tab-label">Room</span>
+  </div>
+  <div class="tr-panel">
+    <div class="tr-head"><span class="live">● Live</span> the room</div>
+    <div class="tr-scroll">
+      <div class="tr-now"><span class="dots"><i></i><i></i><i></i></span> talk to the patient, or address staff by name</div>
+    </div>
+  </div>
+</div>
+
+<!-- Diagnostics drawer -->
+<div class="drawer collapsed" id="drawer">
+  <div class="dr-panel">
+    <div class="dr-tabs" id="drTabs">
+      <button class="dr-t active" data-tab="exam" title="Physical exam">Exam <span class="dr-t-n"></span></button>
+      <button class="dr-t" data-tab="investigations" title="Investigations — labs, ECG, bedside tests">Investigations <span class="dr-t-n"></span></button>
+      <button class="dr-t" data-tab="imaging" title="Imaging — X-ray, CT">Imaging <span class="dr-t-n"></span></button>
+      <button class="dr-t" data-tab="consults" title="Consults">Consults <span class="dr-t-n"></span></button>
+      <button class="dr-t" data-tab="orders" title="Orders — medications given">Orders <span class="dr-t-n"></span></button>
+    </div>
+    <div class="dr-stack" id="drStack">
+      <div class="dr-cards" data-pane="exam">
+        <div class="dr-ctl" data-ctl="exam"></div>
+        <div class="dr-list"><div class="dr-empty">Tap systems above and examine, or say “check her neuro” — findings collect here.</div></div>
+      </div>
+      <div class="dr-cards" data-pane="investigations" hidden>
+        <div class="dr-ctl" data-ctl="investigations"></div>
+        <div class="dr-list"><div class="dr-empty">Tap a test above or say “get a blood gas” — results collect here.</div></div>
+      </div>
+      <div class="dr-cards" data-pane="imaging" hidden>
+        <div class="dr-ctl" data-ctl="imaging"></div>
+        <div class="dr-list"><div class="dr-empty">Tap a film above or say “get a chest X-ray” — images collect here.</div></div>
+      </div>
+      <div class="dr-cards" data-pane="consults" hidden>
+        <div class="dr-ctl" data-ctl="consults"></div>
+        <div class="dr-list"><div class="dr-empty">Tap a specialist above or say “call neurology” — advice collects here.</div></div>
+      </div>
+      <div class="dr-cards" data-pane="orders" hidden>
+        <div class="dr-ctl" data-ctl="orders"></div>
+        <div class="dr-list"><div class="dr-empty">Say “give rocuronium 0.6 mg/kg” or type a medication below — orders collect here.</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="dr-tab" id="drTab">
+    <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3 L11 8 L6 13"/></svg>
+    <span class="dr-tab-label">Diagnostics</span>
+  </div>
+</div>
+
+<!-- Image lightbox: click any tracing/film to read it full-size -->
+<div class="lightbox" id="lightbox">
+  <button class="lb-close" id="lbClose" aria-label="Close">✕</button>
+  <div class="lb-stage" id="lbStage"></div>
+  <div class="lb-cap" id="lbCap"></div>
+</div>
+
+<!-- End-of-case debrief -->
+<div class="debrief" id="debrief">
+  <div class="db-card">
+    <div class="db-head-row">
+      <div class="db-head-text">
+        <div class="db-kicker">Case debrief</div>
+        <div class="db-title" id="dbTitle"></div>
+        <div class="db-outcome" id="dbOutcome"></div>
+      </div>
+      <div class="db-donut" id="dbDonut">
+        <svg viewBox="0 0 76 76" fill="none">
+          <circle cx="38" cy="38" r="30" stroke="rgba(255,255,255,0.07)" stroke-width="7"/>
+          <circle id="dbDonutArc" cx="38" cy="38" r="30"
+            stroke="var(--teal-glow)" stroke-width="7"
+            stroke-linecap="round"
+            stroke-dasharray="188.5" stroke-dashoffset="188.5"
+            transform="rotate(-90 38 38)"
+            style="transition: stroke-dashoffset 1.1s cubic-bezier(.4,0,.2,1), stroke .6s ease"/>
+        </svg>
+        <div class="db-donut-num"><span id="dbScoreNum">0</span><span>score</span></div>
+      </div>
+    </div>
+    <div class="db-body" id="dbBody"></div>
+    <div class="db-foot">
+      <button class="db-print" id="dbPrint">Print report</button>
+      <button class="db-new" id="dbNew">Start new case</button>
+      <button class="db-close" id="dbClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pause overlay: the case clock is frozen and the run is saved -->
+<div class="pause-modal" id="pauseModal">
+  <div class="pm-card">
+    <div class="pm-icon">⏸</div>
+    <div class="db-kicker">Session paused</div>
+    <div class="pm-title">The case is on hold</div>
+    <div class="pm-note">The clock is frozen and your progress is saved. Resume to pick up exactly where you left off, or step away — you can resume this run later from home.</div>
+    <div class="pm-foot">
+      <button class="pm-resume" id="pmResume">Resume case</button>
+      <button class="pm-home" id="pmHome">Exit to home</button>
+    </div>
+  </div>
+</div>
+
+<!-- State transition toast -->
+<div class="state-toast" id="stateToast"><span class="st-dot"></span><span id="stateToastLabel"></span></div>
+
+<script>
+(function () {
+  // ---------- State definitions ----------
+  const STATES = {
+    idle: {
+      name: 'Idle', sub: 'Standing by, ready', mic: 'Mic open',
+      speed: 0.16, amp: 0.16, bright: 0.5, swirl: 0.06, breathe: 0.05,
+      ripple: 0.15, bloom: 1.0, glow: [14,138,158],
+      hues: [186,190,196,200,184,192,198], sat: 58, light: 50, gold: -1,
+    },
+    listening: {
+      name: 'Listening', sub: 'Hearing the resident', mic: 'Hearing you',
+      speed: 0.5, amp: 0.95, bright: 1.0, swirl: 0.12, breathe: 0.02,
+      ripple: 1.0, bloom: 1.15, glow: [40,190,210],
+      hues: [188,184,194,200,182,190,196], sat: 80, light: 60, gold: -1,
+    },
+    thinking: {
+      name: 'Thinking', sub: 'Working it through', mic: 'Processing…',
+      speed: 0.8, amp: 0.5, bright: 0.82, swirl: 1.0, breathe: 0.0,
+      ripple: 0.42, bloom: 1.05, glow: [70,120,210],
+      hues: [205,222,242,255,212,230,248], sat: 66, light: 58, gold: -1,
+    },
+    responding: {
+      name: 'Responding', sub: 'Reading the order back', mic: 'Speaking',
+      speed: 0.46, amp: 0.62, bright: 0.95, swirl: 0.18, breathe: 0.03,
+      ripple: 0.6, bloom: 1.1, glow: [60,170,180],
+      hues: [188,40,194,44,184,42,196], sat: 78, light: 60, gold: -1, pulse: 1,
+    },
+  };
+  const ORDER = ['idle','listening','thinking','responding'];
+
+  // lobe geometry (length 7)
+  const ORBIT = [0.00, 0.30, 0.36, 0.42, 0.31, 0.38, 0.22];
+  const SIZE  = [0.66, 0.50, 0.45, 0.40, 0.48, 0.40, 0.56];
+  const ANG0  = [0, 0.9, 2.0, 3.1, 4.0, 5.0, 5.8];
+  const DIR   = [1, 1, -1, 1, -1, 1, -1];
+  const ASPD  = [0.0, 0.55, 0.8, 0.45, 0.7, 0.5, 0.9];
+
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function lerpHue(a,b,t){ let d=((b-a+540)%360)-180; return (a+d*t+360)%360; }
+
+  class Orb {
+    constructor(canvas, stateKey, opts={}) {
+      this.canvas = canvas;
+      this.ctx = canvas.getContext('2d');
+      this.off = document.createElement('canvas');
+      this.octx = this.off.getContext('2d');
+      this.thumb = !!opts.thumb;
+      this.dpr = Math.min(window.devicePixelRatio || 1, this.thumb ? 1.5 : 2);
+      // params (current, animated toward target)
+      const s = STATES[stateKey];
+      this.p = { speed:s.speed, amp:s.amp, bright:s.bright, swirl:s.swirl, breathe:s.breathe, ripple:s.ripple, bloom:s.bloom, sat:s.sat, light:s.light, pulse: s.pulse||0 };
+      this.hues = s.hues.slice();
+      this.targetKey = stateKey;
+      this.t = Math.random()*40;
+      this.swirlT = 0;
+      this.env = 0.5; this.rnd = 0;
+      this.last = performance.now();
+      this.lastDraw = 0;
+      this.ripples = [];
+      this.rtimer = 0;
+      this.resize();
+    }
+    resize() {
+      const r = this.canvas.getBoundingClientRect();
+      this.w = Math.max(1, r.width); this.h = Math.max(1, r.height);
+      this.canvas.width = Math.round(this.w*this.dpr);
+      this.canvas.height = Math.round(this.h*this.dpr);
+      this.ctx.setTransform(this.dpr,0,0,this.dpr,0,0);
+      this.off.width = this.canvas.width; this.off.height = this.canvas.height;
+      this.octx.setTransform(this.dpr,0,0,this.dpr,0,0);
+    }
+    setState(key) {
+      this.targetKey = key;
+    }
+    step(now) {
+      let dt = (now - this.last)/1000; this.last = now;
+      if (dt > 0.05) dt = 0.05;
+      if (this.thumb) { if (now - this.lastDraw < 40) return; this.lastDraw = now; }
+
+      const T = STATES[this.targetKey];
+      const k = Math.min(1, dt * 2.6);
+      this.p.speed   = lerp(this.p.speed, T.speed, k);
+      this.p.amp     = lerp(this.p.amp, T.amp, k);
+      this.p.bright  = lerp(this.p.bright, T.bright, k);
+      this.p.swirl   = lerp(this.p.swirl, T.swirl, k);
+      this.p.breathe = lerp(this.p.breathe, T.breathe, k);
+      this.p.ripple  = lerp(this.p.ripple, T.ripple, k);
+      this.p.bloom   = lerp(this.p.bloom, T.bloom, k);
+      this.p.sat     = lerp(this.p.sat, T.sat, k);
+      this.p.light   = lerp(this.p.light, T.light, k);
+      this.p.pulse   = lerp(this.p.pulse, T.pulse||0, k);
+      for (let i=0;i<7;i++) this.hues[i] = lerpHue(this.hues[i], T.hues[i], k);
+
+      this.t += dt * this.p.speed;
+      this.swirlT += dt * this.p.swirl;
+
+      // synthetic voice envelope
+      let v = Math.abs(Math.sin(this.t*1.7))*0.55 + Math.abs(Math.sin(this.t*4.1+1.3))*0.32 + 0.13;
+      this.rnd += (Math.random()-0.5)*dt*5; this.rnd = Math.max(-0.5, Math.min(0.5, this.rnd*0.96));
+      v = v*0.78 + (0.5+this.rnd)*0.22;
+      this.env = lerp(this.env, v, 0.18);
+      const amp = this.p.amp * this.env;
+
+      // ripple spawning on amplitude peaks
+      this.rtimer -= dt;
+      const rate = lerp(1.4, 0.34, this.p.ripple);
+      if (this.rtimer <= 0 && this.p.ripple > 0.1) {
+        this.rtimer = rate * (0.7 + Math.random()*0.6);
+        this.ripples.push({ p:0, strength: 0.5 + amp });
+      }
+      for (const rp of this.ripples) rp.p += dt * lerp(0.35, 0.7, this.p.ripple);
+      this.ripples = this.ripples.filter(r => r.p < 1);
+
+      this.draw(amp);
+    }
+    draw(amp) {
+      const ctx = this.ctx, oc = this.octx;
+      const w = this.w, h = this.h;
+      const cx = w/2, cy = h*0.5;
+      const R = Math.min(w,h) * 0.42;
+      const pulse = this.p.pulse ? (0.5 + 0.5*Math.sin(this.t*3.4)) * 0.12 : 0;
+      const scale = 1 + this.p.breathe*Math.sin(this.t*0.8) + amp*0.05 + pulse;
+
+      oc.clearRect(0,0,w,h);
+      oc.globalCompositeOperation = 'lighter';
+
+      // ----- lobes -----
+      for (let i=0;i<7;i++) {
+        const ang = ANG0[i] + this.t*ASPD[i]*DIR[i]*0.6 + this.swirlT*1.4*DIR[i];
+        const orbit = R * ORBIT[i] * (1 + amp*0.32*Math.sin(this.t*1.3 + i)) * scale;
+        const px = cx + Math.cos(ang)*orbit;
+        const py = cy + Math.sin(ang)*orbit;
+        let br = R * SIZE[i] * scale * (1 + amp*0.12*Math.sin(this.t*2 + i*1.7));
+        const hue = this.hues[i];
+        const isGold = (hue < 80);
+        const sat = isGold ? 90 : this.p.sat;
+        const light = (isGold ? 54 : this.p.light) * (0.8 + this.p.bright*0.28);
+        const a = (isGold ? 0.4 : 0.46) * (0.62 + this.p.bright*0.46);
+        const g = oc.createRadialGradient(px,py,0, px,py,br);
+        g.addColorStop(0, `hsla(${hue},${sat}%,${Math.min(68,light+8)}%,${a})`);
+        g.addColorStop(0.45, `hsla(${hue},${sat}%,${light}%,${a*0.6})`);
+        g.addColorStop(1, `hsla(${hue},${sat}%,${light}%,0)`);
+        oc.fillStyle = g;
+        oc.beginPath(); oc.arc(px,py,br,0,Math.PI*2); oc.fill();
+      }
+
+      // ----- bright core -----
+      const coreR = R*0.3*scale;
+      const cg = oc.createRadialGradient(cx,cy,0, cx,cy,coreR);
+      const ch = this.hues[0];
+      cg.addColorStop(0, `hsla(${ch},78%,${Math.min(70, 56+this.p.bright*14)}%,${0.42+this.p.bright*0.22})`);
+      cg.addColorStop(0.5, `hsla(${ch},84%,${52+this.p.bright*8}%,0.24)`);
+      cg.addColorStop(1, `hsla(${ch},84%,50%,0)`);
+      oc.fillStyle = cg;
+      oc.beginPath(); oc.arc(cx,cy,coreR,0,Math.PI*2); oc.fill();
+
+      // ----- ripples (disruptions, large orb only) -----
+      if (!this.thumb && R > 90 && this.ripples.length) {
+        oc.lineWidth = Math.max(1, R*0.012);
+        for (const rp of this.ripples) {
+          const rad = R*(0.32 + rp.p*0.78) * scale;
+          const alpha = (1-rp.p) * 0.5 * this.p.ripple * rp.strength;
+          if (alpha < 0.01) continue;
+          oc.strokeStyle = `hsla(${this.hues[1]}, ${this.p.sat}%, ${62+this.p.bright*12}%, ${alpha})`;
+          oc.beginPath();
+          const segs = 70;
+          for (let s=0;s<=segs;s++) {
+            const aa = s/segs*Math.PI*2;
+            const wob = 1 + Math.sin(aa*4 + this.t*3 + rp.p*6)*0.05*rp.strength
+                          + Math.sin(aa*7 - this.t*2)*0.03*rp.strength;
+            const rr = rad*wob;
+            const x = cx+Math.cos(aa)*rr, y = cy+Math.sin(aa)*rr;
+            if (s===0) oc.moveTo(x,y); else oc.lineTo(x,y);
+          }
+          oc.stroke();
+        }
+      }
+
+      // ----- feather mask -----
+      oc.globalCompositeOperation = 'destination-in';
+      const edge = this.thumb ? 1.02 : 1.06;
+      const mg = oc.createRadialGradient(cx,cy,R*0.05, cx,cy,R*edge);
+      mg.addColorStop(0, 'rgba(0,0,0,1)');
+      mg.addColorStop(0.62, 'rgba(0,0,0,1)');
+      mg.addColorStop(1, 'rgba(0,0,0,0)');
+      oc.fillStyle = mg; oc.fillRect(0,0,w,h);
+      oc.globalCompositeOperation = 'lighter';
+
+      // ----- composite with bloom -----
+      ctx.clearRect(0,0,w,h);
+      const bl = Math.max(1.5, R*0.075) * this.p.bloom;
+      ctx.globalCompositeOperation = 'lighter';
+      if (ctx.filter !== undefined) {
+        ctx.filter = `blur(${bl}px)`;
+        ctx.globalAlpha = 0.55;
+        ctx.drawImage(this.off, 0,0, w, h);
+        ctx.filter = `blur(${bl*0.45}px)`;
+        ctx.globalAlpha = 0.7;
+        ctx.drawImage(this.off, 0,0, w, h);
+        ctx.filter = 'none';
+      }
+      // sharp orb body (additive — capped-lightness teal stacks to cyan, not white)
+      ctx.globalAlpha = 1;
+      ctx.drawImage(this.off, 0,0, w, h);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+
+  // ---------- Hero (docked nurse orb) ----------
+  const hero = new Orb(document.getElementById('orb'), 'listening');
+  let resizeRAF;
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(resizeRAF);
+    resizeRAF = requestAnimationFrame(() => { hero.resize(); thumbs.forEach(t=>t.resize()); });
+  });
+
+  // ---------- Thumbnails / switcher ----------
+  const switcher = document.getElementById('switcher');
+  const thumbs = [];
+  const stateName = document.getElementById('stateName');
+  const micText = document.getElementById('micText');
+
+  ORDER.forEach(key => {
+    const btn = document.createElement('button');
+    btn.className = 'sw' + (key==='listening' ? ' active' : '');
+    btn.dataset.key = key;
+    const ring = document.createElement('div'); ring.className = 'sw-ring';
+    const cv = document.createElement('canvas');
+    ring.appendChild(cv);
+    const nm = document.createElement('div'); nm.className = 'sw-name'; nm.textContent = STATES[key].name;
+    btn.appendChild(ring); btn.appendChild(nm);
+    switcher.appendChild(btn);
+    const orb = new Orb(cv, key, { thumb:true });
+    thumbs.push(orb);
+    btn.addEventListener('click', () => selectState(key));
+  });
+
+  function applyGlow(key) {
+    const g = STATES[key].glow;
+    document.documentElement.style.setProperty('--glow', g.join(','));
+  }
+  function selectState(key) {
+    hero.setState(key);
+    stateName.textContent = STATES[key].name;
+    if (micText) micText.textContent = STATES[key].mic;
+    applyGlow(key);
+    document.querySelectorAll('.sw').forEach(b => b.classList.toggle('active', b.dataset.key===key));
+    document.querySelector('.room').setAttribute('data-screen-label', 'Voice Room — ' + STATES[key].name);
+  }
+  applyGlow('listening');
+
+  // ---------- single animation loop ----------
+  function loop(now) {
+    hero.step(now);
+    thumbs.forEach(t => t.step(now));
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // ---------- transcript channels (Nurse commands + Patient history) ----------
+  function makeChannel(rootId){
+    const root = document.getElementById(rootId);
+    return { root, scroll: root.querySelector('.tr-scroll'), now: root.querySelector('.tr-now') };
+  }
+  // One unified room log; the old per-speaker names alias to it so every call
+  // site keeps working while lines are now tagged by speaker.
+  const ROOM = makeChannel('trRoom');
+  const NURSE_CH = ROOM, PATIENT_CH = ROOM;
+  document.querySelectorAll('.tr-tab[data-ch]').forEach(tab => {
+    tab.addEventListener('click', () => document.getElementById(tab.dataset.ch).classList.toggle('collapsed'));
+  });
+  // Speaker class → avatar + display name. Defaults; the case roster refines the
+  // single-occupant voices (family→“Husband”, rt→“Respiratory Therapist”, …).
+  const SPEAKER_BASE = {
+    res:    { ava:'DR',  who:'You' },
+    nurse:  { ava:'RN',  who:'Nurse' },
+    patient:{ ava:'PT',  who:'Patient' },
+    ems:    { ava:'EMS', who:'EMS' },
+    family: { ava:'FAM', who:'Family' },
+    rt:     { ava:'RT',  who:'Respiratory Therapist' },
+    consult:{ ava:'MD',  who:'Consultant' },
+  };
+  let SPEAKERS = Object.assign({}, SPEAKER_BASE);
+  let ROSTER = [];
+  function applyRoster(roster){
+    ROSTER = roster || [];
+    SPEAKERS = Object.assign({}, SPEAKER_BASE);
+    ROSTER.forEach(r => {
+      const base = SPEAKER_BASE[r.speaker]; if (!base) return;
+      // specialise the label for single-occupant classes (one person each)
+      if (r.speaker === 'family' || r.speaker === 'ems' || r.speaker === 'rt'){
+        SPEAKERS[r.speaker] = { ava: base.ava, who: r.role || base.who };
+      }
+    });
+    buildRosterStrip();   // the top-centre presence avatars
+    buildAddresseeChips(); // addressee chip row below the talk button
+  }
+
+  // ---------- Actor roster / presence strip ----------
+  // Each speaker class carries the same accent gradient used by the transcript
+  // tags, so an avatar and its Room-log lines read as the same person.
+  const SPEAKER_AC = {
+    patient:['#e0a85f','#b9772f'], nurse:['#5fd8e6','#0e8a9e'],
+    ems:['#8ab4f0','#4d6fb0'], family:['#e7b35a','#b9772f'],
+    rt:['#6fd3c2','#2f8d7e'], consult:['#c08cf0','#7e4fb0'],
+  };
+  const PHONE_SVG = '<svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.2c0 5 4.8 9.8 9.8 9.8l.8-2.6-3-1-1.2 1.4c-1.7-.8-3-2.1-3.8-3.8l1.4-1.2-1-3z"/></svg>';
+  const rosterEl = document.getElementById('roster');
+  const arrivalToast = document.getElementById('arrivalToast');
+  const arrivalName = document.getElementById('arrivalName');
+  const actorTokens = {};   // actor id → { el, role, arrive, present, class }
+
+  // A short monogram for an actor, derived generically: initials in a parenthetical
+  // ("Patient (EK)" → EK), else the acronym of the role words ("Respiratory
+  // Therapist" → RT), else the first two letters.
+  function monogram(r){
+    const role = r.role || r.id || '';
+    const paren = role.match(/\(([^)]+)\)/);
+    if (paren){
+      const m = paren[1].match(/[A-Za-z]+/g) || [];
+      if (m.length >= 2) return (m[0][0] + m[1][0]).toUpperCase();
+      return paren[1].replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase() || '··';
+    }
+    const words = role.replace(/[^A-Za-z ]/g,'').split(/\s+/).filter(Boolean);
+    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+    return (role.replace(/[^A-Za-z]/g,'').slice(0,2) || '··').toUpperCase();
+  }
+
+  // A short roster caption per actor — keeps the strip legible (the transcript
+  // carries the full role). Consultants show their specialty, family the relation.
+  function shortLabel(r){
+    const fixed = { patient:'Patient', nurse:'Nurse', ems:'EMS', rt:'RT' };
+    if (fixed[r.speaker]) return fixed[r.speaker];
+    if (r.speaker === 'consult') return (r.role || 'Consult').split(/\s+/)[0];
+    return r.role || r.speaker;   // family → "Husband"
+  }
+
+  function buildRosterStrip(){
+    rosterEl.innerHTML = '';
+    for (const k in actorTokens) delete actorTokens[k];
+    if (!ROSTER.length) return;
+    const head = document.createElement('div');
+    head.className = 'roster-head';
+    head.innerHTML = '<div class="rh-1">In the room</div><div class="rh-2"></div>';
+    rosterEl.appendChild(head);
+    ROSTER.forEach(r => {
+      const ac = SPEAKER_AC[r.speaker]; if (!ac) return;   // 'res' etc. never appears here
+      const arrive = (r.available_after_seconds == null) ? 0 : r.available_after_seconds;
+      const present = secs >= arrive;
+      const el = document.createElement('div');
+      el.className = 'actor ' + (present ? 'idle' : 'enroute');
+      el.style.setProperty('--ac', ac[0]);
+      el.style.setProperty('--ac2', ac[1]);
+      el.innerHTML =
+        '<div class="ava-wrap"><div class="ava">' + escapeHtml(monogram(r)) + '</div>' +
+        '<div class="ring"></div>' + (r.speaker === 'consult' ? '<div class="badge">' + PHONE_SVG + '</div>' : '') +
+        '</div><div class="nm">' + escapeHtml(shortLabel(r)) + '</div>' +
+        '<div class="tag"><span class="tdot"></span>En route</div>';
+      rosterEl.appendChild(el);
+      actorTokens[r.id] = { el, role: r.role, arrive, present, speaker: r.speaker };
+    });
+    refreshPresence();
+  }
+
+  function refreshPresence(){
+    const head = rosterEl.querySelector('.rh-2'); if (!head) return;
+    const all = Object.values(actorTokens);
+    const n = all.filter(a => a.present).length;
+    const enr = all.length - n;
+    head.innerHTML = '<span class="cnt">' + n + '</span> present' + (enr ? ' · ' + enr + ' en route' : '');
+  }
+
+  // ---------- Addressee chips ----------
+  const addrChipsEl  = document.getElementById('addrChips');
+  const addrPromptEl = document.getElementById('addrPrompt');
+
+  function buildAddresseeChips(){
+    // Remove any previously built chips (keep the prompt span)
+    addrChipsEl.querySelectorAll('.addr-chip').forEach(c => c.remove());
+    if (!ROSTER.length){ addrChipsEl.hidden = true; return; }
+    ROSTER.forEach(r => {
+      const chip = document.createElement('button');
+      chip.className = 'addr-chip';
+      chip.dataset.actorId = r.id;
+      chip.dataset.sp = r.speaker;
+      chip.textContent = (r.role || r.id).replace(/\s*\(.*\)/, '').trim();
+      chip.addEventListener('click', () => onChipTap(r));
+      addrChipsEl.appendChild(chip);
+    });
+    addrChipsEl.hidden = false;
+  }
+
+  function onChipTap(actor){
+    // Toggle selection: tap again to deselect
+    const chip = addrChipsEl.querySelector(`.addr-chip[data-actor-id="${actor.id}"]`);
+    const wasSelected = chip && chip.classList.contains('selected');
+    addrChipsEl.querySelectorAll('.addr-chip').forEach(c => c.classList.remove('selected'));
+
+    if (wasSelected){
+      forcedAddressee = null;
+      leaveAskMode();
+      return;
+    }
+
+    chip && chip.classList.add('selected');
+    forcedAddressee = actor.id;
+
+    // Ask-back resubmit: pending transcript waiting for addressee selection
+    if (pendingTranscript){
+      const txt = pendingTranscript;
+      pendingTranscript = null;
+      leaveAskMode();
+      handleSaid(txt, actor.id);
+    }
+  }
+
+  function enterAskMode(){
+    addrChipsEl.classList.add('ask-mode');
+    addrPromptEl.textContent = 'Who for?';
+  }
+  function leaveAskMode(){
+    addrChipsEl.classList.remove('ask-mode');
+    addrPromptEl.textContent = 'Address to:';
+  }
+
+  // Illuminate the avatar of whoever just spoke (driven by real turns, one at a
+  // time). Resident lines don't light anyone — the resident isn't in the roster.
+  // hold=true: no auto-timeout — caller must call clearSpeaking() when audio ends.
+  let speakTokenTimer = null, speakingId = null;
+  function speakRoster(speaker, hold){
+    if (speaker === 'res') return;
+    if (speakingId && actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
+    // first present token of this speaker class (cases have one each; consults rare)
+    const hit = Object.entries(actorTokens).find(([,a]) => a.speaker === speaker && a.present);
+    if (!hit){ speakingId = null; return; }
+    speakingId = hit[0];
+    hit[1].el.classList.add('speaking');
+    clearTimeout(speakTokenTimer);
+    if (!hold){
+      speakTokenTimer = setTimeout(() => {
+        if (actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
+        speakingId = null;
+      }, 2600);
+    }
+  }
+  function clearSpeaking(){
+    clearTimeout(speakTokenTimer);
+    if (speakingId && actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
+    speakingId = null;
+  }
+
+  // Promote any en-route actor whose arrival time the case clock has now reached.
+  function checkArrivals(){
+    Object.values(actorTokens).forEach(a => {
+      if (!a.present && a.arrive && secs >= a.arrive){
+        a.present = true;
+        a.el.classList.remove('enroute');
+        a.el.classList.add('arriving', 'idle');
+        setTimeout(() => a.el.classList.remove('arriving'), 1300);
+        arrivalName.textContent = a.role || 'Someone';
+        arrivalToast.classList.add('show');
+        setTimeout(() => arrivalToast.classList.remove('show'), 4200);
+        refreshPresence();
+      }
+    });
+  }
+  function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function setNow(ch, text){ ch.now.innerHTML = `<span class="dots"><i></i><i></i><i></i></span> ${escapeHtml(text)}`; }
+  function addTurn(ch, speaker, text){
+    const meta = SPEAKERS[speaker] || { ava:'··', who:'' };
+    const t = new Date();
+    const ts = String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0');
+    const div = document.createElement('div');
+    div.className = 'turn ' + speaker;
+    div.innerHTML = `<div class="who"><span class="ava">${escapeHtml(meta.ava)}</span> ${escapeHtml(meta.who)}</div>` +
+                    `<div class="line">${escapeHtml(text)}</div><div class="tstamp">${ts}</div>`;
+    ch.scroll.insertBefore(div, ch.now);
+    ch.root.classList.remove('collapsed');
+    ch.now.scrollIntoView({ block:'nearest' });
+    speakRoster(speaker);   // light the speaker's roster avatar
+  }
+
+  // ---------- case clock ----------
+  let secs = 0, clockPaused = false;
+  const timerEl = document.getElementById('timer');
+  setInterval(() => {
+    if (clockPaused) return;          // frozen while the pause overlay is up
+    secs++;
+    const m = String(Math.floor(secs/60)).padStart(2,'0');
+    const s = String(secs%60).padStart(2,'0');
+    timerEl.textContent = `${m}:${s}`;
+    checkArrivals();                  // promote any en-route actor whose time has come
+  }, 1000);
+
+  // ---------- live vitals (seeded from the loaded case) ----------
+  const hrEl = document.getElementById('hr'), rrEl = document.getElementById('rr'),
+        bpEl = document.getElementById('bp'), spo2El = document.getElementById('spo2'),
+        hrCell = document.getElementById('hrCell'), rrCell = document.getElementById('rrCell'),
+        bpCell = document.getElementById('bpCell'),
+        spo2Cell = document.getElementById('spo2cell'), spo2Trend = document.getElementById('spo2Trend');
+  // base values (overridden by the case on load)
+  let baseHR = 110, baseRR = 30, baseSys = 126, baseDia = 84, spo2 = 92, arrest = false;
+  function jitter(base, spread){ return Math.round(base + (Math.random()-0.5)*spread); }
+
+  // Audible monitor alarm — a short single beep, fires every 4s while any vital is in alarm.
+  let _alarmTimer = null, _vitalsReady = false;
+  function _beep(freq, vol, dur){
+    try {
+      // Reuse the shared AudioContext when available — avoids creating dozens of
+      // orphaned contexts (one per alarm tick) which some browsers throttle or
+      // stack up into a buzzing artefact.
+      const ctx = (audioCtx && audioCtx.state !== 'closed') ? audioCtx
+                : new (window.AudioContext || window.webkitAudioContext)();
+      const ownCtx = ctx !== audioCtx;
+      const osc = ctx.createOscillator(), g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.type = 'sine'; osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      g.gain.setValueAtTime(vol, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + dur);
+      if (ownCtx) setTimeout(() => { try { ctx.close(); } catch(e){} }, (dur + 0.1) * 1000);
+    } catch(e){}
+  }
+  function tickAlarm(anyWarn, anyCrit){
+    // Don't fire before the session loads — placeholder vitals would trigger false alarms.
+    if (!_vitalsReady) return;
+    if (!anyWarn && !anyCrit){ clearInterval(_alarmTimer); _alarmTimer = null; return; }
+    if (!_alarmTimer){
+      const beep = () => anyCrit ? (_beep(1047, 0.09, 0.18), setTimeout(() => _beep(1047, 0.07, 0.14), 220)) : _beep(880, 0.06, 0.22);
+      beep();
+      _alarmTimer = setInterval(() => {
+        const hasCrit = hrCell.classList.contains('critical') || spo2Cell.classList.contains('critical');
+        hasCrit ? (_beep(1047, 0.09, 0.18), setTimeout(() => _beep(1047, 0.07, 0.14), 220)) : _beep(880, 0.06, 0.22);
+      }, 4000);
+    }
+  }
+
+  function renderVitals(){
+    // In a pulseless arrest (PEA/asystole/VF) the perfusing vitals are absent —
+    // show flatline dashes, not the last live numbers, so the monitor never lies.
+    if (arrest){
+      hrEl.innerHTML = `—<span class="u">bpm</span>`;
+      rrEl.innerHTML = `—<span class="u">/min</span>`;
+      bpEl.innerHTML = `—<span class="u">mmHg</span>`;
+    } else {
+      hrEl.innerHTML = `${jitter(baseHR,4)}<span class="u">bpm</span>`;
+      rrEl.innerHTML = `${jitter(baseRR,2)}<span class="u">/min</span>`;
+      bpEl.innerHTML = `${jitter(baseSys,4)}/${jitter(baseDia,3)}<span class="u">mmHg</span>`;
+    }
+    // Cosmetic monitor flicker only — the engine vitals (spo2) stay authoritative.
+    const shown = Math.max(0, Math.min(100, spo2 + (Math.random() < 0.4 ? (Math.random() < 0.5 ? -1 : 1) : 0)));
+    spo2El.innerHTML = `${shown}<span class="u">%</span>`;
+
+    // Alarm thresholds: warn (amber) / critical (red).
+    const hrWarn = arrest || baseHR > 120 || baseHR < 50;
+    const hrCrit = arrest || baseHR > 150 || baseHR < 40;
+    const rrWarn = arrest || baseRR > 20 || baseRR < 8;
+    const bpWarn = arrest || baseSys < 90 || baseSys > 180;
+    const spo2Warn = arrest || spo2 < 94;
+    const spo2Crit = arrest || spo2 < 88;
+
+    hrCell.classList.toggle('critical', hrCrit);
+    hrCell.classList.toggle('warn', hrWarn && !hrCrit);
+    rrCell.classList.toggle('warn', rrWarn);
+    bpCell.classList.toggle('warn', bpWarn);
+    spo2Cell.classList.toggle('critical', spo2Crit);
+    spo2Cell.classList.toggle('warn', spo2Warn && !spo2Crit);
+
+    spo2Trend.lastChild.textContent = arrest ? ' arrest' : (spo2Crit ? ' critical' : spo2Warn ? ' falling' : ' stable');
+
+    tickAlarm(hrWarn || rrWarn || bpWarn || spo2Warn, hrCrit || spo2Crit);
+  }
+  setInterval(renderVitals, 2400);
+
+  // ---------- status chips (airway + working diagnosis) ----------
+  const airwayChip = document.getElementById('airwayChip');
+  const dxChip = document.getElementById('dxChip');
+  function updateAirwayChip(v){
+    if (!airwayChip || !v) return;
+    const fio2 = (v.fio2 || '').toString().toLowerCase();
+    const gcs = (v.gcs || '').toString().toLowerCase();
+    const intubated = gcs.includes('intubat') || fio2.includes('ventilat');
+    airwayChip.classList.toggle('intubated', intubated);
+    airwayChip.textContent = intubated
+      ? 'Airway: intubated · ventilated'
+      : ('Airway: spontaneous' + (v.fio2 ? ' · ' + v.fio2 : ''));
+    airwayChip.hidden = false;
+  }
+  function setWorkingDx(text){
+    if (!dxChip || !text) return;
+    dxChip.textContent = 'Working dx: ' + text;
+    dxChip.hidden = false;
+  }
+
+  // ---------- engine-driven vitals ----------
+  // Apply a vitals snapshot from the SimulationEngine (source of truth).
+  function applyVitals(v){
+    if (!v) return;
+    _vitalsReady = true;   // real vitals from the engine — alarms may now fire
+    // A pulseless rhythm with no perfusing HR/BP is an arrest — flag it so the
+    // monitor shows dashes instead of the stale pre-arrest numbers.
+    const rhythm = (v.rhythm || '').toLowerCase();
+    arrest = /pea|asystole|arrest|pulseless|ventricular fib|vfib|v-fib/.test(rhythm)
+             || (!v.heart_rate && (v.blood_pressure == null) && /pea|asystole/.test(rhythm));
+    if (v.heart_rate){ baseHR = v.heart_rate; _ambienceHR = v.heart_rate; }
+    if (v.respiratory_rate) baseRR = v.respiratory_rate;
+    if (typeof v.oxygen_saturation === 'number') spo2 = v.oxygen_saturation;
+    if (typeof v.blood_pressure === 'string' && v.blood_pressure.includes('/')) {
+      const [s, d] = v.blood_pressure.split('/').map(x => parseInt(x, 10));
+      if (s) baseSys = s; if (d) baseDia = d;
+    }
+    updateAirwayChip(v);
+    renderVitals();
+  }
+
+  // ── Ambient soundscape ────────────────────────────────────────────────────
+  // Pink noise (procedural, no assets) + HR-synced monitor beep, both routed
+  // through a shared gain node so the mute button is one knob.
+  let _ambienceGain = null;   // top-level gain — set to 0 to mute, 0.85 to restore
+  let _ambienceHR = 80;       // updated by applyVitals; drives beep period
+  let _beepTimer = null;
+  let _ambienceMuted = false;
+  const AMBIENCE_VOL = 0.85;  // master gain when unmuted
+
+  function _initAmbience(ctx){
+    if (_ambienceGain) return;  // already running
+    _ambienceGain = ctx.createGain();
+    _ambienceGain.gain.value = AMBIENCE_VOL;
+    _ambienceGain.connect(ctx.destination);
+
+    // Pink noise: Voss–McCartney algorithm via ScriptProcessor.
+    // Very subtle — below the voice level at all times.
+    const bufSz = 4096;
+    const noiseNode = ctx.createScriptProcessor(bufSz, 0, 1);
+    let b = [0, 0, 0, 0, 0, 0, 0];
+    noiseNode.onaudioprocess = (e) => {
+      const out = e.outputBuffer.getChannelData(0);
+      for (let i = 0; i < bufSz; i++){
+        const w = Math.random() * 2 - 1;
+        b[0] = 0.99886 * b[0] + w * 0.0555179;
+        b[1] = 0.99332 * b[1] + w * 0.0750759;
+        b[2] = 0.96900 * b[2] + w * 0.1538520;
+        b[3] = 0.86650 * b[3] + w * 0.3104856;
+        b[4] = 0.55000 * b[4] + w * 0.5329522;
+        b[5] = -0.7616 * b[5] - w * 0.0168980;
+        out[i] = (b[0]+b[1]+b[2]+b[3]+b[4]+b[5]+b[6]+w*0.5362) * 0.0065;
+        b[6] = w * 0.115926;
+      }
+    };
+    // Low-pass at ~900 Hz — retains the "room hum" without harsh highs
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 0.5;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0.28;
+    noiseNode.connect(lp);
+    lp.connect(noiseGain);
+    noiseGain.connect(_ambienceGain);
+
+    _scheduleBeep(ctx);
+  }
+
+  function _scheduleBeep(ctx){
+    if (!_ambienceGain || !ctx) return;
+    const hr = Math.max(20, Math.min(300, _ambienceHR || 80));
+    const period = (60 / hr) * 1000;  // ms between beeps
+    _beepTimer = setTimeout(() => {
+      if (!_ambienceGain) return;
+      try {
+        const osc = ctx.createOscillator();
+        const env = ctx.createGain();
+        osc.type = 'sine'; osc.frequency.value = 880;
+        env.gain.setValueAtTime(0, ctx.currentTime);
+        env.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.004);
+        env.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+        osc.connect(env); env.connect(_ambienceGain);
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.07);
+      } catch(e){}
+      _scheduleBeep(ctx);
+    }, period);
+  }
+
+  function _toggleAmbience(){
+    _ambienceMuted = !_ambienceMuted;
+    const btn = document.getElementById('ambienceBtn');
+    if (_ambienceGain){
+      _ambienceGain.gain.setTargetAtTime(
+        _ambienceMuted ? 0 : AMBIENCE_VOL, audioCtx.currentTime, 0.05
+      );
+    }
+    if (btn) btn.classList.toggle('muted', _ambienceMuted);
+  }
+
+  // ---------- diagnostics drawer (four functional panes) ----------
+  const drawer = document.getElementById('drawer');
+  document.getElementById('drTab').addEventListener('click', () => drawer.classList.toggle('collapsed'));
+  const KIND_LABEL = { ecg:'ECG', cxr:'X-ray', report:'Report', exam:'Exam', consult:'Consult', order:'Order' };
+
+  // Route each result card to a pane by its category (set server-side).
+  function cardPane(card){
+    const cat = (card.category || '').toLowerCase();
+    if (card.kind === 'order' || cat === 'orders') return 'orders';
+    if (card.kind === 'consult' || cat === 'consult') return 'consults';
+    if (cat === 'exam') return 'exam';
+    if (cat === 'imaging') return 'imaging';
+    return 'investigations';  // lab, ecg, bedside, other
+  }
+  const drTabBtns = Array.from(document.querySelectorAll('.dr-t'));
+  const drPanes = {};
+  document.querySelectorAll('.dr-cards[data-pane]').forEach(p => { drPanes[p.dataset.pane] = p; });
+  function showPane(name){
+    drTabBtns.forEach(b => {
+      const on = b.dataset.tab === name;
+      b.classList.toggle('active', on);
+      if (on) b.scrollIntoView({ block:'nearest', inline:'nearest' });
+    });
+    Object.entries(drPanes).forEach(([k, p]) => { p.hidden = (k !== name); });
+  }
+  drTabBtns.forEach(b => b.addEventListener('click', () => showPane(b.dataset.tab)));
+
+  function chevSvg(){ return '<svg class="chev" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6 L8 10 L12 6"/></svg>'; }
+  function diagBody(card){
+    const vp = card.visual_payload;
+    const cap = card.summary ? `<div class="rep">${escapeHtml(card.summary)}</div>` : '';
+    if (card.kind === 'ecg' && vp && vp.svg) return `<div class="dr-img">${vp.svg}</div>${cap}`;
+    if (card.kind === 'cxr' && vp && vp.data) return `<img alt="Chest X-ray" src="data:image/${vp.format||'jpeg'};base64,${vp.data}">${cap}`;
+    return `<div class="rep">${escapeHtml(card.summary || 'No result.')}</div>`;
+  }
+  function updateTabCount(name){
+    const btn = drTabBtns.find(b => b.dataset.tab === name); if (!btn) return;
+    const n = drPanes[name].querySelectorAll('.dr-card').length;
+    btn.classList.toggle('has', n > 0);
+    btn.querySelector('.dr-t-n').textContent = n;
+  }
+  // The body of a medication order card — dose, plus a confirm affordance for
+  // high-alert drugs the nurse is holding until the dose is stated.
+  function orderBody(card){
+    const head = card.dose
+      ? `<div class="rep"><b>${escapeHtml(card.title)}</b> — ${escapeHtml(card.dose)}</div>`
+      : `<div class="rep">${escapeHtml(card.summary || card.title || 'Medication')}</div>`;
+    if (card.confirm_required && card.status === 'confirm'){
+      return head +
+        `<div class="ord-confirm"><span class="warn-tag">⚠ confirm dose</span>` +
+        `<input type="text" class="ord-dose" placeholder="dose… e.g. 0.6 mg/kg">` +
+        `<button class="ord-go ord-confirm-go">Confirm</button></div>`;
+    }
+    return head + (card.status === 'given' ? '<div class="ok-tag">✓ given</div>' : '');
+  }
+
+  function addDiagnostic(card){
+    if (!card) return;
+    const pane = cardPane(card);
+    const paneEl = drPanes[pane] || drPanes.investigations;
+    const host = paneEl.querySelector('.dr-list') || paneEl;
+    const empty = host.querySelector('.dr-empty'); if (empty) empty.remove();
+    // Re-ordering the same drug upserts its card instead of stacking duplicates.
+    if (card.kind === 'order' && card.id){
+      const prev = host.querySelector(`.dr-card[data-card-id="${CSS.escape(card.id)}"]`);
+      if (prev) prev.remove();
+    }
+    host.querySelectorAll('.dr-card').forEach(c => c.classList.add('collapsed'));  // newest stays open
+    const el = document.createElement('div');
+    el.className = 'dr-card';
+    if (card.id) el.dataset.cardId = card.id;
+    const body = card.kind === 'order' ? orderBody(card) : diagBody(card);
+    el.innerHTML =
+      `<div class="dr-card-h"><span class="dot ${card.kind}"></span>` +
+      `<span class="title">${escapeHtml(card.title || 'Result')}</span>` +
+      `<span class="tag">${KIND_LABEL[card.kind] || 'Result'}</span>${chevSvg()}</div>` +
+      `<div class="dr-card-b">${body}</div>`;
+    el.querySelector('.dr-card-h').addEventListener('click', () => el.classList.toggle('collapsed'));
+    // click any tracing/film inside the card to read it full-size
+    const visual = el.querySelector('.dr-img, img');
+    if (visual) visual.addEventListener('click', e => { e.stopPropagation(); openLightbox(card); });
+    // confirm a held high-alert dose → re-order the drug with the stated dose
+    const confirmGo = el.querySelector('.ord-confirm-go');
+    if (confirmGo){
+      const fire = () => {
+        const dose = (el.querySelector('.ord-dose').value || '').trim();
+        if (dose) sendMedOrder(`${card.title} ${dose}`);
+      };
+      confirmGo.addEventListener('click', e => { e.stopPropagation(); fire(); });
+      el.querySelector('.ord-dose').addEventListener('keydown', e => {
+        if (e.key === 'Enter'){ e.preventDefault(); fire(); }
+      });
+    }
+    host.insertBefore(el, host.firstChild);
+    updateTabCount(pane);
+    showPane(pane);                 // surface the pane the newest result landed in
+    drawer.classList.remove('collapsed');
+    // an ECG wakes the bedside lead-II monitor (or refreshes its morphology)
+    if (card.kind === 'ecg') startEcgMonitor((card.visual_payload || {}).lead_ii_morphology);
+  }
+
+  // ---------- live lead-II monitor (wakes when an ECG is generated) ----------
+  // A continuous bedside-monitor sweep of lead II, shaped by the SAME morphology
+  // the 12-lead was built from (rhythm, P-wave, QRS width, ST, T-inversion), and
+  // paced by the engine's live heart rate — so it tracks deterioration in real time.
+  const ecgMon = document.getElementById('ecgMon');
+  const monSep = document.getElementById('monSep');
+  const ecgCanvas = document.getElementById('ecgCanvas');
+  const ecgRhythmEl = document.getElementById('ecgRhythm');
+  let ecgMorph = null, ecgCtx = null, ecgRAF = 0, ecgLastTs = 0;
+  let ecgW = 230, ecgH = 52, ecgBase = 32, ecgGain = 16;
+  let ecgX = 0, ecgPrevX = 0, ecgPrevY = 0, ecgPhase = 0, ecgRR = 0.6;
+
+  function ecgResize(){
+    if (!ecgCanvas) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = ecgCanvas.getBoundingClientRect();
+    ecgW = r.width || 230; ecgH = r.height || 52;
+    ecgCanvas.width = Math.round(ecgW * dpr); ecgCanvas.height = Math.round(ecgH * dpr);
+    ecgCtx = ecgCanvas.getContext('2d'); ecgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ecgBase = ecgH * 0.62; ecgGain = ecgH * 0.34;
+    ecgPrevX = 0; ecgPrevY = ecgBase; ecgX = 0;
+  }
+  function gauss(t, mu, s){ const d = t - mu; return Math.exp(-(d * d) / (2 * s * s)); }
+  // One lead-II amplitude (mV-ish) at cardiac phase t∈[0,1), shaped by morphology.
+  function ecgSample(t, m){
+    m = m || {};
+    const amp = m.amp_scale || 1;
+    const wide = m.qrs === 'wide' || m.qrs === 'lbbb' || m.qrs === 'rbbb';
+    let y = 0;
+    if (!m.p_absent) y += 0.12 * gauss(t, 0.16, 0.022);          // P wave
+    y -= 0.06 * gauss(t, 0.28, 0.010);                            // Q
+    y += 1.00 * gauss(t, 0.31, wide ? 0.022 : 0.011);             // R
+    y -= 0.20 * gauss(t, 0.35, wide ? 0.024 : 0.013);             // S
+    if (m.st_mv) y += m.st_mv * (t > 0.37 && t < 0.48 ? 1 : 0);   // ST shift
+    y += (m.t_inv ? -1 : 1) * 0.24 * gauss(t, 0.58, 0.045);       // T wave
+    return y * amp;
+  }
+  function ecgLoop(ts){
+    if (!ecgMorph || ecgMon.hidden){ ecgRAF = 0; return; }
+    if (!ecgCtx){ ecgRAF = requestAnimationFrame(ecgLoop); return; }
+    if (!ecgLastTs) ecgLastTs = ts;
+    let dt = (ts - ecgLastTs) / 1000; ecgLastTs = ts;
+    if (dt > 0.1) dt = 0.1;                                       // clamp after a tab switch
+    const hr = Math.max(20, Math.min(250, baseHR || 80));
+    const sweep = ecgW / 2.6;                                     // ~2.6s to cross the strip
+    ecgPhase += dt / ecgRR;
+    while (ecgPhase >= 1){
+      ecgPhase -= 1;
+      const irregular = ecgMorph.rhythm_label && /FIB|FLUTTER/.test(ecgMorph.rhythm_label);
+      ecgRR = irregular ? (60 / hr) * (0.6 + Math.random() * 0.8) : (60 / hr);
+    }
+    let nx = ecgX + sweep * dt;
+    const ctx = ecgCtx;
+    ctx.shadowColor = '#39e98f'; ctx.shadowBlur = 4;
+    ctx.strokeStyle = '#39e98f'; ctx.lineWidth = 1.4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (nx >= ecgW){ nx -= ecgW; ecgPrevX = nx; ecgPrevY = ecgBase - ecgSample(ecgPhase, ecgMorph) * ecgGain; }
+    ctx.clearRect(nx, 0, 16, ecgH);                              // erase bar ahead of the pen
+    const y = ecgBase - ecgSample(ecgPhase, ecgMorph) * ecgGain;
+    ctx.beginPath(); ctx.moveTo(ecgPrevX, ecgPrevY); ctx.lineTo(nx, y); ctx.stroke();
+    ecgPrevX = nx; ecgPrevY = y; ecgX = nx;
+    ecgRAF = requestAnimationFrame(ecgLoop);
+  }
+  function startEcgMonitor(morph){
+    ecgMorph = morph || ecgMorph || {};
+    // Show a neutral lead label, not the rhythm name — the resident reads the
+    // tracing themselves (the morphology still drives the waveform internally).
+    if (ecgRhythmEl) ecgRhythmEl.textContent = 'lead II';
+    if (ecgMon.hidden){ ecgMon.hidden = false; monSep.hidden = false; ecgResize(); }
+    ecgRR = 60 / Math.max(20, Math.min(250, baseHR || 80));
+    if (!ecgRAF){ ecgLastTs = 0; ecgRAF = requestAnimationFrame(ecgLoop); }
+  }
+  // pause the sweep when the tab is hidden; resume on return
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden){ if (ecgRAF){ cancelAnimationFrame(ecgRAF); ecgRAF = 0; } }
+    else if (ecgMorph && !ecgMon.hidden && !ecgRAF){ ecgLastTs = 0; ecgRAF = requestAnimationFrame(ecgLoop); }
+  });
+  window.addEventListener('resize', () => { if (!ecgMon.hidden) ecgResize(); });
+
+  // ---------- image lightbox ----------
+  const lightbox = document.getElementById('lightbox');
+  const lbStage = document.getElementById('lbStage');
+  const lbCap = document.getElementById('lbCap');
+  function openLightbox(card){
+    const vp = card.visual_payload || {};
+    if (card.kind === 'ecg' && vp.svg) lbStage.innerHTML = vp.svg;
+    else if (card.kind === 'cxr' && vp.data) lbStage.innerHTML = `<img alt="Chest X-ray" src="data:image/${vp.format||'jpeg'};base64,${vp.data}">`;
+    else return;
+    lbStage.classList.toggle('ecg', card.kind === 'ecg');  // wide box for the 12-lead
+    lbCap.textContent = card.summary || '';
+    lightbox.classList.add('open');
+  }
+  function closeLightbox(){ lightbox.classList.remove('open'); lbStage.innerHTML = ''; }
+  document.getElementById('lbClose').addEventListener('click', closeLightbox);
+  lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && lightbox.classList.contains('open')) closeLightbox(); });
+
+  // ---------- end-of-case debrief ----------
+  const debrief = document.getElementById('debrief');
+  const dbTitle = document.getElementById('dbTitle'), dbOutcome = document.getElementById('dbOutcome'), dbBody = document.getElementById('dbBody');
+  const dbDonut = document.getElementById('dbDonut'), dbDonutArc = document.getElementById('dbDonutArc'), dbScoreNum = document.getElementById('dbScoreNum');
+  let pendingEnd = false, debriefShown = false;
+  let pendingTranscript = null;   // stored after a Director ask-back for chip-tap resubmit
+  let forcedAddressee = null;     // set by addressee chip tap; consumed on next utterance
+  let _coachNote = '';
+
+  function _renderTimeline(path){
+    if (!path || !path.length) return '';
+    const SHOW = 5;
+    const items = path.map((name, i) =>
+      `<div class="db-tl-item">
+        <div class="db-tl-spine"><div class="db-tl-dot"></div><div class="db-tl-line"></div></div>
+        <div class="db-tl-label"><b>Step ${i + 1}</b>${escapeHtml(name)}</div>
+      </div>`
+    );
+    const hidden = items.length > SHOW;
+    const visibleHtml = items.slice(0, hidden ? SHOW : undefined).join('');
+    const hiddenHtml = hidden
+      ? `<div class="db-tl-hidden" style="display:none">${items.slice(SHOW).join('')}</div>
+         <div class="db-tl-more" onclick="this.previousElementSibling.style.display=''; this.remove()">
+           + ${items.length - SHOW} more states
+         </div>`
+      : '';
+    return `<div class="db-timeline">${visibleHtml}${hiddenHtml}</div>`;
+  }
+
+  function showDebrief(d){
+    const s = d.summary || {}, t = d.teaching || {};
+    dbTitle.textContent = d.case_title || 'Case complete';
+    dbOutcome.textContent = s.ended ? s.outcome : ('Ended early — ' + (s.outcome || ''));
+    dbOutcome.className = 'db-outcome' + (!s.ended ? ' early' : ((s.critical_errors || []).length ? ' bad' : ''));
+
+    // Score donut
+    const score = typeof d.overall_score === 'number' ? d.overall_score : null;
+    if (score !== null){
+      const circ = 188.5;
+      dbDonutArc.setAttribute('stroke-dashoffset', String(circ * (1 - score / 100)));
+      dbDonutArc.setAttribute('stroke', score >= 70 ? 'var(--teal-glow)' : score >= 40 ? 'var(--amber)' : '#e06c5f');
+      dbScoreNum.textContent = score;
+      dbDonut.classList.add('visible');
+    } else {
+      dbDonut.classList.remove('visible');
+    }
+
+    _coachNote = d.coaching_note || '';
+    const sec = (h, inner, extraHead) => inner
+      ? `<div><div class="db-sec-h">${escapeHtml(h)}${extraHead || ''}</div>${inner}</div>`
+      : '';
+    const chips = arr => (arr && arr.length) ? arr.map(x => `<span class="db-chip">${escapeHtml(x)}</span>`).join('') : '<span class="db-chip none">none</span>';
+    const list = (arr, cls) => (arr && arr.length) ? `<ul class="db-list ${cls || ''}">${arr.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : '';
+
+    let html = '';
+    const assess = d.assessment || [];
+    if (assess.length){
+      const rows = assess.map(c =>
+        `<div class="db-crit ${c.met ? 'met' : 'miss'}"><span class="db-crit-mark">${c.met ? '✓' : '✕'}</span>` +
+        `<span class="db-crit-label">${escapeHtml(c.label)}</span>` +
+        `<span class="db-crit-detail">${escapeHtml(c.detail || '')}</span></div>`
+      ).join('');
+      html += sec('Assessment', `<div class="db-crits">${rows}</div>`);
+    }
+    if (_coachNote){
+      const playBtn = `<button class="db-coach-play" id="dbCoachPlay" title="Read aloud">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg>
+      </button>`;
+      html += sec('Coaching', `<div class="db-coach-wrap"><div class="db-coach">${escapeHtml(_coachNote)}</div></div>`, playBtn);
+    }
+    html += sec('Your run',
+      `<div class="db-stats">
+        <span class="db-stat">Time <b>${escapeHtml(s.elapsed_label || '—')}</b></span>
+        <span class="db-stat">Path <b>${(s.states_path || []).length} states</b></span>
+        ${score !== null ? `<span class="db-stat">Score <b>${score}/100</b></span>` : ''}
+      </div>`);
+    const path = s.states_path || [];
+    if (path.length) html += sec('Timeline', _renderTimeline(path));
+    html += sec('Examined', `<div class="db-chips">${chips(s.exams)}</div>`);
+    html += sec('Investigations', `<div class="db-chips">${chips(s.investigations)}</div>`);
+    html += sec('Consults', `<div class="db-chips">${chips(s.consults)}</div>`);
+    if ((s.critical_errors || []).length) html += sec('Critical errors', `<div class="db-chips">${s.critical_errors.map(x => `<span class="db-chip err">${escapeHtml(x)}</span>`).join('')}</div>`);
+    html += sec('Teaching points', list(t.teaching_points));
+    html += sec('Common errors', list(t.common_errors, 'errs'));
+    if ((t.references || []).length) html += sec('References', `<div class="db-refs">${t.references.map(escapeHtml).join('<br>')}</div>`);
+    dbBody.innerHTML = html;
+    debrief.classList.add('open');
+
+    // Coaching read-aloud button
+    const playBtn = document.getElementById('dbCoachPlay');
+    if (playBtn){
+      playBtn.addEventListener('click', async () => {
+        if (playBtn.classList.contains('playing')){
+          stopAudio();
+          playBtn.classList.remove('playing');
+          playBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg>';
+          return;
+        }
+        playBtn.classList.add('playing');
+        playBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1"/><rect x="9" y="2" width="4" height="12" rx="1"/></svg>';
+        try { await playTTS(_coachNote, 'nurse'); } catch(e){}
+        playBtn.classList.remove('playing');
+        playBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg>';
+      });
+    }
+  }
+
+  async function concludeCase(){
+    if (debriefShown || !SESSION_ID) return;
+    debriefShown = true;
+    try { stopListening(); } catch(e){}
+    stopAudio();
+    try {
+      const d = await postJSON('/api/voice/debrief', { session_id: SESSION_ID });
+      showDebrief(d);
+    } catch(e){
+      debriefShown = false;   // let them retry
+      setNow(NURSE_CH, (e && e.message) || 'could not load the debrief');
+      NURSE_CH.root.classList.remove('collapsed');
+    }
+  }
+  document.getElementById('ambienceBtn').addEventListener('click', _toggleAmbience);
+  document.getElementById('endCaseBtn').addEventListener('click', () => {
+    if (debriefShown) return;
+    if (confirm('Conclude the case and see your debrief?')) concludeCase();
+  });
+  // Pause: freeze the clock, save the run, and raise the overlay. The resident
+  // can resume in place or exit to home and pick it up later.
+  const pauseModal = document.getElementById('pauseModal');
+  document.getElementById('pauseBtn').addEventListener('click', async () => {
+    if (debriefShown) return;
+    clockPaused = true;
+    try { stopListening(); } catch(e){}
+    stopAudio();
+    pauseModal.classList.add('open');
+    if (SESSION_ID){ try { await postJSON('/api/voice/pause', { session_id: SESSION_ID }); } catch(e){} }
+  });
+  document.getElementById('pmResume').addEventListener('click', async () => {
+    pauseModal.classList.remove('open');
+    clockPaused = false;
+    // tell the server to drop the parked wall-time so it doesn't advance the case
+    if (SESSION_ID){ try { await postJSON('/api/voice/unpause', { session_id: SESSION_ID }); } catch(e){} }
+    try { await startListening(); } catch(e){}
+  });
+  document.getElementById('pmHome').addEventListener('click', () => { location.href = '/home'; });
+  document.getElementById('dbNew').addEventListener('click', () => { location.href = '/simulator'; });
+  // The case is over and the debrief is the terminal screen — closing it returns
+  // the resident home, not back into the finished room.
+  document.getElementById('dbClose').addEventListener('click', () => { location.href = '/home'; });
+  document.getElementById('dbPrint').addEventListener('click', () => window.print());
+
+  // ---------- click-to-order panels (the case's own menu, docked per tab) ----------
+  // Every control here mirrors a voice command: it routes through the same engine,
+  // so a click and "examine her chest" produce the same grounded result + card.
+  let MENU = {};
+  let actionBusy = false;
+  let EXAM_SYS = [];
+  const examSel = new Set();
+  function checkSvg(){ return '<svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 L7 12 L13 4"/></svg>'; }
+  function shortName(name){ const n = (name || '').split(/[,(/]/)[0].trim(); return n.length > 22 ? n.slice(0, 21) + '…' : n; }
+
+  function renderPanels(menu){
+    MENU = menu || {};
+    const invs = MENU.investigations || [];
+    renderExamCtl(MENU.exam_systems || []);
+    renderOrderCtl('investigations', invs.filter(i => i.category !== 'imaging'));
+    renderOrderCtl('imaging', invs.filter(i => i.category === 'imaging'));
+    renderConsultCtl(MENU.consultants || []);
+    renderMedCtl();
+  }
+
+  function renderMedCtl(){
+    const ctl = document.querySelector('.dr-ctl[data-ctl="orders"]'); if (!ctl) return;
+    ctl.innerHTML = '<div class="dr-ctl-h">Give a medication</div>' +
+      '<div class="ord-row"><input type="text" placeholder="e.g. rocuronium 0.6 mg/kg"><button class="ord-go">Give</button></div>';
+    const inp = ctl.querySelector('input'), go = ctl.querySelector('.ord-go');
+    const fire = () => { const t = inp.value.trim(); if (t){ inp.value = ''; sendMedOrder(t); } };
+    go.addEventListener('click', fire);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fire(); } });
+  }
+
+  function renderExamCtl(systems){
+    const ctl = document.querySelector('.dr-ctl[data-ctl="exam"]'); if (!ctl) return;
+    EXAM_SYS = systems; examSel.clear();
+    if (!systems.length){ ctl.innerHTML = ''; return; }
+    ctl.innerHTML =
+      '<div class="dr-ctl-h">Examine — select systems</div>' +
+      '<div class="ex-grid">' + systems.map((s, i) =>
+        `<div class="ex-row" data-idx="${i}"><span class="ex-box">${checkSvg()}</span><span>${escapeHtml(s)}</span></div>`
+      ).join('') + '</div>' +
+      '<div class="ex-foot"><span class="ex-n">0 selected</span><button class="ex-do" disabled>Examine</button></div>';
+    ctl.querySelectorAll('.ex-row').forEach(row => row.addEventListener('click', () => {
+      const s = EXAM_SYS[+row.dataset.idx];
+      if (examSel.has(s)){ examSel.delete(s); row.classList.remove('sel'); }
+      else { examSel.add(s); row.classList.add('sel'); }
+      updateExamFoot();
+    }));
+    ctl.querySelector('.ex-do').addEventListener('click', examineSelected);
+  }
+  function updateExamFoot(){
+    const ctl = document.querySelector('.dr-ctl[data-ctl="exam"]'); if (!ctl) return;
+    const n = ctl.querySelector('.ex-n'), btn = ctl.querySelector('.ex-do');
+    if (n) n.textContent = examSel.size + ' selected';
+    if (btn) btn.disabled = examSel.size === 0 || actionBusy;
+  }
+  async function examineSelected(){
+    if (!examSel.size) return;
+    const systems = [...examSel]; examSel.clear();
+    document.querySelectorAll('.dr-ctl[data-ctl="exam"] .ex-row.sel').forEach(r => r.classList.remove('sel'));
+    updateExamFoot();
+    for (const s of systems){ await sendAction('perform_exam', s, `Examine the ${s} system.`); }
+  }
+
+  function renderOrderCtl(pane, invs){
+    const ctl = document.querySelector(`.dr-ctl[data-ctl="${pane}"]`); if (!ctl) return;
+    const chips = invs.map(i =>
+      `<button class="chip" data-op="order_investigation" data-id="${escapeHtml(i.id)}" title="${escapeHtml(i.name)}">${escapeHtml(shortName(i.name))}</button>`
+    ).join('');
+    const free = pane === 'investigations'
+      ? '<div class="ord-row"><input type="text" placeholder="Order any test… e.g. troponin"><button class="ord-go">Order</button></div>'
+      : '';
+    ctl.innerHTML = `<div class="dr-ctl-h">${pane === 'imaging' ? 'Order imaging' : 'Quick order'}</div>` +
+      (chips ? `<div class="chip-row">${chips}</div>` : '') + free;
+    ctl.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => sendAction(c.dataset.op, c.dataset.id)));
+    const inp = ctl.querySelector('input'), go = ctl.querySelector('.ord-go');
+    if (go && inp){
+      const fire = () => { const t = inp.value.trim(); if (t){ inp.value = ''; sendFreeOrder(t); } };
+      go.addEventListener('click', fire);
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fire(); } });
+    }
+  }
+
+  function renderConsultCtl(cons){
+    const ctl = document.querySelector('.dr-ctl[data-ctl="consults"]'); if (!ctl) return;
+    if (!cons.length){ ctl.innerHTML = ''; return; }
+    const chips = cons.map(c =>
+      `<button class="chip" data-op="request_consult" data-id="${escapeHtml(c.id)}">${escapeHtml(c.role || c.id)}</button>`
+    ).join('');
+    ctl.innerHTML = '<div class="dr-ctl-h">Call a specialist</div>' + `<div class="chip-row">${chips}</div>`;
+    ctl.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => sendAction(c.dataset.op, c.dataset.id)));
+  }
+
+  function actionLabel(op, target){
+    if (op === 'order_investigation'){ const i = (MENU.investigations || []).find(x => x.id === target); return `Order ${i ? i.name : target}.`; }
+    if (op === 'request_consult'){ const c = (MENU.consultants || []).find(x => x.id === target); return `Call ${c ? c.role : target}.`; }
+    if (op === 'perform_exam') return `Examine the ${target} system.`;
+    return target || op;
+  }
+
+  // Apply a nurse-channel turn payload (shared by click actions and free-text orders).
+  async function applyNurseData(data){
+    const reply = (data.reply || '').trim();
+    const speaker = data.speaker || 'nurse';   // a click can be answered by RT / a consultant too
+    if (reply) addTurn(ROOM, speaker, reply);
+    applyEngine(data);
+    if (reply && VOICE_BACKEND){            // speak only once a voice mode is chosen
+      const native = VOICE_BACKEND === 'native' && recognition;
+      if (native){ recoSuspend = true; try { recognition.stop(); } catch(e){} }
+      try { await playTTS(reply, speaker, data.affect_stability ?? null); } catch(e){}
+      await deliverCues(data);              // room nudges after the reply
+      if (native && listening){ recoSuspend = false; try { recognition.start(); } catch(e){} }
+    }
+    if (pendingEnd){ pendingEnd = false; concludeCase(); }
+  }
+
+  async function sendAction(op, target, label){
+    if (!SESSION_ID || processing || actionBusy) return;
+    actionBusy = true; updateExamFoot();
+    addTurn(NURSE_CH, 'res', label || actionLabel(op, target));
+    setNow(NURSE_CH, 'working…');
+    try {
+      const data = await postJSON('/api/voice/action', { session_id: SESSION_ID, op, target });
+      await applyNurseData(data);
+      setNow(NURSE_CH, listening ? 'listening for your next order…' : 'tap a test, or begin to talk');
+    } catch(e){
+      setNow(NURSE_CH, (e && e.message) || 'action failed');
+      NURSE_CH.root.classList.remove('collapsed');
+    } finally { actionBusy = false; updateExamFoot(); }
+  }
+
+  async function sendFreeOrder(text){
+    if (!SESSION_ID || processing || actionBusy) return;
+    actionBusy = true; updateExamFoot();
+    addTurn(NURSE_CH, 'res', text);
+    setNow(NURSE_CH, 'ordering…');
+    try {
+      const data = await postJSON('/api/voice/turn', { session_id: SESSION_ID, text });
+      await applyNurseData(data);
+      setNow(NURSE_CH, listening ? 'listening for your next order…' : 'tap a test, or begin to talk');
+    } catch(e){
+      setNow(NURSE_CH, (e && e.message) || 'order failed');
+      NURSE_CH.root.classList.remove('collapsed');
+    } finally { actionBusy = false; updateExamFoot(); }
+  }
+
+  // A medication order rides the same free-text router path; the server classifies
+  // it as order_medication and returns an order card (which upserts by drug id).
+  function sendMedOrder(text){ return sendFreeOrder(text); }
+
+  // Apply the full engine outcome of one turn to the room.
+  const stageLabel = document.getElementById('stageLabel');
+  const stageHint  = document.getElementById('stageHint');
+  function applyEngine(d){
+    if (!d) return;
+    applyVitals(d.vitals);
+    if (d.working_dx) setWorkingDx(d.working_dx);
+    if (d.diagnostic) addDiagnostic(d.diagnostic);
+    if (d.revealed && !d.diagnostic){
+      stageLabel.textContent = (d.state && d.state.name) ? d.state.name : 'Result';
+      stageHint.textContent = d.revealed;
+    }
+    if (d.critical){
+      const msg = (d.clock_events && d.clock_events[0]) || 'Patient deteriorating';
+      stageLabel.textContent = '⚠ ' + msg;
+      setNow(NURSE_CH, msg);
+    } else if (d.transitioned && d.clock_events && d.clock_events.length){
+      setNow(NURSE_CH, d.clock_events[0]);
+    }
+    if (d.ended) pendingEnd = true;   // case reached a terminal state — debrief after the reply
+  }
+
+  // Proactive prompts the room raised this turn (nurse nudge, ICU callback, the
+  // husband's hint): show each in the Room log and voice it after the main reply.
+  async function deliverCues(d){
+    const cues = (d && d.cues) || [];
+    for (const c of cues){
+      const speaker = c.speaker || 'nurse';
+      addTurn(ROOM, speaker, c.text);
+      if (c.text && VOICE_BACKEND){ try { await playTTS(c.text, speaker); } catch(e){} }
+    }
+  }
+
+  // ---------- live event channel (autonomous clock — F1+F2) ----------
+  // The server's Session Runtime advances the case on a wall-clock even while the
+  // resident is silent (deterioration, cues, state changes) and streams the events
+  // here. Turn *replies* still arrive over the REST POST; this socket carries only
+  // what happens between turns. Opened only when the server reports live_runtime.
+  let liveWS = null, liveLastSeq = 0, liveRetry = 0;
+  function connectLiveEvents(){
+    if (!SESSION_ID || liveWS) return;
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const since = liveLastSeq ? `?since=${liveLastSeq}` : '';
+    let ws;
+    try { ws = new WebSocket(`${proto}://${location.host}/ws/voice/${SESSION_ID}${since}`); }
+    catch(e){ return; }
+    liveWS = ws;
+    ws.onopen = () => { liveRetry = 0; };
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch(e){ return; }
+      if (!m || typeof m.seq !== 'number' || m.seq <= liveLastSeq) return;  // dedup + ordering
+      liveLastSeq = m.seq;
+      handleLiveEvent(m);
+    };
+    ws.onerror = () => { try { ws.close(); } catch(e){} };
+    ws.onclose = () => {
+      liveWS = null;
+      if (debriefShown || pendingEnd) return;            // case over → stop reconnecting
+      liveRetry = Math.min(liveRetry + 1, 6);
+      setTimeout(connectLiveEvents, 500 * Math.pow(2, liveRetry - 1));   // backoff → ~16s
+    };
+  }
+
+  async function handleLiveEvent(m){
+    const d = m.data || {};
+    if (m.kind === 'cue'){
+      const speaker = m.speaker || 'nurse';
+      addTurn(ROOM, speaker, m.text);
+      if (m.text && VOICE_BACKEND && !processing){ try { await playTTS(m.text, speaker); } catch(e){} }
+      return;
+    }
+    if (m.kind === 'state_change' || m.kind === 'condition'){
+      if (d.vitals) applyVitals(d.vitals);                // the monitor reacts to deterioration
+      if (m.text){
+        setNow(NURSE_CH, m.text);
+        const stateName = (m.data && m.data.state_name) || '';
+        stageLabel.textContent = d.critical ? ('⚠ ' + m.text) : stateName || stageLabel.textContent;
+        showStateToast(stateName || m.text, !!d.critical);
+      }
+      return;
+    }
+    if (m.kind === 'case_ended'){
+      if (!debriefShown) concludeCase();
+      return;
+    }
+  }
+
+  // ---------- state transition toast ----------
+  const stateToast = document.getElementById('stateToast');
+  const stateToastLabel = document.getElementById('stateToastLabel');
+  let _toastTimer = null;
+  function showStateToast(label, isCritical){
+    if (!label) return;
+    stateToastLabel.textContent = label;
+    stateToast.className = 'state-toast' + (isCritical ? ' critical' : '');
+    stateToast.classList.add('visible');
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => {
+      stateToast.classList.remove('visible');
+      _toastTimer = null;
+    }, 2800);
+  }
+
+  // ---------- start the live engine-backed session ----------
+  let SESSION_ID = null;
+  function titleCase(s){ return s ? s[0].toUpperCase()+s.slice(1) : s; }
+  function shortId(id){ return (id||'').replace(/_/g,'-').slice(0,16) || 'session'; }
+  async function startSession(){
+    const params = new URLSearchParams(location.search);
+    const resumeId = params.get('session') || params.get('resume');   // resume a parked run
+    const id = params.get('case') || 'myasthenic_crisis';
+    let data;
+    try {
+      const res = resumeId
+        ? await fetch('/api/voice/resume', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ session_id: resumeId }) })
+        : await fetch('/api/voice/session', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ case_id: id }) });
+      if (res.status === 401) { location.href = '/'; return; }
+      if (!res.ok){ if (resumeId) location.href = '/simulator'; return; }   // stale resume link → picker
+      data = await res.json();
+    } catch (e) { return; }
+    if (!data) return;
+    SESSION_ID = data.session_id;
+    const p = data.patient || {}, pres = data.presentation || {}, meta = data.meta || {};
+    document.getElementById('ptName').textContent = p.name || (data.case_id || 'Patient').toUpperCase();
+    const g = (p.gender || '').charAt(0).toUpperCase();
+    document.getElementById('ptAge').textContent = p.age ? `· ${p.age}${g}` : '';
+    if (pres.chief_complaint) document.getElementById('ptCC').textContent = `“${pres.chief_complaint}”`;
+    document.getElementById('ptMeta').textContent = [meta.specialty, meta.setting].filter(Boolean).join(' · ');
+    document.getElementById('caseTag').innerHTML = `Session <b>${shortId(data.session_id)}</b> · ${titleCase(meta.difficulty || 'medium')}`;
+    document.title = `CasesBasis — Voice Room · ${meta.title || ''}`;
+    applyVitals(data.vitals);
+    applyRoster(data.roster);  // who's in the room → Room-log avatars/labels + addressing
+    renderPanels(data.menu);   // dock the case's exam/order/consult controls into the tabs
+    if (data.live_runtime) connectLiveEvents();  // stream autonomous-clock events (F1+F2)
+    if (data.resumed){
+      repaintResume(data);     // full visual rehydration of a parked run
+    } else {
+      // the nurse's spoken handoff: show it now, speak it when the resident begins
+      INTRO_TEXT = (data.intro || '').trim();
+      if (INTRO_TEXT){
+        addTurn(NURSE_CH, 'nurse', INTRO_TEXT);
+        setNow(NURSE_CH, 'tap “Tap to start” to hear the handoff and begin');
+      }
+    }
+  }
+
+  // Repaint a resumed session: both transcript channels + every drawer card (the
+  // ECG monitor re-wakes via addDiagnostic), then continue live where we left off.
+  function repaintResume(data){
+    (data.history || []).forEach(t => addTurn(NURSE_CH, t.role === 'resident' ? 'res' : 'nurse', t.text));
+    (data.patient_history || []).forEach(t => addTurn(PATIENT_CH, t.role === 'resident' ? 'res' : 'patient', t.text));
+    (data.cards || []).forEach(c => addDiagnostic(c));
+    if (data.state && data.state.name) stageLabel.textContent = data.state.name;
+    setNow(NURSE_CH, 'resumed — tap to continue');
+    drawer.classList.add('collapsed');   // don't smother the room on load
+  }
+  let INTRO_TEXT = '', introPlayed = false;
+  startSession();
+
+  // ---------- real-time voice: hands-free VAD listening + barge-in ----------
+  const talkBtn = document.getElementById('talkBtn');
+  const talkLabel = talkBtn.querySelector('.talk-label');
+  let stream = null, recorder = null, chunks = [];
+  let audioCtx = null, analyser = null, micSource = null, vadRaf = 0;
+  let listening = false;     // hands-free mode engaged
+  let capturing = false;     // recording the current utterance
+  let processing = false;    // STT/LLM in flight (no audio yet)
+  let curAudio = null, playResolve = null;          // playing TTS reply (for barge-in)
+  let curAbortCtrl = null, curPCMGain = null;       // streaming PCM path: fetch abort + gain node
+  let voiced = false, voiceStart = 0, silenceAt = 0;
+  let vadGate = false;       // mute the VAD while a reply is speaking (half-duplex, kills self-capture)
+  let recentSpoken = [];     // last few things we spoke — to drop echo that leaks past the gate
+
+  // Voice backend chosen at the start: 'native' (browser dictation + speech
+  // synthesis, zero cost) or 'models' (Whisper STT + Cartesia TTS). Set once.
+  let VOICE_BACKEND = null;
+  let recognition = null;    // native SpeechRecognition (native mode)
+  let recoSuspend = false;   // pause native recognition while the reply speaks (no AEC)
+
+  // Cache the browser's speech-synthesis voices and pick a distinct one per speaker.
+  let _voices = [];
+  function loadVoices(){ try { _voices = window.speechSynthesis ? speechSynthesis.getVoices() : []; } catch(e){ _voices = []; } }
+  if (window.speechSynthesis){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+  function pickVoice(speaker){
+    if (!_voices.length) loadVoices();
+    const en = _voices.filter(v => /^en[-_]/i.test(v.lang));
+    const pool = en.length ? en : _voices;
+    if (!pool.length) return null;
+    const female = pool.filter(v => /female|woman|samantha|victoria|karen|moira|fiona|tessa|zira|aria/i.test(v.name));
+    const base = female.length ? female : pool;
+    // give the patient and a phoned consultant each a different voice from the
+    // nurse when the browser offers enough to choose from
+    if (speaker === 'patient') return base[base.length - 1];
+    if (speaker === 'consult') {
+      const male = pool.filter(v => /male|man|daniel|alex|fred|tom|rishi|oliver/i.test(v.name)
+                                    && !/female|woman/i.test(v.name));
+      return male[0] || pool[Math.min(1, pool.length - 1)];
+    }
+    return base[0];
+  }
+
+  // VAD tuning (RMS on the mic's time-domain signal).
+  const SPEECH_THRESH = 0.020;   // above this counts as voice
+  const SILENCE_MS = 750;        // trailing silence that ends an utterance
+  const MIN_SPEECH_MS = 280;     // ignore shorter blips
+  const GATE_TAIL_MS = 280;      // keep the mic muted briefly after a reply so the room rings out
+
+  // Half-duplex gate: while a reply plays we stop listening, so the nurse/patient
+  // TTS coming out of the speakers can't trip the VAD and get transcribed back.
+  function gateVad(on){
+    vadGate = on;
+    voiced = false; silenceAt = 0;   // drop any half-formed utterance on either edge
+  }
+
+  // Echo guard: remember what we just spoke and drop a transcript that is mostly
+  // those same words — catches TTS that leaks past the gate's tail.
+  function normTokens(t){
+    return (t || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  }
+  function rememberSpoken(text){
+    const toks = normTokens(text);
+    if (!toks.length) return;
+    recentSpoken.push(toks);
+    if (recentSpoken.length > 3) recentSpoken.shift();
+  }
+  function looksLikeEcho(said){
+    const toks = normTokens(said);
+    if (toks.length < 2) return false;        // too short to judge — let it through
+    const set = new Set(toks);
+    for (const prev of recentSpoken){
+      if (prev.length < 2) continue;
+      const pset = new Set(prev);
+      let hit = 0; for (const w of set) if (pset.has(w)) hit++;
+      if (hit / Math.min(set.size, pset.size) >= 0.6) return true;   // mostly our own words
+    }
+    return false;
+  }
+
+  function setMic(mode){ // off | listen | rec | busy
+    talkBtn.classList.toggle('rec', mode==='rec');
+    talkBtn.classList.toggle('busy', mode==='busy');
+    talkBtn.classList.toggle('live', mode==='listen' || mode==='rec');
+    talkLabel.textContent =
+      mode==='off'  ? 'Tap to start' :
+      mode==='rec'  ? 'Listening to you…' :
+      mode==='busy' ? 'Working…' : 'Live — tap to stop';
+  }
+
+  async function stt(blob){
+    const url = SESSION_ID ? `/api/voice/stt?session_id=${encodeURIComponent(SESSION_ID)}` : '/api/voice/stt';
+    const res = await fetch(url, { method:'POST', headers:{ 'Content-Type': blob.type }, body: blob });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok){
+      const raw = data.detail || 'transcription failed';
+      // Translate cryptic HTTP errors into actionable messages
+      const msg = /503|service unavailable/i.test(raw) ? 'speech-to-text service temporarily unavailable — try again in a moment'
+                : /502|bad gateway/i.test(raw)         ? 'speech-to-text service unreachable'
+                : raw;
+      throw new Error(msg);
+    }
+    return (data.text || '').trim();
+  }
+  async function postJSON(url, body){
+    const res = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'request failed');
+    return data;
+  }
+
+  // NOTE: addressee routing now lives SERVER-SIDE (the Director). The browser sends
+  // the raw transcript to /api/voice/turn and the server decides who answers — see
+  // handleSaid(). The old client-side detectAddressee() keyword router (with its
+  // legacy "else → patient" default) was removed in Phase 2; addressee chips still
+  // let the resident force a recipient via forced_addressee.
+
+  // ---------- caption bar ----------
+  const captionBar = document.getElementById('captionBar');
+  const captionWho = document.getElementById('captionWho');
+  const captionText = document.getElementById('captionText');
+  const CAP_WHO_LABELS = { nurse:'RN Nurse', patient:'Patient', ems:'EMS', family:'Family', rt:'RT', consult:'Consultant' };
+  function showCaption(text, speaker){
+    if (!captionBar) return;
+    captionWho.textContent = CAP_WHO_LABELS[speaker] || speaker;
+    captionWho.style.color = { nurse:'var(--teal-glow)', patient:'#e0a85f', ems:'#8ab4f0', family:'#e7b35a', rt:'#6fd3c2', consult:'#c08cf0' }[speaker] || 'var(--ink-400)';
+    captionText.textContent = text;
+    captionBar.classList.add('visible');
+  }
+  function hideCaption(){
+    if (captionBar) captionBar.classList.remove('visible');
+  }
+
+  function stopAudio(){ // halt any playing reply (barge-in / stop) and release the await
+    flushSpeak();        // drop anything queued behind the current line (barge-in wins)
+    clearSpeaking();
+    hideCaption();
+    if (curAudio){ try { curAudio.pause(); } catch(e){} curAudio = null; }
+    if (curAbortCtrl){ curAbortCtrl.abort(); curAbortCtrl = null; }
+    if (curPCMGain && audioCtx){ try { curPCMGain.gain.setValueAtTime(0, audioCtx.currentTime); } catch(e){} curPCMGain = null; }
+    if (window.speechSynthesis){ try { speechSynthesis.cancel(); } catch(e){} }
+    if (playResolve){ const r = playResolve; playResolve = null; r(); }
+  }
+
+  // ── one speak queue so calls never overlap ───────────────────────────────────
+  // playTTS shares mutable audio globals (curAudio/curAbortCtrl/curPCMGain/
+  // playResolve); two concurrent calls (a reply + a proactive WS cue) would clobber
+  // each other and one would silently drop ("answer but no audio"). Every caller now
+  // chains through `speakChain`, so the reply, inline cues, and background cues play
+  // strictly in order. `speakGen` invalidates everything still queued on a barge-in.
+  let speakChain = Promise.resolve();
+  let speakGen = 0;
+  function flushSpeak(){ speakGen++; }
+
+  // ── dispatch filler: mask LLM latency with a brief spoken acknowledgement ─────
+  // Only fires if a turn is genuinely slow (the reply hasn't arrived within
+  // FILLER_DELAY_MS); the real reply queues after it via the speak queue, so there's
+  // no overlap. Cancelled the moment the reply is ready. Set FILLER_ENABLED=false to
+  // turn the room silent-while-thinking again.
+  const FILLER_ENABLED = true;
+  const FILLER_DELAY_MS = 850;
+  const FILLERS = ['One moment.', 'Okay.', 'Let me see.', 'Right.', 'Bear with me.'];
+  let fillerTimer = 0;
+  function scheduleFiller(){
+    if (!FILLER_ENABLED || VOICE_BACKEND === 'native') return;
+    clearTimeout(fillerTimer);
+    fillerTimer = setTimeout(() => {
+      if (!processing) return;                 // reply already arrived — no dead air to mask
+      const f = FILLERS[Math.floor(Math.random() * FILLERS.length)];
+      playTTS(f, 'nurse');                      // queues; the real reply follows in order
+    }, FILLER_DELAY_MS);
+  }
+  function cancelFiller(){ clearTimeout(fillerTimer); fillerTimer = 0; }
+  function playTTS(text, speaker, stabilityOverride){
+    const gen = speakGen;
+    const run = async () => {
+      if (gen !== speakGen) return;        // a barge-in invalidated this queued line
+      try { await _playTTSNow(text, speaker, stabilityOverride); }
+      catch(e){
+        if (e && e.name === 'AbortError') return;
+        // A real synthesis failure used to be swallowed by callers — retry once, then
+        // surface it instead of looking like a dropped reply with no audio.
+        try { await _playTTSNow(text, speaker, stabilityOverride); }
+        catch(e2){
+          if (e2 && e2.name === 'AbortError') return;
+          setNow(ROOM, 'audio unavailable for that line — tap to continue');
+          ROOM.root.classList.remove('collapsed');
+        }
+      }
+    };
+    speakChain = speakChain.then(run, run);
+    return speakChain;
+  }
+
+  async function _playTTSNow(text, speaker, stabilityOverride){
+    selectState('responding');
+    rememberSpoken(text);
+    if (VOICE_BACKEND === 'native') return speakNative(text, speaker);
+    gateVad(true);
+    speakRoster(speaker, true);
+    showCaption(text, speaker);
+    const body = { text, speaker };
+    if (stabilityOverride != null) body.stability = stabilityOverride;
+    const abortCtrl = new AbortController();
+    curAbortCtrl = abortCtrl;
+    try {
+      const res = await fetch('/api/voice/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), signal: abortCtrl.signal,
+      });
+      if (!res.ok) throw new Error('synthesis failed');
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('audio/pcm')) {
+        await _playPCMStream(res);
+      } else {
+        // MP3 blob path (Together fallback)
+        const url = URL.createObjectURL(await res.blob());
+        const audio = new Audio(url); curAudio = audio;
+        await new Promise(resolve => {
+          playResolve = resolve;
+          const done = () => { clearSpeaking(); hideCaption(); URL.revokeObjectURL(url); if (curAudio===audio) curAudio=null; if (playResolve){ playResolve=null; resolve(); } };
+          audio.onended = done; audio.onerror = done;
+          audio.play().catch(done);
+        });
+      }
+    } catch(e) {
+      if (e.name !== 'AbortError') throw e;
+    } finally {
+      curAbortCtrl = null;
+      clearSpeaking();
+      hideCaption();
+      setTimeout(() => gateVad(false), GATE_TAIL_MS);
+    }
+  }
+
+  // Play a server-sent PCM-16000 stream (16-bit signed LE mono) via Web Audio API.
+  // Chunks are scheduled on the AudioContext timeline as they arrive, so audio
+  // starts after the first ~4 KB chunk (~128 ms of audio) rather than the full file.
+  async function _playPCMStream(res){
+    const SAMPLE_RATE = 16000;
+    const ctx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx = ctx;
+    if (ctx.state === 'suspended') await ctx.resume();
+
+    const masterGain = ctx.createGain();
+    masterGain.connect(ctx.destination);
+    curPCMGain = masterGain;
+
+    const reader = res.body.getReader();
+    let nextTime = ctx.currentTime + 0.06;   // 60 ms startup gap so first chunk doesn't clip
+    let leftover = new Uint8Array(0);
+    let lastSrc = null;
+
+    let fetchAborted = false;
+    await new Promise(async (resolve, reject) => {
+      playResolve = resolve;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value || !value.length) continue;
+
+          // Merge leftover bytes from the previous iteration (PCM needs even byte count)
+          const full = new Uint8Array(leftover.length + value.length);
+          full.set(leftover); full.set(value, leftover.length);
+          const numSamples = Math.floor(full.length / 2);
+          const evenLen = numSamples * 2;
+          leftover = full.slice(evenLen);
+          if (numSamples === 0) continue;
+
+          // Int16 little-endian → Float32 [-1, 1]
+          const view = new DataView(full.buffer, full.byteOffset, evenLen);
+          const f32 = new Float32Array(numSamples);
+          for (let i = 0; i < numSamples; i++) f32[i] = view.getInt16(i * 2, true) / 32768.0;
+
+          const buf = ctx.createBuffer(1, numSamples, SAMPLE_RATE);
+          buf.getChannelData(0).set(f32);
+
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(masterGain);
+          if (nextTime < ctx.currentTime + 0.01) nextTime = ctx.currentTime + 0.01;
+          src.start(nextTime);
+          nextTime += buf.duration;
+          lastSrc = src;
+        }
+      } catch(e) {
+        if (e.name === 'AbortError') fetchAborted = true;
+        else console.warn('[pcm stream]', e);
+      }
+      if (lastSrc) {
+        // Safety timeout resolves if onended never fires (e.g. browser suspend)
+        const safetyMs = Math.max(0, (nextTime - ctx.currentTime)) * 1000 + 500;
+        const tOut = setTimeout(() => { if (playResolve){ playResolve = null; resolve(); } }, safetyMs);
+        lastSrc.onended = () => { clearTimeout(tOut); if (playResolve){ playResolve = null; resolve(); } };
+      } else {
+        if (playResolve){ playResolve = null; }
+        // Empty stream: if not a deliberate abort, surface the failure so the
+        // caller (playHandoff) can show an error rather than silently doing nothing.
+        if (fetchAborted) resolve();
+        else reject(new Error('voice service unavailable'));
+      }
+    });
+    curPCMGain = null;
+  }
+  // Native speech synthesis (zero-cost mode). Distinct voice + pitch per speaker.
+  function speakNative(text, speaker){
+    speakRoster(speaker, true);
+    showCaption(text, speaker);
+    return new Promise(resolve => {
+      if (!window.speechSynthesis){ clearSpeaking(); hideCaption(); resolve(); return; }
+      playResolve = resolve;
+      const fin = () => { clearSpeaking(); hideCaption(); if (playResolve){ playResolve = null; resolve(); } };
+      try {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        const v = pickVoice(speaker); if (v) u.voice = v;
+        u.lang = (v && v.lang) || 'en-US';
+        u.rate = 1.0;
+        u.pitch = speaker === 'patient' ? 1.12 : speaker === 'consult' ? 0.82 : 0.96;
+        u.onend = fin; u.onerror = fin;
+        speechSynthesis.speak(u);
+      } catch(e){ fin(); }
+    });
+  }
+
+  // ---- voice-activity detection loop ----
+  function rmsLevel(){
+    const buf = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(buf);
+    let sum = 0;
+    for (let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum += v*v; }
+    return Math.sqrt(sum/buf.length);
+  }
+  function vadTick(){
+    if (!listening){ return; }
+    if (vadGate){ vadRaf = requestAnimationFrame(vadTick); return; }   // muted while the reply speaks
+    const level = rmsLevel(), now = performance.now();
+    if (level > SPEECH_THRESH){
+      if (!voiced){ voiced = true; voiceStart = now; onVoiceStart(); }
+      silenceAt = 0;
+    } else if (voiced){
+      if (!silenceAt) silenceAt = now;
+      else if (now - silenceAt > SILENCE_MS){
+        voiced = false;
+        onVoiceEnd((silenceAt - voiceStart) >= MIN_SPEECH_MS);   // speech length before silence
+      }
+    }
+    vadRaf = requestAnimationFrame(vadTick);
+  }
+  function onVoiceStart(){
+    stopAudio();                 // barge-in: cut off the reply the instant you speak
+    if (processing) return;      // mid-fetch — let it resolve; ignore this blip
+    if (!capturing) startCapture();
+  }
+  function onVoiceEnd(longEnough){
+    if (capturing){ capturing = false; try { recorder.stop(); } catch(e){} }
+    if (!longEnough){ chunks = []; }   // too short — drop it
+  }
+
+  function startCapture(){
+    chunks = [];
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+               : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+    recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop = () => {
+      const parts = chunks; chunks = [];
+      if (parts.length) processUtterance(new Blob(parts, { type: parts[0].type || 'audio/webm' }));
+    };
+    recorder.start();
+    capturing = true; setMic('rec'); selectState('listening');
+  }
+
+  // Server mode (Whisper): captured blob → text → shared handler.
+  async function processUtterance(blob){
+    if (blob.size < 1500) { if (listening) setMic('listen'); return; }
+    processing = true; setMic('busy'); selectState('thinking');
+    let said = '';
+    try { said = await stt(blob); }
+    catch(e){
+      setNow(NURSE_CH, (e && e.message) ? e.message : 'transcription failed');
+      NURSE_CH.root.classList.remove('collapsed');
+      processing = false; if (!capturing) setMic(listening ? 'listen' : 'off');
+      selectState(listening ? 'listening' : 'idle'); return;
+    }
+    if (!said){ processing = false; if (listening) setMic('listen'); selectState(listening ? 'listening' : 'idle'); return; }
+    await handleSaid(said);
+  }
+
+  // Shared by both backends: a recognised utterance → routed, grounded, spoken reply.
+  async function handleSaid(said, _forcedAddr){
+    if (looksLikeEcho(said)){                 // our own TTS bled into the mic — ignore it
+      processing = false;
+      if (!capturing) setMic(listening ? 'listen' : 'off');
+      selectState(listening ? 'listening' : 'idle');
+      return;
+    }
+    // Resolve forced addressee: explicit param wins over the chip state variable.
+    const effectiveAddr = _forcedAddr || forcedAddressee || null;
+    // Consume the chip selection so it doesn't bleed into subsequent turns.
+    forcedAddressee = null;
+    addrChipsEl.querySelectorAll('.addr-chip').forEach(c => c.classList.remove('selected'));
+    leaveAskMode();
+
+    try {
+      addTurn(ROOM, 'res', said);
+
+      // Single unified endpoint: the SERVER-SIDE Director decides who answers
+      // (nurse / bystander / patient) from the utterance content. The browser no
+      // longer pre-routes — it just sends the raw transcript and an optional chip.
+      const body = { session_id: SESSION_ID, text: said };
+      if (effectiveAddr) body.forced_addressee = effectiveAddr;
+      scheduleFiller();                          // mask the dispatch latency if it's slow
+      let data;
+      try { data = await postJSON('/api/voice/turn', body); }
+      finally { cancelFiller(); }
+
+      const reply = (data.reply || '').trim();
+      const speaker = data.speaker || 'nurse';
+      const patientStability = data.affect_stability ?? null;
+      addTurn(ROOM, speaker, reply);
+      applyEngine(data);
+
+      // Director ask-back: store the utterance and illuminate the addressee chips.
+      if (data.needs_addressee){
+        pendingTranscript = said;
+        enterAskMode();
+      }
+
+      processing = false;
+      if (!capturing) setMic(listening ? 'listen' : 'off');
+      // affect_stability is the speaker's live EmotionalState (Phase 5): set for the
+      // patient and a frightened relative, absent for the steady professionals.
+      if (reply) await playTTS(reply, speaker, patientStability);
+      await deliverCues(data);
+      setNow(ROOM, 'listening for your next order…');
+      if (pendingEnd){ pendingEnd = false; concludeCase(); }
+    } catch(e){
+      setNow(ROOM, (e && e.message) ? e.message : 'something went wrong');
+      ROOM.root.classList.remove('collapsed');
+    } finally {
+      processing = false;
+      if (!capturing) setMic(listening ? 'listen' : 'off');
+      selectState(listening ? 'listening' : 'idle');
+    }
+  }
+
+  // Play the one-time spoken handoff before the floor opens (both backends).
+  async function playHandoff(){
+    if (INTRO_TEXT && !introPlayed){
+      setMic('busy');
+      try {
+        await playTTS(INTRO_TEXT, 'nurse');
+        introPlayed = true;            // mark played ONLY after it actually played, so a
+      }                                // transient TTS failure doesn't silently swallow the
+      catch(e){                        // one-time briefing for the whole session.
+        setNow(NURSE_CH, (e && e.message) || 'voice service unavailable — tap again to hear the handoff');
+        NURSE_CH.root.classList.remove('collapsed');
+        return true;                   // let the floor open; they can retry the tap
+      }
+      if (!listening) return false;     // resident stopped during the handoff
+      setMic('listen');
+    }
+    return true;
+  }
+
+  // ── server backend: getUserMedia + RMS VAD + MediaRecorder → Whisper ──
+  async function startServer(){
+    try {
+      if (!stream) stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+    } catch(e){ setNow(NURSE_CH, 'microphone permission needed'); NURSE_CH.root.classList.remove('collapsed'); return; }
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    _initAmbience(audioCtx);
+    if (!analyser){
+      analyser = audioCtx.createAnalyser(); analyser.fftSize = 512;
+      micSource = audioCtx.createMediaStreamSource(stream);
+      // High-pass filter on VAD path only — cuts sub-250 Hz mechanical noise
+      // (table bumps, footsteps, mic handling) so they don't trip the RMS gate.
+      // The MediaRecorder captures the raw stream; Whisper still gets full audio.
+      const vadHp = audioCtx.createBiquadFilter();
+      vadHp.type = 'highpass'; vadHp.frequency.value = 250; vadHp.Q.value = 0.7;
+      micSource.connect(vadHp);
+      vadHp.connect(analyser);
+    }
+    listening = true; voiced = false; silenceAt = 0;
+    setMic('listen'); selectState('listening');
+    if (!await playHandoff()) return;
+    vadRaf = requestAnimationFrame(vadTick);
+  }
+
+  // ── native backend: browser SpeechRecognition (half-duplex, no AEC) ──
+  function nativeSupported(){ return 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window; }
+  async function startNative(){
+    if (!nativeSupported()){
+      setNow(NURSE_CH, 'this browser has no built-in dictation — refresh and pick Speech models');
+      NURSE_CH.root.classList.remove('collapsed'); return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SR();
+    recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'en-US';
+    recognition.onresult = onNativeResult;
+    recognition.onerror = () => {};   // 'no-speech'/'aborted' are routine; ignore
+    recognition.onend = () => { if (listening && !recoSuspend){ try { recognition.start(); } catch(e){} } };
+    listening = true; setMic('listen'); selectState('listening');
+    if (!await playHandoff()) return;
+    try { recognition.start(); } catch(e){}
+  }
+  function onNativeResult(event){
+    let finalText = '', interim = '';
+    for (let i = event.resultIndex; i < event.results.length; i++){
+      const r = event.results[i];
+      if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+    }
+    if (interim){ stopAudio(); setNow(NURSE_CH, interim); }   // show live partial
+    const said = finalText.trim();
+    if (!said) return;
+    // half-duplex: stop listening while we think + speak, so the reply isn't
+    // transcribed back as input, then resume.
+    recoSuspend = true;
+    try { recognition.stop(); } catch(e){}
+    processing = true; setMic('busy'); selectState('thinking');
+    handleSaid(said).finally(() => {
+      recoSuspend = false;
+      if (listening){ try { recognition.start(); } catch(e){} setMic('listen'); }
+    });
+  }
+
+  async function startListening(){
+    if (VOICE_BACKEND === 'native') return startNative();
+    return startServer();
+  }
+  function stopListening(){
+    listening = false; recoSuspend = false;
+    if (vadRaf){ cancelAnimationFrame(vadRaf); vadRaf = 0; }
+    if (recognition){ try { recognition.stop(); } catch(e){} }
+    if (capturing){ capturing = false; try { recorder.stop(); } catch(e){} chunks = []; }
+    stopAudio();
+    setMic('off'); selectState('idle');
+  }
+
+  // ── voice-mode modal: choose the backend once, then begin ──
+  const voiceModal = document.getElementById('voiceModal');
+  function openVoiceModal(){ voiceModal.classList.add('open'); }
+  function closeVoiceModal(){ voiceModal.classList.remove('open'); }
+  function chooseBackend(mode){
+    VOICE_BACKEND = mode;
+    closeVoiceModal();
+    startListening();
+  }
+  document.getElementById('vmNative').addEventListener('click', () => chooseBackend('native'));
+  document.getElementById('vmModels').addEventListener('click', () => chooseBackend('models'));
+  voiceModal.addEventListener('click', e => { if (e.target === voiceModal) closeVoiceModal(); });
+
+  function onBegin(){
+    if (listening){ stopListening(); return; }
+    if (!VOICE_BACKEND){ openVoiceModal(); return; }   // first run → pick a mode
+    startListening();
+  }
+
+  setMic('off');
+  talkBtn.addEventListener('click', onBegin);
+  document.addEventListener('keydown', e => {
+    if (e.code==='Space' && !e.repeat && e.target===document.body){ e.preventDefault(); onBegin(); }
+  });
+})();
+</script>
+
+</body>
+</html>

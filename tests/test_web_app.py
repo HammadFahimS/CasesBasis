@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import json
 
+from backend import sim_core
 from backend.investigations import InvestigationService
 from schemas.clinical_case import ClinicalCase
 from schemas.investigation import InvestigationResult
+
+
+class FakeRequest:
+    """Minimal stand-in for fastapi.Request in tests that call endpoints directly."""
+    cookies: dict = {}
 
 
 def sample_case() -> ClinicalCase:
@@ -38,7 +44,7 @@ def sample_case() -> ClinicalCase:
                 },
             ],
             "risk_factors": ["smoking", "hypertension"],
-            "exam_findings": ["diaphoretic", "anxious"],
+            "exam_findings": {"General": ["diaphoretic", "anxious"]},
             "outcome": {
                 "if_treated": "Rapid emergency treatment improves outcomes.",
                 "if_untreated": "Ongoing ischemia can lead to instability.",
@@ -68,19 +74,21 @@ def test_generate_case_reuses_recent_cached_case(monkeypatch: object) -> None:
     simulator = FakeSimulator()
     web_app.CASE_CACHE.clear()
     web_app.SESSIONS.clear()
-    monkeypatch.setattr(web_app, "SIMULATOR", simulator)
+    monkeypatch.setattr(sim_core, "SIMULATOR", simulator)
 
     first = web_app.generate_case(
         web_app.GenerateCaseRequest(
             diagnosis="Myocardial Infarction",
             difficulty="medium",
-        )
+        ),
+        FakeRequest(),
     )
     second = web_app.generate_case(
         web_app.GenerateCaseRequest(
             diagnosis="  myocardial   infarction  ",
             difficulty="Medium",
-        )
+        ),
+        FakeRequest(),
     )
 
     assert simulator.calls == [("Myocardial Infarction", "medium")]
@@ -99,6 +107,10 @@ def test_case_preview_does_not_expose_hidden_symptom_list() -> None:
     assert preview == {
         "age": 58,
         "gender": "male",
+        "name": None,
+        "race": None,
+        "occupation": None,
+        "persona_description": "",
         "chief_complaint": "chest pressure",
         "vitals": {
             "heart_rate": 104,
@@ -131,9 +143,10 @@ def test_web_evaluation_preserves_exact_diagnosis_guess(monkeypatch: object) -> 
     web_app.SESSIONS.clear()
     web_app.SESSIONS[session_id] = web_app.WebSession(case=sample_case())
     web_app.SESSIONS[session_id].diagnosis_guess = "Heart Attack"
-    monkeypatch.setattr(web_app, "EVALUATOR", evaluator)
+    monkeypatch.setattr(sim_core, "EVALUATOR", evaluator)
 
-    web_app.evaluate(web_app.EvaluateRequest(session_id=session_id))
+    from tests.helpers import make_request
+    web_app.evaluate(web_app.EvaluateRequest(session_id=session_id), make_request())
 
     assert evaluator.questions is not None
     assert "Diagnosis guess: Heart Attack" in evaluator.questions
@@ -141,26 +154,24 @@ def test_web_evaluation_preserves_exact_diagnosis_guess(monkeypatch: object) -> 
 
 
 def test_web_ui_includes_loading_states_for_async_actions() -> None:
+    from pathlib import Path
+
     from backend import web_app
 
-    html = web_app.HTML_PAGE
+    # The simulator workbench markup was extracted from an inline HTML_PAGE
+    # constant to its own static file (F3); the page is served from there.
+    html = (Path(web_app.__file__).parent / "static" / "simulator.html").read_text()
 
-    assert 'id="askButton"' in html
-    assert 'id="investigationButton"' in html
-    assert 'id="doctorButton"' in html
-    assert 'id="diagnosisButton"' in html
-    assert 'id="evaluateButton"' in html
-    assert "Asking patient..." in html
-    assert "Ordering investigation..." in html
-    assert "Calling doctor..." in html
-    assert "Evaluating performance..." in html
-    assert "Patient question failed." in html
-    assert "Investigation order failed." in html
-    assert "Doctor consult failed." in html
-    assert "Evaluation failed." in html
+    assert 'id="askBtn"' in html
+    assert 'id="invBtn"' in html
+    assert 'id="doctorBtn"' in html
+    assert 'id="diagnosisBtn"' in html
+    assert 'id="submitCaseBtn"' in html
+    assert "spin(" in html
+    assert "toast(" in html
     assert "result.investigations.forEach" in html
-    assert ".ecg-tracing" in html
-    assert "overflow-x: auto" in html
+    assert ".ecg-wrap" in html
+    assert "overflow-x:auto" in html
 
 
 def test_ecg_student_display_hides_decoded_findings() -> None:
@@ -172,7 +183,13 @@ def test_ecg_student_display_hides_decoded_findings() -> None:
     serialized = json.dumps(display).lower()
 
     assert display["summary"] == "ECG completed"
-    assert display["visual_payload"]["svg"].startswith("<svg")
+    vp = display["visual_payload"]
+    # ECG can be either a paper-style PNG (from PTB-XL) or legacy SVG.
+    assert vp["type"] in ("svg", "image")
+    if vp["type"] == "svg":
+        assert vp["svg"].startswith("<svg")
+    else:
+        assert vp["data"]  # base64 PNG
     assert "st elevation" not in serialized
     assert "reciprocal" not in serialized
     assert "territory" not in serialized
@@ -266,10 +283,12 @@ def test_investigation_endpoint_preserves_full_result_in_session(monkeypatch: ob
     case = sample_case()
     web_app.SESSIONS.clear()
     web_app.SESSIONS[session_id] = web_app.WebSession(case=case)
-    monkeypatch.setattr(web_app, "INVESTIGATION_SERVICE", FakeInvestigationService())
+    monkeypatch.setattr(sim_core, "INVESTIGATION_SERVICE", FakeInvestigationService())
 
+    from tests.helpers import make_request
     display = web_app.order_investigation(
-        web_app.InvestigationRequest(session_id=session_id, investigation="ECG")
+        web_app.InvestigationRequest(session_id=session_id, investigation="ECG"),
+        make_request(),
     )
 
     assert "st_segments" not in json.dumps(display).lower()
@@ -293,10 +312,12 @@ def test_investigation_endpoint_returns_multiple_sanitized_displays(monkeypatch:
     case = sample_case()
     web_app.SESSIONS.clear()
     web_app.SESSIONS[session_id] = web_app.WebSession(case=case)
-    monkeypatch.setattr(web_app, "INVESTIGATION_SERVICE", FakeInvestigationService())
+    monkeypatch.setattr(sim_core, "INVESTIGATION_SERVICE", FakeInvestigationService())
 
+    from tests.helpers import make_request as _make_request
     display = web_app.order_investigation(
-        web_app.InvestigationRequest(session_id=session_id, investigation="ECG and troponin")
+        web_app.InvestigationRequest(session_id=session_id, investigation="ECG and troponin"),
+        _make_request(),
     )
 
     assert "investigations" in display

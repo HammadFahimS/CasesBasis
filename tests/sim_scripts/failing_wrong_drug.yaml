@@ -1,0 +1,22 @@
+# FAILING — the resident gives a STANDARD succinylcholine dose in myasthenia.
+# This is the case's authored critical error: clenched jaw → aspiration → PEA arrest.
+# The system should behave *correctly in the face of the mistake*: trip the critical
+# transition, deteriorate the patient, and score it low.
+case: myasthenic_crisis
+name: failing_standard_succinylcholine_pea_arrest
+setup:
+  - goto: intubation_prep        # arrive at the airway decision
+turns:
+  - say: "Push the usual succinylcholine, 1.5 mig per kig."
+    intent: { op: order_medication, target: succinylcholine, action_text: "standard dose 1.5 mg/kg" }
+    expect:
+      endpoint: staff
+      op: order_medication
+      state: pea_arrest
+      transitioned: true
+      critical_error: true
+
+final:
+  reached_state: pea_arrest
+  critical_error: true
+  max_score: 50

@@ -208,8 +208,17 @@ def synthesize_ecg_svg(params: ECGParameters) -> str:
     Y_SCALE = PLOT_H / AMP_RANGE
     X_SCALE = PLOT_W / STRIP_DURATION
 
+    # Lead II rhythm strip at the bottom: same panel height, full SVG width,
+    # 10 s of continuous signal so the reader can assess rhythm across many
+    # beats. Uses its own X scale (smaller) so 10 s fits, which is why we
+    # need a separate grid pattern below.
+    RHYTHM_DURATION = 10.0
+    RHYTHM_LEAD = "II"
     total_w = COLS * PW
-    total_h = ROWS * PH
+    rhythm_plot_w = total_w - PAD_L - 4
+    X_SCALE_RH = rhythm_plot_w / RHYTHM_DURATION
+
+    total_h = ROWS * PH + PH  # 3 grid rows + 1 rhythm strip row
 
     out: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {total_w} {total_h}" '
@@ -226,6 +235,19 @@ def synthesize_ecg_svg(params: ECGParameters) -> str:
     out.append(
         f'<pattern id="majgrid" x="0" y="0" width="{X_SCALE*0.20:.2f}" height="{Y_SCALE*0.5:.2f}" patternUnits="userSpaceOnUse">'
         f'<path d="M {X_SCALE*0.20:.2f} 0 L 0 0 0 {Y_SCALE*0.5:.2f}" fill="none" stroke="#ffaaaa" stroke-width="0.6"/>'
+        f"</pattern>"
+    )
+    # Rhythm strip uses its own grid pattern with the wider X scale so the
+    # 0.04 s / 0.20 s gridlines still mean the same thing in time, just
+    # spaced differently in pixels.
+    out.append(
+        f'<pattern id="mingrid_rh" x="0" y="0" width="{X_SCALE_RH*0.04:.2f}" height="{Y_SCALE*0.1:.2f}" patternUnits="userSpaceOnUse">'
+        f'<path d="M {X_SCALE_RH*0.04:.2f} 0 L 0 0 0 {Y_SCALE*0.1:.2f}" fill="none" stroke="#ffdddd" stroke-width="0.3"/>'
+        f"</pattern>"
+    )
+    out.append(
+        f'<pattern id="majgrid_rh" x="0" y="0" width="{X_SCALE_RH*0.20:.2f}" height="{Y_SCALE*0.5:.2f}" patternUnits="userSpaceOnUse">'
+        f'<path d="M {X_SCALE_RH*0.20:.2f} 0 L 0 0 0 {Y_SCALE*0.5:.2f}" fill="none" stroke="#ffaaaa" stroke-width="0.6"/>'
         f"</pattern>"
     )
     out.append("</defs>")
@@ -290,6 +312,57 @@ def synthesize_ecg_svg(params: ECGParameters) -> str:
                 f'<polyline points="{" ".join(pts)}" fill="none" stroke="#111" '
                 f'stroke-width="1.2" stroke-linejoin="round" clip-path="url(#{clip_id})"/>'
             )
+
+    # ── Lead II rhythm strip (row 4, full width, 10 s) ──────────────────────
+    rh_ox = 0
+    rh_oy = ROWS * PH
+    rh_plot_x = rh_ox + PAD_L
+    rh_plot_y = rh_oy + PAD_T
+    rh_clip_id = "crh"
+
+    # Panel background + border
+    out.append(
+        f'<rect x="{rh_ox}" y="{rh_oy}" width="{total_w}" height="{PH}" '
+        f'fill="#fff9f9" stroke="#e8e8e8" stroke-width="0.5"/>'
+    )
+    # Clip path for waveform
+    out.append(
+        f'<clipPath id="{rh_clip_id}">'
+        f'<rect x="{rh_plot_x}" y="{rh_plot_y}" width="{rhythm_plot_w}" height="{PLOT_H}"/>'
+        f"</clipPath>"
+    )
+    # Grid (wider-scale minor + major)
+    out.append(
+        f'<rect x="{rh_plot_x}" y="{rh_plot_y}" width="{rhythm_plot_w}" height="{PLOT_H}" fill="url(#mingrid_rh)"/>'
+    )
+    out.append(
+        f'<rect x="{rh_plot_x}" y="{rh_plot_y}" width="{rhythm_plot_w}" height="{PLOT_H}" fill="url(#majgrid_rh)"/>'
+    )
+    # Iso-electric baseline (0 mV)
+    y_zero_rh = rh_plot_y + (AMP_RANGE - Y_MID_MV) / AMP_RANGE * PLOT_H
+    out.append(
+        f'<line x1="{rh_plot_x}" y1="{y_zero_rh:.1f}" x2="{rh_plot_x + rhythm_plot_w}" y2="{y_zero_rh:.1f}" '
+        f'stroke="#ffbbbb" stroke-width="0.8"/>'
+    )
+    # Lead label
+    out.append(
+        f'<text x="{rh_ox + 3}" y="{rh_oy + 11}" font-size="10" font-weight="bold" fill="#444">{RHYTHM_LEAD}</text>'
+    )
+    # Build the 10-second Lead II signal using the same parameters as the grid
+    rh_findings = params.leads.get(RHYTHM_LEAD) or LeadFindings()
+    t_axis_rh, signal_rh = _build_signal(
+        params, rh_findings, RHYTHM_DURATION, seed=abs(hash(RHYTHM_LEAD)) % 9999
+    )
+    pts_rh: list[str] = []
+    for t_val, sig_val in zip(t_axis_rh[::step], signal_rh[::step]):
+        px = rh_plot_x + t_val * X_SCALE_RH
+        py = rh_plot_y + (AMP_RANGE - sig_val - Y_MID_MV) / AMP_RANGE * PLOT_H
+        py = max(rh_plot_y, min(rh_plot_y + PLOT_H, py))
+        pts_rh.append(f"{px:.1f},{py:.1f}")
+    out.append(
+        f'<polyline points="{" ".join(pts_rh)}" fill="none" stroke="#111" '
+        f'stroke-width="1.2" stroke-linejoin="round" clip-path="url(#{rh_clip_id})"/>'
+    )
 
     out.append("</svg>")
     return "\n".join(out)

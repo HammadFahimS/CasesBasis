@@ -1,0 +1,5 @@
+- Use a subtle or misleading presentation
+- Include plausible atypical symptoms
+- Make progression delayed, early, or unclear
+- Preserve enough evidence for the diagnosis without making it obvious
+- Keep the case medically correct, not obscure for its own sake

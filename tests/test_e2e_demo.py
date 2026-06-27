@@ -57,7 +57,7 @@ class DemoGenerator:
                     },
                 ],
                 "risk_factors": ["smoking", "hypertension", "high cholesterol"],
-                "exam_findings": ["diaphoretic", "anxious", "no focal neurologic deficit"],
+                "exam_findings": {"General": ["diaphoretic", "anxious"], "Neurological": ["no focal neurologic deficit"]},
                 "outcome": {
                     "if_treated": "Rapid emergency treatment improves the chance of preserving heart muscle.",
                     "if_untreated": "Ongoing ischemia can lead to arrhythmia, heart failure, or death.",
@@ -75,7 +75,7 @@ class DemoValidator:
 
 
 class DemoPatientAgent:
-    def answer(self, case: ClinicalCase, question: str) -> str:
+    def answer(self, case: ClinicalCase, question: str, **_: object) -> str:
         normalized = question.lower()
         if "describe" in normalized or "chest" in normalized:
             return "It feels like a heavy pressure in the middle of my chest."
@@ -135,7 +135,7 @@ class SessionCapturingGenerator(GeneratorAgent):
                     },
                 ],
                 "risk_factors": ["former smoker", "diabetes"],
-                "exam_findings": ["crackles at right lung base", "mild increased work of breathing"],
+                "exam_findings": {"Respiratory": ["crackles at right lung base", "mild increased work of breathing"]},
                 "outcome": {
                     "if_treated": "Symptoms improve with timely antibiotics and supportive care.",
                     "if_untreated": "Respiratory status can worsen and require hospital care.",
@@ -207,7 +207,7 @@ class OfflineLLMGenerator(GeneratorAgent):
                         },
                     ],
                     "risk_factors": ["smoking", "hypertension", "high cholesterol"],
-                    "exam_findings": ["diaphoretic", "anxious"],
+                    "exam_findings": {"General": ["diaphoretic", "anxious"]},
                     "outcome": {
                         "if_treated": "Rapid emergency treatment improves outcomes.",
                         "if_untreated": "Ongoing ischemia can lead to instability.",
@@ -229,7 +229,7 @@ class OfflinePatientAgent:
     def __init__(self) -> None:
         self.questions: list[str] = []
 
-    def answer(self, case: ClinicalCase, question: str) -> str:
+    def answer(self, case: ClinicalCase, question: str, **_: object) -> str:
         self.questions.append(question)
         normalized = question.lower()
         if "feeling" in normalized or "chest" in normalized:
@@ -473,7 +473,7 @@ def test_offline_end_to_end_demo_without_live_llm_calls() -> None:
     assert investigations[0].investigation == "ECG"
     assert investigations[0].visual_payload is not None
     assert investigations[1].investigation == "Troponin"
-    assert investigations[1].structured_result["flag"] == "high"
+    assert investigations[1].structured_result["values"][0]["flag"] == "high"
     assert isinstance(evaluation.overall_score, int)
     assert 0 <= evaluation.overall_score <= 100
     assert evaluation.learning_recommendations.primary_skill_gap

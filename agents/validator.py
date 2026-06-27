@@ -2,42 +2,12 @@ from __future__ import annotations
 
 from agents.base import OpenAIJsonAgent
 from agents.generator import build_generation_prompt, sanitize_diagnosis
+from agents.prompt_loader import load
 from schemas.clinical_case import ClinicalCase
 from schemas.evaluation import ClinicalEvaluation
 from schemas.session_context import build_session_context
 
-VALIDATOR_FALLBACK_SYSTEM_PROMPT = """
-You are a fallback medical consistency agent.
-The primary generator failed repeatedly.
-Return valid JSON only and follow the schema exactly.
-""".strip()
-
-STRICT_REGENERATION_SYSTEM_PROMPT = """
-You are a strict clinical case regeneration agent.
-Return valid JSON only and follow the schema exactly.
-Generate a fresh medically consistent case for the same diagnosis and difficulty.
-""".strip()
-
 MAX_VALIDATOR_ATTEMPTS = 2
-
-CORRECTION_SYSTEM_PROMPT = """
-You are a clinical case correction agent for a medical simulation system.
-
-Input is generated case JSON that failed deterministic medical validation.
-
-Task:
-- fix medical inconsistencies
-- ensure symptoms match diagnosis
-- correct unrealistic vitals
-
-Rules:
-- preserve original structure
-- do not add new fields
-- only modify fields related to the validation failure
-- do not rewrite the entire case
-- preserve original structure and intent
-- return JSON only
-""".strip()
 
 
 class ValidatorAgent(OpenAIJsonAgent):
@@ -57,7 +27,7 @@ Generated case JSON:
 Return the corrected case JSON only.
 """.strip()
         proposed_case = self.parse_clinical_case_with_retries(
-            system_prompt=CORRECTION_SYSTEM_PROMPT,
+            system_prompt=load("validator", "correction_system"),
             user_prompt=prompt,
         )
         return merge_allowed_corrections(case, proposed_case, allowed_fields)
@@ -78,7 +48,7 @@ Return the corrected case JSON only.
         if failure_reason:
             prompt = f"{prompt}\n\nPrevious generation failure: {failure_reason}"
         generated_case = self.parse_clinical_case_with_retries(
-            system_prompt=VALIDATOR_FALLBACK_SYSTEM_PROMPT,
+            system_prompt=load("validator", "fallback_system"),
             user_prompt=prompt,
         )
         if generated_case.diagnosis.strip().lower() != sanitized_diagnosis.lower():
@@ -113,7 +83,7 @@ STRICT REGENERATION AFTER MEDICAL VALIDATION FAILURE:
 Return JSON only.
 """.strip()
         generated_case = self.parse_response(
-            system_prompt=STRICT_REGENERATION_SYSTEM_PROMPT,
+            system_prompt=load("validator", "strict_system"),
             user_prompt=prompt,
             response_model=ClinicalCase,
         )

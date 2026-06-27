@@ -43,7 +43,7 @@ def mi_case() -> ClinicalCase:
                 },
             ],
             "risk_factors": ["smoking", "hypertension", "high cholesterol"],
-            "exam_findings": ["diaphoretic", "anxious"],
+            "exam_findings": {"General": ["diaphoretic", "anxious"]},
             "outcome": {
                 "if_treated": "Rapid emergency treatment improves outcomes.",
                 "if_untreated": "Ongoing ischemia can lead to instability.",
@@ -223,7 +223,7 @@ def test_critical_vitals_produce_escalation_and_safety_warnings() -> None:
 
 
 def test_web_doctor_consult_path_uses_service(monkeypatch: Any) -> None:
-    from backend import web_app
+    from backend import sim_core, web_app
 
     class FakeDoctorConsultService:
         def consult(
@@ -233,6 +233,8 @@ def test_web_doctor_consult_path_uses_service(monkeypatch: Any) -> None:
             patient_responses: list[str],
             investigations_ordered: list[InvestigationResult],
             consult_question: str,
+            *,
+            session_context: dict[str, Any] | None = None,
         ) -> DoctorConsultResponse:
             assert case.diagnosis == "myocardial infarction"
             assert consult_question == "Should I order an ECG?"
@@ -242,13 +244,15 @@ def test_web_doctor_consult_path_uses_service(monkeypatch: Any) -> None:
 
     session_id = "doctor-consult-session"
     web_app.SESSIONS[session_id] = web_app.WebSession(case=mi_case())
-    monkeypatch.setattr(web_app, "DOCTOR_CONSULT_SERVICE", FakeDoctorConsultService())
+    monkeypatch.setattr(sim_core, "DOCTOR_CONSULT_SERVICE", FakeDoctorConsultService())
 
+    from tests.helpers import make_request
     result = web_app.call_doctor(
         web_app.DoctorConsultRequest(
             session_id=session_id,
             question="Should I order an ECG?",
-        )
+        ),
+        make_request(),
     )
 
     assert result["concise_advice"] == "Yes, get the ECG now and keep him monitored."

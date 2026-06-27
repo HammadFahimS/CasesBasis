@@ -1,0 +1,4 @@
+- Use classic symptoms that strongly point to the diagnosis
+- Make progression clear and easy to follow
+- Include minimal misleading information
+- Keep the case medically correct and straightforward

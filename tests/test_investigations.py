@@ -5,6 +5,7 @@ import pytest
 from agents.investigation_generator import (
     GenericInvestigationAgent,
     InvestigationGenerationError,
+    MAX_INVESTIGATION_ATTEMPTS,
 )
 from backend.investigations import (
     InvestigationService,
@@ -50,7 +51,7 @@ def mi_case() -> ClinicalCase:
                 },
             ],
             "risk_factors": ["smoking", "hypertension", "high cholesterol"],
-            "exam_findings": ["diaphoretic", "anxious"],
+            "exam_findings": {"General": ["diaphoretic", "anxious"]},
             "outcome": {
                 "if_treated": "Rapid emergency treatment improves outcomes.",
                 "if_untreated": "Ongoing ischemia can lead to instability.",
@@ -90,7 +91,7 @@ def non_cardiac_case() -> ClinicalCase:
                 },
             ],
             "risk_factors": ["recent sports activity"],
-            "exam_findings": ["lateral ankle tenderness", "mild swelling"],
+            "exam_findings": {"Musculoskeletal": ["lateral ankle tenderness", "mild swelling"]},
             "outcome": {
                 "if_treated": "Pain improves with rest, ice, compression, and elevation.",
                 "if_untreated": "Pain and swelling may persist longer.",
@@ -131,7 +132,7 @@ def pneumonia_case() -> ClinicalCase:
                 },
             ],
             "risk_factors": ["COPD", "older age"],
-            "exam_findings": ["crackles at the right lung base", "mild increased work of breathing"],
+            "exam_findings": {"Respiratory": ["crackles at the right lung base", "mild increased work of breathing"]},
             "outcome": {
                 "if_treated": "Respiratory symptoms improve with appropriate care.",
                 "if_untreated": "Breathing may worsen and oxygen levels may fall.",
@@ -171,7 +172,7 @@ def pulmonary_embolism_case() -> ClinicalCase:
                 },
             ],
             "risk_factors": ["recent surgery", "immobility"],
-            "exam_findings": ["tachypnea", "left calf tenderness"],
+            "exam_findings": {"General": ["tachypnea"], "Peripheral Vascular": ["left calf tenderness"]},
             "outcome": {
                 "if_treated": "Anticoagulation and supportive care reduce risk.",
                 "if_untreated": "Clot burden may worsen and cause instability.",
@@ -326,7 +327,7 @@ def test_ecg_uses_deterministic_visual_path_without_generic_generator() -> None:
     result = InvestigationService(generic_generator=fake).get_result(mi_case(), "EKG")
 
     assert result.visual_payload is not None
-    assert result.visual_payload.type == "svg"
+    assert result.visual_payload.type in ("svg", "image")
     assert fake.calls == []
 
 
@@ -402,11 +403,11 @@ def test_generic_investigation_generation_failure_returns_safe_unavailable_resul
 
     result = InvestigationService(generic_generator=fake).get_result(
         pneumonia_case(),
-        "chest x-ray",
+        "urinalysis",
     )
 
     assert fake.calls
-    assert result.investigation == "chest x-ray"
+    assert result.investigation == "urinalysis"
     assert result.status == "unavailable"
     assert result.summary == "That test is not available yet"
     assert "pneumonia" not in result.model_dump_json().lower()
@@ -417,10 +418,12 @@ def test_troponin_result_is_elevated_for_mi_like_case() -> None:
 
     assert result.investigation == "Troponin"
     assert result.status == "available"
-    assert result.structured_result["test"] == "high-sensitivity troponin I"
-    assert result.structured_result["value"] > 0.04
-    assert result.structured_result["reference_range"] == "<0.04 ng/mL"
-    assert result.structured_result["flag"] == "high"
+    assert result.structured_result["test"] == "Troponin"
+    row = result.structured_result["values"][0]
+    assert row["name"] == "high-sensitivity troponin I"
+    assert row["value"] > 0.04
+    assert row["reference_range"] == "<0.04 ng/mL"
+    assert row["flag"] == "high"
     assert result.visual_payload is None
 
 
@@ -452,6 +455,12 @@ def test_generic_investigation_result_does_not_reveal_diagnosis_directly() -> No
 class RevealingThenSafeInvestigationAgent(GenericInvestigationAgent):
     def __init__(self) -> None:
         self.calls = 0
+
+    def _reason(self, *_: object, **__: object) -> str:
+        return ""
+
+    def _validate_pattern(self, *_: object, **__: object) -> list[str]:
+        return []
 
     def parse_response(self, **_: object) -> InvestigationResult:
         self.calls += 1
@@ -485,48 +494,64 @@ class AlwaysInvalidInvestigationAgent(GenericInvestigationAgent):
     def __init__(self) -> None:
         self.calls = 0
 
+    def _reason(self, *_: object, **__: object) -> str:
+        return ""
+
+    def _validate_pattern(self, *_: object, **__: object) -> list[str]:
+        return []
+
     def parse_response(self, **_: object) -> InvestigationResult:
         self.calls += 1
         raise ValueError("invalid JSON")
 
 
-def test_generic_investigation_fails_after_two_invalid_json_attempts() -> None:
+def test_generic_investigation_fails_after_max_invalid_json_attempts() -> None:
     agent = AlwaysInvalidInvestigationAgent()
 
     with pytest.raises(InvestigationGenerationError):
-        agent.generate(pneumonia_case(), "chest x-ray")
+        agent.generate(pneumonia_case(), "complete blood count")
 
-    assert agent.calls == 2
+    assert agent.calls == MAX_INVESTIGATION_ATTEMPTS
 
 
 def test_troponin_result_is_normal_for_non_cardiac_case() -> None:
     result = InvestigationService().get_result(non_cardiac_case(), "troponin")
 
     assert result.status == "available"
-    assert result.structured_result["value"] == 0.01
-    assert result.structured_result["flag"] == "normal"
-    assert "within the reference range" in result.structured_result["interpretation_hint"]
+    row = result.structured_result["values"][0]
+    assert row["value"] == 0.01
+    assert "flag" not in row
+    assert "normal limits" in result.summary
 
 
-def test_ecg_visual_payload_contains_svg_and_all_leads() -> None:
-    result = InvestigationService().get_result(mi_case(), "EKG")
+def test_ecg_visual_payload_contains_svg_and_all_leads(monkeypatch) -> None:
+    from backend import ecg_service as ecg_service_mod
+    from backend.ecg_service import ECGService
+    from backend.ptbxl_service import PTBXLService
+    from schemas.ecg import ALL_LEADS, ECGParameters, LeadFindings
 
-    assert result.visual_payload is not None
-    assert result.visual_payload.type == "svg"
-    assert result.visual_payload.svg.startswith("<svg")
-    assert set(result.visual_payload.leads) == {
-        "I",
-        "II",
-        "III",
-        "aVR",
-        "aVL",
-        "aVF",
-        "V1",
-        "V2",
-        "V3",
-        "V4",
-        "V5",
-        "V6",
-    }
-    for lead in result.visual_payload.leads:
-        assert f">{lead}<" in result.visual_payload.svg
+    class StubECGParameterAgent:
+        def generate(self, diagnosis: str, *, heart_rate: int | None = None) -> ECGParameters:
+            return ECGParameters(
+                heart_rate=heart_rate or 72,
+                rhythm="sinus",
+                leads={lead: LeadFindings() for lead in ALL_LEADS},
+            )
+
+    # Force the legacy SVG fallback path even if PTB-XL is installed locally.
+    from pathlib import Path
+    monkeypatch.setattr(
+        ecg_service_mod,
+        "get_ptbxl_service",
+        lambda: PTBXLService(base_dir=Path("/nonexistent-ptbxl")),
+    )
+
+    service = ECGService(agent=StubECGParameterAgent())
+    visual_payload = service.build_visual_payload("test diagnosis", heart_rate=72)
+
+    assert visual_payload is not None
+    assert visual_payload.type == "svg"
+    assert visual_payload.svg.startswith("<svg")
+    assert set(visual_payload.leads) == set(ALL_LEADS)
+    for lead in visual_payload.leads:
+        assert f">{lead}<" in visual_payload.svg

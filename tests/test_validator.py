@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from agents.validator import (
-    CORRECTION_SYSTEM_PROMPT,
     MAX_VALIDATOR_ATTEMPTS,
     ValidatorAgent,
     allowed_correction_fields,
 )
+from agents.prompt_loader import load
 from schemas.clinical_case import ClinicalCase
 from tests.test_clinical_case_schema import sample_case
 
@@ -54,9 +54,10 @@ def build_case() -> ClinicalCase:
 
 
 def test_correction_prompt_limits_rewrites() -> None:
-    assert "only modify fields related to the validation failure" in CORRECTION_SYSTEM_PROMPT
-    assert "do not rewrite the entire case" in CORRECTION_SYSTEM_PROMPT
-    assert "preserve original structure and intent" in CORRECTION_SYSTEM_PROMPT
+    prompt = load("validator", "correction_system")
+    assert "only modify fields related to the validation failure" in prompt
+    assert "do not rewrite the entire case" in prompt
+    assert "preserve original structure and intent" in prompt
 
 
 def test_allowed_correction_fields_maps_vital_failures_to_vitals_only() -> None:

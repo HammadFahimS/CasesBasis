@@ -11,6 +11,7 @@ import falkordb
 if TYPE_CHECKING:
     from schemas.clinical_case import ClinicalCase
     from schemas.investigation import InvestigationResult
+    from schemas.physical_exam import ExamFinding
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +30,24 @@ Rules:
 """.strip()
 
 
+_llm_client: Any = None
+_llm_model: str = ""
+
+
+def _get_llm_client() -> tuple[Any, str]:
+    global _llm_client, _llm_model
+    if _llm_client is None:
+        from agents.base import build_llm_client, get_llm_provider, resolve_model
+        provider = get_llm_provider()
+        _llm_client = build_llm_client(provider)
+        _llm_model = resolve_model(provider, None)
+    return _llm_client, _llm_model
+
+
 def _extract_entities(text: str) -> dict[str, Any]:
     """Extract clinical entities using the configured LLM provider."""
     try:
-        from agents.base import build_llm_client, get_llm_provider, resolve_model
-        provider = get_llm_provider()
-        client = build_llm_client(provider)
-        model = resolve_model(provider, None)
+        client, model = _get_llm_client()
         raw = client.text_response(
             model=model,
             system_prompt=_EXTRACT_SYSTEM,
@@ -88,8 +100,14 @@ class ClinicalKnowledgeGraph:
     def enabled(self) -> bool:
         return self._enabled
 
+    def _maybe_reconnect(self) -> None:
+        """Try to reconnect to FalkorDB if it wasn't available at startup."""
+        if not self._enabled:
+            self._connect()
+
     def _graph(self, session_id: str) -> falkordb.Graph:
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("FalkorDB is not connected")
         return self._db.select_graph(f"session:{session_id}")
 
     # ── Internal write (runs in background thread) ─────────────────────────────
@@ -140,6 +158,7 @@ class ClinicalKnowledgeGraph:
     # ── Public API (sync, non-blocking) ───────────────────────────────────────
 
     def init_session(self, session_id: str, case: ClinicalCase) -> None:
+        self._maybe_reconnect()
         if not self._enabled:
             return
         self._bg(self._init_session, session_id, case)
@@ -163,6 +182,7 @@ class ClinicalKnowledgeGraph:
             logger.warning("_init_session failed: %s", exc)
 
     def add_turn(self, session_id: str, question: str, answer: str) -> None:
+        self._maybe_reconnect()
         if not self._enabled:
             return
         self._bg(self._add_turn, session_id, question, answer)
@@ -173,12 +193,25 @@ class ClinicalKnowledgeGraph:
         self._write_entities(session_id, extraction)
 
     def add_investigation(self, session_id: str, result: InvestigationResult) -> None:
+        self._maybe_reconnect()
         if not self._enabled:
             return
         self._bg(self._add_investigation, session_id, result)
 
     def _add_investigation(self, session_id: str, result: InvestigationResult) -> None:
         text = f"Investigation: {result.investigation}. Result: {result.summary or ''}"
+        extraction = _extract_entities(text)
+        self._write_entities(session_id, extraction)
+
+    def add_examination(self, session_id: str, finding: ExamFinding) -> None:
+        self._maybe_reconnect()
+        if not self._enabled:
+            return
+        self._bg(self._add_examination, session_id, finding)
+
+    def _add_examination(self, session_id: str, finding: ExamFinding) -> None:
+        findings_text = ". ".join(finding.findings)
+        text = f"Physical examination — {finding.system}: {findings_text}. Summary: {finding.summary}"
         extraction = _extract_entities(text)
         self._write_entities(session_id, extraction)
 
@@ -190,6 +223,7 @@ class ClinicalKnowledgeGraph:
         Groups entities by type into a compact paragraph the LLM can use as
         context. Returns an empty string when the graph is unavailable or empty.
         """
+        self._maybe_reconnect()
         if not self._enabled:
             return ""
         try:
@@ -237,6 +271,7 @@ class ClinicalKnowledgeGraph:
 
     def get_entity_names(self, session_id: str) -> list[str]:
         """Return a flat list of all non-negated entity names for this session."""
+        self._maybe_reconnect()
         if not self._enabled:
             return []
         try:
@@ -254,6 +289,7 @@ class ClinicalKnowledgeGraph:
     # ── Cleanup ────────────────────────────────────────────────────────────────
 
     def delete_session(self, session_id: str) -> None:
+        self._maybe_reconnect()
         if not self._enabled:
             return
         try:

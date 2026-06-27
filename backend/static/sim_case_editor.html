@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CasesBasis — Case Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink-950:#0a0f17; --ink-900:#111824; --ink-800:#1a2332;
+    --ink-700:#273347; --ink-600:#3b4a63; --ink-500:#5b6b85;
+    --ink-400:#8696b0; --ink-300:#b3becf; --ink-200:#d6dde7;
+    --ink-100:#e9edf2; --ink-50:#f4f6f9; --paper:#fbfcfd;
+    --teal-800: oklch(0.40 0.09 195); --teal-700: oklch(0.45 0.10 195);
+    --teal-600: oklch(0.55 0.10 195); --teal-500: oklch(0.65 0.10 195);
+    --teal-100: oklch(0.93 0.04 195); --teal-50: oklch(0.97 0.02 195);
+    --gold-700:#9a6b00; --gold-bg:#fdf6e3; --gold-bd:#ecd9a6;
+    --critical:#c43a2c; --critical-bg:#fdecea;
+    --amber:#b76e00; --purple:#6d4dca; --grey:#7c8aa0;
+    --shadow-sm:0 1px 2px rgba(15,23,42,.05);
+    --shadow-md:0 2px 4px rgba(15,23,42,.05),0 4px 12px rgba(15,23,42,.05);
+    --shadow-lg:0 12px 32px rgba(15,23,42,.12),0 2px 4px rgba(15,23,42,.05);
+    /* trigger-kind colours */
+    --k-action:#0e8a9e; --k-time:#b76e00; --k-vitals:#7a4dd1; --k-inaction:#7c8aa0; --k-manual:#5b6b85; --k-error:#c43a2c;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{font-family:'Inter',system-ui,sans-serif;font-size:13.5px;line-height:1.5;color:var(--ink-900);background:var(--ink-50);-webkit-font-smoothing:antialiased;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;}
+
+  /* editor top bar (own, slim) */
+  .ed-top{display:flex;align-items:center;gap:14px;padding:0 18px;height:56px;background:var(--paper);border-bottom:1px solid var(--ink-100);position:sticky;top:0;z-index:30;}
+  .ed-back{display:inline-flex;align-items:center;gap:6px;color:var(--ink-500);text-decoration:none;font-weight:600;font-size:13px;padding:7px 10px;border-radius:8px;}
+  .ed-back:hover{background:var(--ink-50);color:var(--ink-800);}
+  .ed-title{font-weight:700;font-size:15px;letter-spacing:-.01em;}
+  .ed-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--gold-bg);color:var(--gold-700);border:1px solid var(--gold-bd);}
+  .ed-spacer{flex:1;}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;font-family:inherit;padding:8px 14px;border-radius:9px;cursor:pointer;border:1.5px solid transparent;transition:all .14s;text-decoration:none;}
+  .btn-pri{background:var(--teal-700);color:#fff;}
+  .btn-pri:hover{background:var(--teal-800);}
+  .btn-pri:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-ghost{background:#fff;color:var(--ink-700);border-color:var(--ink-200);}
+  .btn-ghost:hover{border-color:var(--ink-300);background:var(--ink-50);}
+
+  /* tabs */
+  .tabs{display:flex;gap:2px;padding:0 18px;background:var(--paper);border-bottom:1px solid var(--ink-100);position:sticky;top:56px;z-index:20;overflow-x:auto;}
+  .tab{padding:11px 14px;font-size:13px;font-weight:600;color:var(--ink-500);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;}
+  .tab:hover{color:var(--ink-800);}
+  .tab.on{color:var(--teal-700);border-bottom-color:var(--teal-700);}
+
+  .pane{display:none;}
+  .pane.on{display:block;}
+
+  /* forms */
+  .form-wrap{max-width:880px;margin:0 auto;padding:26px 24px 80px;}
+  .sec{background:var(--paper);border:1px solid var(--ink-100);border-radius:14px;box-shadow:var(--shadow-sm);padding:20px 22px;margin-bottom:18px;}
+  .sec h3{margin:0 0 14px;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-400);}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+  .f{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
+  .f.full{grid-column:1/-1;}
+  .f label{font-size:11.5px;font-weight:600;color:var(--ink-600);}
+  .f .hint{font-size:11px;color:var(--ink-400);font-weight:400;}
+  input,select,textarea{font-family:inherit;font-size:13px;color:var(--ink-900);background:#fff;border:1.5px solid var(--ink-200);border-radius:9px;padding:8px 10px;width:100%;transition:border-color .12s;}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--teal-500);}
+  textarea{resize:vertical;min-height:64px;line-height:1.5;}
+  input:disabled,select:disabled,textarea:disabled{background:var(--ink-50);color:var(--ink-500);cursor:not-allowed;}
+  .chk{display:flex;align-items:center;gap:8px;}
+  .chk input{width:auto;}
+  .list-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:7px;}
+  .list-row input,.list-row textarea{flex:1;}
+  .mini{display:inline-flex;align-items:center;justify-content:center;width:30px;height:34px;flex:none;border-radius:8px;border:1px solid var(--ink-200);background:#fff;color:var(--ink-500);cursor:pointer;}
+  .mini:hover{border-color:var(--critical);color:var(--critical);background:var(--critical-bg);}
+  .addbtn{font-size:12px;font-weight:600;color:var(--teal-700);background:var(--teal-50);border:1px dashed var(--teal-500);border-radius:8px;padding:6px 11px;cursor:pointer;margin-top:4px;}
+  .addbtn:hover{background:var(--teal-100);}
+  .obj-card{border:1px solid var(--ink-100);border-radius:11px;padding:14px;margin-bottom:12px;background:#fff;}
+  .obj-card .obj-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .obj-card .obj-head .t{font-weight:700;font-size:13px;color:var(--ink-800);}
+
+  /* graph */
+  .graph-layout{display:grid;grid-template-columns:1fr 340px;height:calc(100vh - 110px);}
+  .canvas-wrap{position:relative;overflow:auto;background:
+    radial-gradient(circle, var(--ink-100) 1px, transparent 1px) 0 0/22px 22px,
+    var(--ink-50);}
+  .canvas-toolbar{position:absolute;top:12px;left:12px;z-index:5;display:flex;gap:8px;}
+  .ctool{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;background:var(--paper);border:1px solid var(--ink-200);border-radius:8px;padding:7px 11px;cursor:pointer;box-shadow:var(--shadow-sm);color:var(--ink-700);}
+  .ctool:hover{border-color:var(--teal-500);color:var(--teal-700);}
+  .ctool:disabled{opacity:.5;cursor:not-allowed;}
+  .connect-hint{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:6;background:var(--teal-700);color:#fff;font-size:12px;font-weight:600;padding:7px 14px;border-radius:999px;box-shadow:var(--shadow-md);display:none;}
+  svg.canvas{display:block;}
+  .node{cursor:grab;}
+  .node.dragging{cursor:grabbing;}
+  .node-card{fill:var(--paper);stroke:var(--ink-200);stroke-width:1.5;}
+  .node.sel .node-card{stroke:var(--teal-600);stroke-width:2.5;}
+  .node-stripe{fill:var(--teal-500);}
+  .node-title{font:600 12.5px Inter,sans-serif;fill:var(--ink-900);}
+  .node-status{font:400 10.5px Inter,sans-serif;fill:var(--ink-500);}
+  .vbadge{font:600 9.5px 'JetBrains Mono',monospace;fill:var(--ink-600);}
+  .vbadge-bg{fill:var(--ink-50);stroke:var(--ink-100);}
+  .tag{font:700 8.5px Inter,sans-serif;}
+  .conn-handle{fill:var(--teal-600);cursor:crosshair;}
+  .conn-handle:hover{fill:var(--teal-800);}
+  .edge-path{fill:none;stroke-width:2;}
+  .edge-label-bg{fill:var(--paper);stroke:var(--ink-100);stroke-width:1;}
+  .edge-label{font:600 10px Inter,sans-serif;}
+
+  /* inspector */
+  .inspector{border-left:1px solid var(--ink-100);background:var(--paper);overflow-y:auto;padding:18px 18px 60px;}
+  .insp-empty{color:var(--ink-400);text-align:center;padding:60px 12px;font-size:13px;}
+  .insp-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .insp-head .k{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--teal-700);}
+  .vit-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+
+  .ro-banner{background:var(--gold-bg);border:1px solid var(--gold-bd);color:var(--gold-700);font-size:12.5px;font-weight:600;padding:9px 16px;text-align:center;}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink-900);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;transition:opacity .2s;z-index:2000;max-width:520px;}
+  .toast.show{opacity:1;}
+  .toast.err{background:var(--critical);}
+</style>
+</head>
+<body>
+
+<div class="ed-top">
+  <a class="ed-back" href="/crud-simulations">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+    Cases
+  </a>
+  <span class="ed-title" id="edTitle">Loading…</span>
+  <span class="ed-badge" id="edGold" style="display:none">★ Gold — read-only</span>
+  <div class="ed-spacer"></div>
+  <button class="btn btn-ghost" id="dupBtn" style="display:none">Duplicate</button>
+  <button class="btn btn-pri" id="saveBtn">Save</button>
+</div>
+<div class="ro-banner" id="roBanner" style="display:none">This is the protected gold case. Make a copy to edit it freely.</div>
+
+<div class="tabs" id="tabs">
+  <div class="tab on" data-tab="overview">Overview</div>
+  <div class="tab" data-tab="graph">State graph</div>
+  <div class="tab" data-tab="history">History</div>
+  <div class="tab" data-tab="exam">Exam</div>
+  <div class="tab" data-tab="actors">Actors</div>
+  <div class="tab" data-tab="investigations">Investigations</div>
+  <div class="tab" data-tab="debrief">Debrief</div>
+</div>
+
+<div class="pane on" id="pane-overview"></div>
+<div class="pane" id="pane-graph">
+  <div class="graph-layout">
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="canvas-toolbar">
+        <button class="ctool" id="addStateBtn">＋ State</button>
+        <button class="ctool" id="relayoutBtn">⤡ Auto-layout</button>
+      </div>
+      <div class="connect-hint" id="connectHint">Click a target state to connect — or press Esc to cancel</div>
+      <svg class="canvas" id="svg"></svg>
+    </div>
+    <div class="inspector" id="inspector"><div class="insp-empty">Select a state or transition to edit it.<br><br>Drag states to arrange. Use the ◆ handle to draw a transition.</div></div>
+  </div>
+</div>
+<div class="pane" id="pane-history"></div>
+<div class="pane" id="pane-exam"></div>
+<div class="pane" id="pane-actors"></div>
+<div class="pane" id="pane-investigations"></div>
+<div class="pane" id="pane-debrief"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ───────────────────────── state ─────────────────────────
+let D = null;          // the SimulatedCase document
+let L = {};            // layout {state_id:{x,y}}
+let RO = false;        // read-only (gold)
+let CID = 'new';       // case id or 'new'
+let sel = null;        // {type:'state'|'edge', stateId, edgeIdx}
+let connectFrom = null;
+const NODE_W = 212, NODE_H = 96;
+// Literal hex — SVG presentation attributes don't resolve CSS var().
+const KIND_COLORS = {action:'#0e8a9e', time:'#b76e00', vitals:'#7a4dd1', inaction:'#7c8aa0', manual:'#5b6b85'};
+const ERR = '#c43a2c';
+const C = {teal700:'#0c7382', teal600:'#0e8a9e', teal500:'#3aa7ba', ink400:'#8696b0', ink100:'#e9edf2'};
+const PROVIDERS = ['patient','ems','family','nurse','chart','other'];
+const REVEALS = ['on_ask','on_arrival','on_trigger'];
+const CATEGORIES = ['lab','imaging','ecg','bedside','other'];
+const KINDS = ['action','time','vitals','inaction','manual'];
+const VITAL_PARAMS = ['heart_rate','respiratory_rate','oxygen_saturation','temperature_c','glucose'];
+const OPS = ['<','<=','>','>=','==','!='];
+
+function toast(msg, isErr){ const t=document.getElementById('toast'); t.textContent=msg; t.className='toast show'+(isErr?' err':''); clearTimeout(t._t); t._t=setTimeout(()=>t.className='toast',3400); }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function uid(prefix){ let n=1,id; const ex=new Set(D.states.map(s=>s.id)); do{id=prefix+'_'+n;n++;}while(ex.has(id)); return id; }
+
+// path get/set into D
+function getPath(obj,path){ return path.split('.').reduce((o,k)=>o==null?o:o[k], obj); }
+function setPath(obj,path,val){ const ks=path.split('.'); const last=ks.pop(); let o=obj; for(const k of ks){ o=o[k]; } o[last]=val; }
+
+// ───────────────────────── load / save ─────────────────────────
+function blankCase(){
+  return {
+    id:'new_case', schema_version:1,
+    meta:{title:'Untitled case',keywords:[],summary:'',specialty:null,setting:'Emergency Department',target_level:'any',difficulty:'medium',estimated_minutes:null,author:null,institution:null,source:null,version:1},
+    objectives:{overall_goal:'',medical:[],nursing:[],crm:[],epas:[]},
+    patient:{name:null,age:50,gender:'male',weight_kg:null,allergies:[],medications:[],past_medical_history:[],social_history:[],persona:''},
+    presentation:{chief_complaint:'',opening_vignette:'',triage_note:[],initial_vitals:{rhythm:'Sinus',heart_rate:80,blood_pressure:'120/80',respiratory_rate:16,oxygen_saturation:98,temperature_c:37.0,glucose:null,gcs:'15',fio2:'room air',extra:{}},on_monitor:false},
+    history:[],exam:[],actors:[],investigations:[],
+    initial_state:'baseline',
+    states:[{id:'baseline',name:'Baseline',order:1,vitals:{rhythm:'Sinus',heart_rate:80,blood_pressure:'120/80',respiratory_rate:16,oxygen_saturation:98,temperature_c:37.0,glucose:null,gcs:'15',fio2:'room air',extra:{}},patient_status:'',expected_actions:[],modifiers:[],cues:[],transitions:[],facilitator_notes:'',is_terminal:false}],
+    debrief:{summary:'',teaching_points:[],common_errors:[],discussion:[],references:[]}
+  };
+}
+
+async function load(){
+  const params=new URLSearchParams(location.search);
+  CID=params.get('id')||'new';
+  if(CID==='new'){
+    D=blankCase(); L={}; RO=false; CID='new';
+    document.getElementById('edTitle').textContent='New case';
+  } else {
+    let res;
+    try{ res=await fetch('/api/simulated-cases/'+encodeURIComponent(CID)); }catch(e){ toast('Failed to load case',true); return; }
+    if(res.status===401){ location.href='/'; return; }
+    if(!res.ok){ toast('Case not found',true); return; }
+    const data=await res.json();
+    D=data.case; L=data.layout||{}; RO=data.is_gold; CID=data.id;
+    document.getElementById('edTitle').textContent=D.meta.title;
+  }
+  if(RO){
+    document.getElementById('edGold').style.display='';
+    document.getElementById('roBanner').style.display='';
+    document.getElementById('dupBtn').style.display='';
+    document.getElementById('saveBtn').style.display='none';
+  }
+  renderAll();
+}
+
+async function save(){
+  if(RO) return;
+  const btn=document.getElementById('saveBtn'); btn.disabled=true; btn.textContent='Saving…';
+  const body=JSON.stringify({case:D, layout:L});
+  let res;
+  try{
+    if(CID==='new'){
+      res=await fetch('/api/simulated-cases',{method:'POST',headers:{'Content-Type':'application/json'},body});
+    } else {
+      res=await fetch('/api/simulated-cases/'+encodeURIComponent(CID),{method:'PUT',headers:{'Content-Type':'application/json'},body});
+    }
+  }catch(e){ btn.disabled=false; btn.textContent='Save'; toast('Network error',true); return; }
+  btn.disabled=false; btn.textContent='Save';
+  if(res.status===422){ const d=await res.json(); toast('Validation failed: '+shortErr(d.detail),true); return; }
+  if(!res.ok){ const d=await res.json().catch(()=>({})); toast(d.detail||'Save failed',true); return; }
+  const saved=await res.json();
+  toast('Saved.');
+  if(CID==='new'){ history.replaceState(null,'','/crud-simulations/edit?id='+encodeURIComponent(saved.id)); CID=saved.id; }
+  document.getElementById('edTitle').textContent=D.meta.title;
+}
+function shortErr(detail){ const s=String(detail); const m=s.match(/\n([^\n]+)\n\s*([^\n]+)/); return (m?m[1]+' — '+m[2]:s).slice(0,180); }
+
+async function duplicate(){
+  try{
+    const res=await fetch('/api/simulated-cases/'+encodeURIComponent(CID)+'/duplicate',{method:'POST'});
+    if(!res.ok) throw 0;
+    const copy=await res.json();
+    location.href='/crud-simulations/edit?id='+encodeURIComponent(copy.id);
+  }catch(e){ toast('Could not duplicate',true); }
+}
+
+// ───────────────────────── form builders ─────────────────────────
+function field(label,path,opts={}){
+  const v=getPath(D,path);
+  const type=opts.type||'text';
+  const dis=RO?'disabled':'';
+  const hint=opts.hint?`<span class="hint">${esc(opts.hint)}</span>`:'';
+  let input;
+  if(type==='textarea') input=`<textarea data-path="${path}" ${dis} rows="${opts.rows||3}">${esc(v)}</textarea>`;
+  else if(type==='select'){ input=`<select data-path="${path}" ${dis}>${opts.options.map(o=>`<option value="${esc(o)}" ${String(v)===String(o)?'selected':''}>${esc(o)}</option>`).join('')}</select>`; }
+  else if(type==='checkbox') return `<div class="f"><label class="chk"><input type="checkbox" data-path="${path}" data-type="bool" ${v?'checked':''} ${dis}> ${esc(label)}</label></div>`;
+  else if(type==='csv'){ const val=Array.isArray(v)?v.join(', '):''; input=`<input data-path="${path}" data-type="csv" value="${esc(val)}" ${dis} placeholder="comma, separated">`; }
+  else input=`<input data-path="${path}" ${opts.dtype?`data-type="${opts.dtype}"`:''} value="${esc(v==null?'':v)}" ${dis} placeholder="${esc(opts.ph||'')}">`;
+  return `<div class="f ${opts.full?'full':''}"><label>${esc(label)} ${hint}</label>${input}</div>`;
+}
+// editable list of strings at array path
+function strList(label,path,opts={}){
+  const arr=getPath(D,path)||[];
+  const dis=RO?'disabled':'';
+  const rows=arr.map((s,i)=>`<div class="list-row"><textarea data-path="${path}.${i}" rows="${opts.rows||1}" ${dis}>${esc(s)}</textarea>${RO?'':`<button class="mini" data-act="arr-del" data-path="${path}" data-idx="${i}" title="Remove">✕</button>`}</div>`).join('');
+  const add=RO?'':`<button class="addbtn" data-act="arr-add" data-path="${path}" data-kind="str">+ Add ${esc(opts.item||'item')}</button>`;
+  return `<div class="f full"><label>${esc(label)}</label>${rows||'<div class="hint" style="color:var(--ink-400)">None yet.</div>'}${add}</div>`;
+}
+
+function vitalsFields(prefix){
+  return `<div class="vit-grid">
+    ${field('Rhythm',prefix+'.rhythm')}
+    ${field('HR',prefix+'.heart_rate',{dtype:'int'})}
+    ${field('BP',prefix+'.blood_pressure',{ph:'120/80'})}
+    ${field('RR',prefix+'.respiratory_rate',{dtype:'int'})}
+    ${field('SpO₂',prefix+'.oxygen_saturation',{dtype:'int'})}
+    ${field('Temp °C',prefix+'.temperature_c',{dtype:'num'})}
+    ${field('GCS',prefix+'.gcs')}
+    ${field('FiO₂ / O₂',prefix+'.fio2')}
+  </div>`;
+}
+
+// ───────────────────────── render: tabs ─────────────────────────
+function renderAll(){ renderOverview(); renderHistory(); renderExam(); renderActors(); renderInvestigations(); renderDebrief(); renderGraph(); }
+
+function renderOverview(){
+  document.getElementById('pane-overview').innerHTML=`<div class="form-wrap">
+    <div class="sec"><h3>Case</h3>
+      <div class="grid">
+        ${field('Title','meta.title',{full:true})}
+        ${field('Specialty','meta.specialty')}
+        ${field('Setting','meta.setting')}
+        ${field('Difficulty','meta.difficulty',{type:'select',options:['easy','medium','hard']})}
+        ${field('Target level','meta.target_level',{type:'select',options:['junior','senior','staff','any']})}
+        ${field('Est. minutes','meta.estimated_minutes',{dtype:'int'})}
+        ${field('Author','meta.author')}
+        ${field('Institution','meta.institution')}
+        ${field('Source','meta.source',{full:true})}
+        ${field('Keywords','meta.keywords',{type:'csv',full:true})}
+        ${field('Summary','meta.summary',{type:'textarea',full:true,rows:3})}
+      </div>
+    </div>
+    <div class="sec"><h3>Objectives</h3>
+      ${field('Overall goal','objectives.overall_goal',{type:'textarea',full:true,rows:2})}
+      ${strList('Medical objectives','objectives.medical',{item:'objective',rows:2})}
+      ${strList('Nursing objectives','objectives.nursing',{item:'objective',rows:2})}
+      ${strList('CRM objectives','objectives.crm',{item:'objective',rows:2})}
+      ${field('EPAs','objectives.epas',{type:'csv',full:true})}
+    </div>
+    <div class="sec"><h3>Patient</h3>
+      <div class="grid-3">
+        ${field('Name','patient.name')}
+        ${field('Age','patient.age',{dtype:'int'})}
+        ${field('Gender','patient.gender',{type:'select',options:['male','female']})}
+        ${field('Weight (kg)','patient.weight_kg',{dtype:'num'})}
+      </div>
+      ${field('Allergies','patient.allergies',{type:'csv',full:true})}
+      ${field('Medications','patient.medications',{type:'csv',full:true})}
+      ${field('Past medical history','patient.past_medical_history',{type:'csv',full:true})}
+      ${field('Social history','patient.social_history',{type:'csv',full:true})}
+      ${field('Persona (LLM patient voice)','patient.persona',{type:'textarea',full:true,rows:4})}
+    </div>
+    <div class="sec"><h3>Presentation</h3>
+      ${field('Chief complaint','presentation.chief_complaint',{full:true})}
+      ${field('Opening vignette (read at start)','presentation.opening_vignette',{type:'textarea',full:true,rows:3})}
+      ${strList('Triage note','presentation.triage_note',{item:'line',rows:1})}
+      ${field('On monitor at start','presentation.on_monitor',{type:'checkbox'})}
+      <label style="font-size:11.5px;font-weight:600;color:var(--ink-600)">Initial vitals</label>
+      ${vitalsFields('presentation.initial_vitals')}
+    </div>
+  </div>`;
+}
+
+function objList(path, title, render, factory){
+  const arr=getPath(D,path)||[];
+  const items=arr.map((it,i)=>`<div class="obj-card">
+      <div class="obj-head"><span class="t">${esc(render.title(it,i))}</span>${RO?'':`<button class="mini" data-act="arr-del" data-path="${path}" data-idx="${i}">✕</button>`}</div>
+      ${render.body(it,i,path)}
+    </div>`).join('');
+  const add=RO?'':`<button class="addbtn" data-act="obj-add" data-path="${path}" data-factory="${factory}">+ Add ${esc(title)}</button>`;
+  return `${items||'<div class="hint" style="color:var(--ink-400);margin-bottom:8px">None yet.</div>'}${add}`;
+}
+
+function renderHistory(){
+  document.getElementById('pane-history').innerHTML=`<div class="form-wrap"><div class="sec"><h3>History beats (gated information)</h3>
+    ${objList('history','history beat',{
+      title:(it)=>it.label||it.id||'Beat',
+      body:(it,i,p)=>`<div class="grid">
+        ${field('ID',`${p}.${i}.id`)}
+        ${field('Label',`${p}.${i}.label`)}
+        ${field('Provider',`${p}.${i}.provider`,{type:'select',options:PROVIDERS})}
+        ${field('Reveal',`${p}.${i}.reveal`,{type:'select',options:REVEALS})}
+        ${field('Available after (s)',`${p}.${i}.available_after_seconds`,{dtype:'int',hint:'optional'})}
+        ${field('Content',`${p}.${i}.content`,{type:'textarea',full:true,rows:3})}
+      </div>`
+    },'history')}
+  </div></div>`;
+}
+
+function renderExam(){
+  document.getElementById('pane-exam').innerHTML=`<div class="form-wrap"><div class="sec"><h3>Physical exam findings</h3>
+    ${objList('exam','exam system',{
+      title:(it)=>it.system||'System',
+      body:(it,i,p)=>`${field('System',`${p}.${i}.system`)}
+        ${strList('Findings',`${p}.${i}.findings`,{item:'finding',rows:1})}
+        ${field('Abnormal',`${p}.${i}.abnormal`,{type:'checkbox'})}
+        ${field('Dynamic note',`${p}.${i}.note`,{type:'textarea',full:true,rows:2,hint:'cues seen live'})}`
+    },'exam')}
+  </div></div>`;
+}
+
+function renderActors(){
+  document.getElementById('pane-actors').innerHTML=`<div class="form-wrap"><div class="sec"><h3>Sim actors (LLM personas)</h3>
+    ${objList('actors','actor',{
+      title:(it)=>it.role||it.id||'Actor',
+      body:(it,i,p)=>`<div class="grid">
+        ${field('ID',`${p}.${i}.id`)}
+        ${field('Role',`${p}.${i}.role`)}
+        ${field('Voice / tone',`${p}.${i}.voice`,{full:true})}
+        ${field('Persona',`${p}.${i}.persona`,{type:'textarea',full:true,rows:2})}
+      </div>${strList('Script lines',`${p}.${i}.script`,{item:'line',rows:2})}`
+    },'actor')}
+  </div></div>`;
+}
+
+function renderInvestigations(){
+  document.getElementById('pane-investigations').innerHTML=`<div class="form-wrap"><div class="sec"><h3>Investigations &amp; bedside tests</h3>
+    ${objList('investigations','investigation',{
+      title:(it)=>it.name||it.id||'Test',
+      body:(it,i,p)=>`<div class="grid">
+        ${field('ID',`${p}.${i}.id`)}
+        ${field('Name',`${p}.${i}.name`)}
+        ${field('Category',`${p}.${i}.category`,{type:'select',options:CATEGORIES})}
+        ${field('Available after (s)',`${p}.${i}.available_after_seconds`,{dtype:'int',hint:'optional'})}
+        ${field('Result',`${p}.${i}.result`,{type:'textarea',full:true,rows:2})}
+        ${field('Image ref',`${p}.${i}.image_ref`,{hint:'optional asset key'})}
+      </div>`
+    },'investigation')}
+  </div></div>`;
+}
+
+function renderDebrief(){
+  document.getElementById('pane-debrief').innerHTML=`<div class="form-wrap"><div class="sec"><h3>Debrief</h3>
+    ${field('Summary','debrief.summary',{type:'textarea',full:true,rows:3})}
+    ${strList('Teaching points','debrief.teaching_points',{item:'point',rows:2})}
+    ${strList('Common errors','debrief.common_errors',{item:'error',rows:1})}
+    ${strList('References','debrief.references',{item:'reference',rows:1})}
+    </div>
+    <div class="sec"><h3>Discussion (Q &amp; A)</h3>
+    ${objList('debrief.discussion','question',{
+      title:(it)=>it.question?it.question.slice(0,60):'Question',
+      body:(it,i,p)=>`${field('Question',`${p}.${i}.question`,{type:'textarea',full:true,rows:2})}${field('Answer',`${p}.${i}.answer`,{type:'textarea',full:true,rows:3})}`
+    },'discussion')}
+  </div></div>`;
+}
+
+// ───────────────────────── render: graph ─────────────────────────
+function nodePos(id){
+  if(L[id]) return L[id];
+  const auto=autoLayout(); return auto[id]||{x:80,y:80};
+}
+function autoLayout(){
+  const out={}; const states=[...D.states].sort((a,b)=>(a.order||0)-(b.order||0));
+  const side=new Set();
+  D.states.forEach(s=>s.transitions.forEach(t=>{ if(t.critical_error) side.add(t.to_state); }));
+  let row=0;
+  states.forEach(s=>{
+    if(side.has(s.id) && s.id!==D.initial_state){ out[s.id]={x:120+NODE_W+120, y:80+(Math.max(0,(s.order||1)-2))*(NODE_H+54)}; }
+    else { out[s.id]={x:120, y:80+row*(NODE_H+54)}; row++; }
+  });
+  return out;
+}
+function applyAutoLayout(){ L=autoLayout(); renderGraph(); }
+
+function renderGraph(){
+  const svg=document.getElementById('svg');
+  // canvas bounds
+  let maxX=0,maxY=0;
+  D.states.forEach(s=>{ const p=nodePos(s.id); maxX=Math.max(maxX,p.x+NODE_W); maxY=Math.max(maxY,p.y+NODE_H); });
+  const W=Math.max(maxX+160, document.getElementById('canvasWrap').clientWidth-2);
+  const H=Math.max(maxY+120, 560);
+  svg.setAttribute('width',W); svg.setAttribute('height',H);
+
+  let defs=`<defs>
+    ${KINDS.map(k=>`<marker id="arr-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="${KIND_COLORS[k]}"/></marker>`).join('')}
+    <marker id="arr-error" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="${ERR}"/></marker>
+  </defs>`;
+
+  // edges first (under nodes)
+  let edges='';
+  D.states.forEach(s=>{
+    const from=nodePos(s.id);
+    s.transitions.forEach((t,ti)=>{
+      const to=nodePos(t.to_state); if(!to) return;
+      const a={x:from.x+NODE_W, y:from.y+NODE_H/2};
+      const b={x:to.x, y:to.y+NODE_H/2};
+      // if target is left/above, route from bottom
+      let p1=a, p2=b;
+      if(to.x < from.x+20){ p1={x:from.x+NODE_W/2,y:from.y+NODE_H}; p2={x:to.x+NODE_W/2,y:to.y}; }
+      const self=s.id===t.to_state;
+      const col=t.critical_error?ERR:(KIND_COLORS[t.kind]||C.teal600);
+      const mark=t.critical_error?'arr-error':`arr-${t.kind}`;
+      const dash=t.kind==='manual'?'stroke-dasharray="5 4"':(t.critical_error?'stroke-dasharray="6 4"':'');
+      let dpath, mid;
+      if(self){ const cx=p1.x+50, cy=from.y-10; dpath=`M ${from.x+NODE_W-30} ${from.y} C ${cx+30} ${cy-30}, ${cx+60} ${from.y+30}, ${from.x+NODE_W} ${from.y+24}`; mid={x:cx+40,y:cy-6}; }
+      else { const dx=Math.abs(p2.x-p1.x); const c1={x:p1.x+Math.max(40,dx*0.5),y:p1.y}; const c2={x:p2.x-Math.max(40,dx*0.5),y:p2.y}; dpath=`M ${p1.x} ${p1.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${p2.x} ${p2.y}`; mid={x:(p1.x+p2.x)/2,y:(p1.y+p2.y)/2}; }
+      const isSel=sel&&sel.type==='edge'&&sel.stateId===s.id&&sel.edgeIdx===ti;
+      const label=(t.critical_error?'⚠ ':'')+t.kind+(t.after_seconds!=null?` ${t.after_seconds}s`:'');
+      const lw=label.length*5.6+12;
+      edges+=`<g class="edge" data-edge-state="${s.id}" data-edge-idx="${ti}" style="cursor:pointer">
+        <path class="edge-path" d="${dpath}" stroke="${col}" ${dash} marker-end="url(#${mark})" opacity="${isSel?1:.85}" stroke-width="${isSel?3:2}"/>
+        <rect class="edge-label-bg" x="${mid.x-lw/2}" y="${mid.y-9}" width="${lw}" height="18" rx="9" stroke="${isSel?col:C.ink100}"/>
+        <text class="edge-label" x="${mid.x}" y="${mid.y+3.5}" text-anchor="middle" fill="${col}">${esc(label)}</text>
+      </g>`;
+    });
+  });
+
+  // nodes
+  let nodes='';
+  D.states.forEach(s=>{
+    const p=nodePos(s.id);
+    const isSel=sel&&sel.type==='state'&&sel.stateId===s.id;
+    const isInit=s.id===D.initial_state;
+    const stripe=s.is_terminal?C.ink400:(isInit?C.teal600:C.teal500);
+    const v=s.vitals||{};
+    const badges=[['HR',v.heart_rate],['BP',v.blood_pressure],['RR',v.respiratory_rate],['SpO₂',v.oxygen_saturation]].filter(b=>b[1]!=null&&b[1]!=='');
+    let bx=p.x+14; const badgeEls=badges.map(b=>{ const txt=`${b[0]} ${b[1]}`; const w=txt.length*5.6+12; const el=`<g><rect class="vbadge-bg" x="${bx}" y="${p.y+NODE_H-26}" width="${w}" height="17" rx="5"/><text class="vbadge" x="${bx+6}" y="${p.y+NODE_H-14}">${esc(txt)}</text></g>`; bx+=w+6; return el; }).join('');
+    const tag=isInit?`<g><rect x="${p.x+NODE_W-54}" y="${p.y+10}" width="44" height="15" rx="7.5" fill="${C.teal600}"/><text class="tag" x="${p.x+NODE_W-32}" y="${p.y+20.5}" text-anchor="middle" fill="#fff">START</text></g>`
+      : (s.is_terminal?`<g><rect x="${p.x+NODE_W-44}" y="${p.y+10}" width="34" height="15" rx="7.5" fill="${C.ink400}"/><text class="tag" x="${p.x+NODE_W-27}" y="${p.y+20.5}" text-anchor="middle" fill="#fff">END</text></g>`:'');
+    const status=(s.patient_status||'').slice(0,46)+((s.patient_status||'').length>46?'…':'');
+    nodes+=`<g class="node ${isSel?'sel':''}" data-node="${s.id}" transform="translate(0,0)">
+      <rect class="node-card" x="${p.x}" y="${p.y}" width="${NODE_W}" height="${NODE_H}" rx="13"/>
+      <rect class="node-stripe" x="${p.x}" y="${p.y}" width="5" height="${NODE_H}" rx="2.5" fill="${stripe}"/>
+      ${tag}
+      <text class="node-title" x="${p.x+14}" y="${p.y+24}">${esc(s.name.slice(0,26))}</text>
+      <text class="node-status" x="${p.x+14}" y="${p.y+42}">${esc(status)}</text>
+      ${badgeEls}
+      ${RO?'':`<circle class="conn-handle" data-conn="${s.id}" cx="${p.x+NODE_W}" cy="${p.y+NODE_H/2}" r="6"/>`}
+    </g>`;
+  });
+
+  svg.innerHTML=defs+edges+nodes;
+  attachGraphEvents();
+  renderInspector();
+}
+
+function attachGraphEvents(){
+  const svg=document.getElementById('svg');
+  // node selection + drag
+  svg.querySelectorAll('.node').forEach(g=>{
+    const id=g.getAttribute('data-node');
+    g.addEventListener('mousedown',e=>{
+      if(e.target.hasAttribute('data-conn')) return;
+      if(connectFrom){ return; }
+      startDrag(e,id,g);
+    });
+    g.addEventListener('click',e=>{
+      if(e.target.hasAttribute('data-conn')) return;
+      if(connectFrom){ finishConnect(id); return; }
+      if(!g._moved){ sel={type:'state',stateId:id}; renderGraph(); }
+    });
+  });
+  if(!RO) svg.querySelectorAll('.conn-handle').forEach(c=>{
+    c.addEventListener('click',e=>{ e.stopPropagation(); beginConnect(c.getAttribute('data-conn')); });
+  });
+  svg.querySelectorAll('.edge').forEach(g=>{
+    g.addEventListener('click',()=>{ sel={type:'edge',stateId:g.getAttribute('data-edge-state'),edgeIdx:+g.getAttribute('data-edge-idx')}; renderGraph(); });
+  });
+}
+
+let drag=null;
+function startDrag(e,id,g){
+  if(RO){ return; }
+  const svg=document.getElementById('svg'); const pt=svgPoint(e);
+  const p=nodePos(id); drag={id,offX:pt.x-p.x,offY:pt.y-p.y,g}; g._moved=false; g.classList.add('dragging');
+  window.addEventListener('mousemove',onDrag); window.addEventListener('mouseup',endDrag);
+}
+function onDrag(e){
+  if(!drag) return; const pt=svgPoint(e);
+  L[drag.id]={x:Math.max(8,Math.round(pt.x-drag.offX)),y:Math.max(8,Math.round(pt.y-drag.offY))};
+  drag.g._moved=true; renderGraph();
+}
+function endDrag(){ if(drag){ drag.g.classList.remove('dragging'); } window.removeEventListener('mousemove',onDrag); window.removeEventListener('mouseup',endDrag); setTimeout(()=>{drag=null;},0); }
+function svgPoint(e){ const svg=document.getElementById('svg'); const r=svg.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+
+function beginConnect(id){ connectFrom=id; document.getElementById('connectHint').style.display='block'; }
+function cancelConnect(){ connectFrom=null; document.getElementById('connectHint').style.display='none'; }
+function finishConnect(toId){
+  const s=D.states.find(x=>x.id===connectFrom);
+  s.transitions.push({to_state:toId,description:'New transition',kind:'action',keywords:[],after_seconds:null,vitals_check:null,patient_effect:'',critical_error:false});
+  const from=connectFrom; cancelConnect(); sel={type:'edge',stateId:from,edgeIdx:s.transitions.length-1}; renderGraph();
+}
+
+// ───────────────────────── inspector ─────────────────────────
+function renderInspector(){
+  const el=document.getElementById('inspector');
+  if(!sel){ el.innerHTML='<div class="insp-empty">Select a state or transition to edit it.<br><br>Drag states to arrange. Use the ◆ handle to draw a transition.</div>'; return; }
+  if(sel.type==='state') el.innerHTML=inspState();
+  else el.innerHTML=inspEdge();
+}
+
+function inspState(){
+  const i=D.states.findIndex(s=>s.id===sel.stateId); const s=D.states[i]; if(!s) return '';
+  const isInit=s.id===D.initial_state;
+  return `<div class="insp-head"><span class="k">State</span>${RO?'':`<button class="mini" data-act="del-state" data-id="${s.id}" title="Delete state">✕</button>`}</div>
+    ${field('Name',`states.${i}.name`)}
+    ${field('ID',`states.${i}.id`,{hint:'unique slug'})}
+    ${field('Order',`states.${i}.order`,{dtype:'int'})}
+    <div class="f"><label class="chk"><input type="radio" name="initst" ${isInit?'checked':''} ${RO?'disabled':''} data-act="set-initial" data-id="${s.id}" style="width:auto"> Initial state</label></div>
+    ${field('Terminal (end) state',`states.${i}.is_terminal`,{type:'checkbox'})}
+    ${field('Patient status',`states.${i}.patient_status`,{type:'textarea',full:true,rows:2})}
+    <label style="font-size:11.5px;font-weight:600;color:var(--ink-600)">Vitals</label>
+    ${vitalsFields(`states.${i}.vitals`)}
+    ${strList('Expected actions',`states.${i}.expected_actions`,{item:'action',rows:1})}
+    ${field('Facilitator notes',`states.${i}.facilitator_notes`,{type:'textarea',full:true,rows:2})}
+    <div class="sec" style="box-shadow:none;padding:14px;margin-top:8px"><h3>Modifiers</h3>
+    ${objList(`states.${i}.modifiers`,'modifier',{
+      title:(it)=>it.when||'modifier',
+      body:(it,j,p)=>`${field('Description',`${p}.${j}.description`,{type:'textarea',full:true,rows:2})}
+        ${field('When',`${p}.${j}.when`,{type:'select',options:['on_inaction','on_action','on_time']})}
+        ${field('After (s)',`${p}.${j}.after_seconds`,{dtype:'int'})}
+        ${field('Keywords',`${p}.${j}.keywords`,{type:'csv',full:true})}`
+    },'modifier')}</div>
+    <div class="sec" style="box-shadow:none;padding:14px;margin-top:4px"><h3>Cues</h3>
+    ${objList(`states.${i}.cues`,'cue',{
+      title:(it)=>(it.text||'cue').slice(0,40),
+      body:(it,j,p)=>`${field('Text',`${p}.${j}.text`,{type:'textarea',full:true,rows:2})}
+        ${field('Actor id',`${p}.${j}.actor_id`,{hint:'optional'})}
+        ${field('When',`${p}.${j}.when`)}`
+    },'cue')}</div>`;
+}
+
+function inspEdge(){
+  const i=D.states.findIndex(s=>s.id===sel.stateId); const s=D.states[i]; const t=s.transitions[sel.edgeIdx]; if(!t) return '';
+  const p=`states.${i}.transitions.${sel.edgeIdx}`;
+  const stateOpts=D.states.map(x=>x.id);
+  return `<div class="insp-head"><span class="k">Transition</span>${RO?'':`<button class="mini" data-act="del-edge" data-state="${s.id}" data-idx="${sel.edgeIdx}" title="Delete transition">✕</button>`}</div>
+    <div class="hint" style="color:var(--ink-500);margin-bottom:10px">${esc(s.name)} <b>→</b> ${esc((D.states.find(x=>x.id===t.to_state)||{}).name||t.to_state)}</div>
+    ${field('Target state',`${p}.to_state`,{type:'select',options:stateOpts})}
+    ${field('Trigger kind',`${p}.kind`,{type:'select',options:KINDS})}
+    ${field('Description (LLM-readable)',`${p}.description`,{type:'textarea',full:true,rows:2})}
+    ${(t.kind==='action'||t.kind==='inaction')?field('Keywords',`${p}.keywords`,{type:'csv',full:true,hint:'deterministic match hints'}):''}
+    ${(t.kind==='time'||t.kind==='inaction')?field('After seconds',`${p}.after_seconds`,{dtype:'int'}):''}
+    ${t.kind==='vitals'?`<div class="grid-3">${field('Param',`${p}.vitals_check.param`,{type:'select',options:VITAL_PARAMS})}${field('Op',`${p}.vitals_check.op`,{type:'select',options:OPS})}${field('Value',`${p}.vitals_check.value`,{dtype:'num'})}</div>`:''}
+    ${field('Patient effect (on transition)',`${p}.patient_effect`,{type:'textarea',full:true,rows:2})}
+    ${field('Critical error path',`${p}.critical_error`,{type:'checkbox'})}`;
+}
+
+// ───────────────────────── global input handling ─────────────────────────
+function coerce(input){
+  const dt=input.getAttribute('data-type');
+  if(input.type==='checkbox') return input.checked;
+  let v=input.value;
+  if(dt==='int'){ return v.trim()===''?null:parseInt(v,10); }
+  if(dt==='num'){ return v.trim()===''?null:parseFloat(v); }
+  if(dt==='csv'){ return v.split(',').map(x=>x.trim()).filter(Boolean); }
+  if(v==='' && (input.getAttribute('data-path')||'').match(/\.(specialty|author|institution|source|name|weight_kg|estimated_minutes|image_ref|actor_id|glucose)$/)) return null;
+  return v;
+}
+document.addEventListener('input',e=>{
+  const inp=e.target.closest('[data-path]'); if(!inp||RO) return;
+  const path=inp.getAttribute('data-path');
+  let val=coerce(inp);
+  // ensure vitals_check object exists when editing it
+  if(path.includes('.vitals_check.')){ const base=path.split('.vitals_check.')[0]; const o=getPath(D,base); if(o && !o.vitals_check) o.vitals_check={param:'oxygen_saturation',op:'<',value:0}; }
+  setPath(D,path,val);
+  // live updates
+  if(path==='meta.title') document.getElementById('edTitle').textContent=val||'Untitled';
+  if(path.startsWith('states.')) renderGraph();
+});
+document.addEventListener('change',e=>{
+  const inp=e.target.closest('[data-path]'); if(!inp||RO) return;
+  if(inp.tagName==='SELECT'||inp.type==='checkbox'){
+    const path=inp.getAttribute('data-path'); setPath(D,path,coerce(inp));
+    if(path.startsWith('states.')||path==='initial_state') { renderInspector(); renderGraph(); }
+  }
+});
+
+// click delegation: array add/remove, obj add, state/edge ops, initial
+const FACTORIES={
+  history:()=>({id:uid('hx').replace('hx','hist'),label:'New beat',content:'',provider:'patient',reveal:'on_ask',available_after_seconds:null}),
+  exam:()=>({system:'General',findings:[],abnormal:false,note:''}),
+  actor:()=>({id:'actor',role:'New actor',voice:'',persona:'',script:[]}),
+  investigation:()=>({id:'test',name:'New test',category:'lab',result:'',result_by_state:{},image_ref:null,available_after_seconds:null}),
+  discussion:()=>({question:'',answer:''}),
+  modifier:()=>({description:'',when:'on_inaction',after_seconds:null,keywords:[],set_vitals:null}),
+  cue:()=>({text:'',actor_id:null,when:'',after_seconds:null}),
+};
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]'); if(!b) return;
+  if(RO && b.getAttribute('data-act')!=='') { /* allow nothing destructive */ }
+  const act=b.getAttribute('data-act');
+  if(RO) return;
+  if(act==='arr-add'){ const path=b.getAttribute('data-path'); const arr=getPath(D,path); arr.push(''); rerenderOwner(b); }
+  else if(act==='arr-del'){ const path=b.getAttribute('data-path'); const idx=+b.getAttribute('data-idx'); getPath(D,path).splice(idx,1); rerenderOwner(b); }
+  else if(act==='obj-add'){ const path=b.getAttribute('data-path'); const f=b.getAttribute('data-factory'); getPath(D,path).push(FACTORIES[f]()); rerenderOwner(b); }
+  else if(act==='del-state'){ delState(b.getAttribute('data-id')); }
+  else if(act==='del-edge'){ const sid=b.getAttribute('data-state'); const idx=+b.getAttribute('data-idx'); D.states.find(s=>s.id===sid).transitions.splice(idx,1); sel=null; renderGraph(); }
+  else if(act==='set-initial'){ D.initial_state=b.getAttribute('data-id'); renderGraph(); }
+});
+function rerenderOwner(node){
+  // re-render whichever pane/inspector the control lives in
+  if(node.closest('#inspector')) renderInspector();
+  else if(node.closest('#pane-overview')) renderOverview();
+  else if(node.closest('#pane-history')) renderHistory();
+  else if(node.closest('#pane-exam')) renderExam();
+  else if(node.closest('#pane-actors')) renderActors();
+  else if(node.closest('#pane-investigations')) renderInvestigations();
+  else if(node.closest('#pane-debrief')) renderDebrief();
+}
+function delState(id){
+  if(D.states.length<=1){ toast('A case needs at least one state',true); return; }
+  if(!confirm('Delete this state and all transitions to/from it?')) return;
+  D.states=D.states.filter(s=>s.id!==id);
+  D.states.forEach(s=>{ s.transitions=s.transitions.filter(t=>t.to_state!==id); });
+  if(D.initial_state===id) D.initial_state=D.states[0].id;
+  delete L[id]; sel=null; renderGraph();
+}
+
+// add state
+document.getElementById('addStateBtn').addEventListener('click',()=>{
+  if(RO) return;
+  const id=uid('state'); const order=D.states.length+1;
+  D.states.push({id,name:'New state',order,vitals:{rhythm:'Sinus',heart_rate:null,blood_pressure:null,respiratory_rate:null,oxygen_saturation:null,temperature_c:null,glucose:null,gcs:null,fio2:null,extra:{}},patient_status:'',expected_actions:[],modifiers:[],cues:[],transitions:[],facilitator_notes:'',is_terminal:false});
+  L[id]={x:140,y:80+ (D.states.length-1)*40};
+  sel={type:'state',stateId:id}; renderGraph();
+});
+document.getElementById('relayoutBtn').addEventListener('click',()=>{ applyAutoLayout(); });
+
+// tabs
+document.getElementById('tabs').addEventListener('click',e=>{
+  const t=e.target.closest('.tab'); if(!t) return;
+  const name=t.getAttribute('data-tab');
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===t));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='pane-'+name));
+  if(name==='graph') renderGraph();
+});
+
+document.getElementById('saveBtn').addEventListener('click',save);
+document.getElementById('dupBtn').addEventListener('click',duplicate);
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') cancelConnect(); if((e.metaKey||e.ctrlKey)&&e.key==='s'){ e.preventDefault(); save(); } });
+
+load();
+</script>
+</body>
+</html>

@@ -3,131 +3,15 @@ from __future__ import annotations
 import re
 
 from agents.base import OpenAIJsonAgent
+from agents.prompt_loader import load, render
 from pydantic import BaseModel, ConfigDict, field_validator
 from schemas.clinical_case import ClinicalCase
 from schemas.evaluation import ClinicalEvaluation
 from schemas.session_context import SessionContext, build_session_context
 
-FACT_EXTRACTION_SYSTEM_PROMPT = """
-You are extracting concise medical grounding facts for case generation.
-Return valid JSON only.
-Keep facts brief and medically standard.
-Do not include treatment plans or explanations.
-""".strip()
-
-GENERATOR_PROMPT_TEMPLATE = """
-You are a clinical case generator for a medical simulation system.
-
-Your task is to generate a realistic, medically plausible patient case based ONLY on a diagnosis.
-
-STRICT RULES:
-- Output MUST be valid JSON only
-- Do NOT include any explanations or extra text
-- Do NOT break the schema
-- Ensure medical consistency (symptoms, vitals, progression must align with diagnosis)
-- Avoid contradictions
-- Keep values realistic (no impossible vitals)
-
-JSON STRUCTURE:
-
-{
-  "diagnosis": "",
-  "patient": {
-    "age": number,
-    "gender": "male or female",
-    "occupation": "string or null",
-    "persona_description": "string",
-    "history": ["string"]
-  },
-  "symptoms": ["string"],
-  "vitals": {
-    "heart_rate": number,
-    "blood_pressure": "systolic/diastolic",
-    "respiratory_rate": number,
-    "oxygen_saturation": number
-  },
-  "progression": [
-    {
-      "time_min": number,
-      "description": "string"
-    }
-  ],
-  "risk_factors": ["string"],
-  "exam_findings": ["string"],
-  "outcome": {
-    "if_treated": "string",
-    "if_untreated": "string"
-  }
-}
-
-PERSONA GUIDELINES:
-- Choose an age that is clinically realistic for the diagnosis and varies across cases (do not always default to middle-aged adults — use teenagers, young adults, elderly patients too)
-- Set occupation consistent with age: omit (null) for patients under 14; use student, retired, or specific careers otherwise
-- Write persona_description as exactly ONE sentence describing communication style and emotional state only
-  Examples: "A shy 16-year-old who answers reluctantly and avoids detail."
-            "A stoic retired farmer who minimises pain and resists fuss."
-            "An anxious professional who over-explains and seeks reassurance."
-            "A confused elderly man who struggles to recall exact timelines."
-- persona_description must NOT describe information-sharing behaviour (never say 'freely shares', 'withholds', 'volunteers symptoms', etc.)
-- Vary the persona meaningfully — not every patient is cooperative and articulate
-
-MEDICAL GUIDELINES:
-- Symptoms must strongly match the diagnosis
-- Include at least 3-6 relevant symptoms
-- Vitals must reflect severity (e.g., shock -> low BP, high HR)
-- Progression must show worsening or change over time
-- Include at least one realistic risk factor
-- Avoid rare or irrelevant symptoms unless justified
-
-PRESENTATION VARIATION:
-- Do not always use the most classic textbook presentation
-- Sometimes include atypical symptoms when they are medically plausible
-- Sometimes make the case mild, early-stage, or still evolving
-- Sometimes start with a misleading or non-specific complaint
-- Keep the diagnosis medically supported by the overall case
-- Keep difficulty balanced: avoid making the case either obvious from one clue or obscure without enough evidence
-
-DIFFICULTY:
-{difficulty_guidelines}
-
-MEDICAL FACT GROUNDING:
-Use these concise extracted facts as guidance. Do not copy them mechanically; keep the case realistic.
-{medical_facts}
-
-SESSION CONTEXT:
-Use this only as a light bias. Do not overfit the case to it.
-{session_context}
-
-INPUT:
-Diagnosis: {diagnosis}
-
-Return JSON only.
-""".strip()
-
 MAX_DIAGNOSIS_CHARS = 160
 MAX_GENERATION_ATTEMPTS = 2
 VALID_DIFFICULTIES = {"easy", "medium", "hard"}
-DIFFICULTY_GUIDELINES = {
-    "easy": """
-- Use classic symptoms that strongly point to the diagnosis
-- Make progression clear and easy to follow
-- Include minimal misleading information
-- Keep the case medically correct and straightforward
-""".strip(),
-    "medium": """
-- Include some atypical or vague symptoms
-- Allow moderate ambiguity while preserving enough diagnostic support
-- Use a realistic mix of classic and non-specific findings
-- Keep the case medically correct and balanced
-""".strip(),
-    "hard": """
-- Use a subtle or misleading presentation
-- Include plausible atypical symptoms
-- Make progression delayed, early, or unclear
-- Preserve enough evidence for the diagnosis without making it obvious
-- Keep the case medically correct, not obscure for its own sake
-""".strip(),
-}
 
 
 class MedicalFacts(BaseModel):
@@ -175,17 +59,12 @@ def build_generation_prompt(
 ) -> str:
     sanitized_diagnosis = sanitize_diagnosis(diagnosis)
     normalized_difficulty = normalize_difficulty(difficulty)
-    facts_context = format_medical_facts(medical_facts)
-    session_context_text = format_session_context(session_context)
-    return GENERATOR_PROMPT_TEMPLATE.replace("{diagnosis}", sanitized_diagnosis).replace(
-        "{difficulty_guidelines}",
-        DIFFICULTY_GUIDELINES[normalized_difficulty],
-    ).replace(
-        "{medical_facts}",
-        facts_context,
-    ).replace(
-        "{session_context}",
-        session_context_text,
+    return render(
+        load("generator", "user"),
+        difficulty_guidelines=load("generator", f"difficulty_{normalized_difficulty}"),
+        medical_facts=format_medical_facts(medical_facts),
+        session_context=format_session_context(session_context),
+        diagnosis=sanitized_diagnosis,
     )
 
 
@@ -255,18 +134,8 @@ class GeneratorAgent(OpenAIJsonAgent):
 
     def extract_medical_facts(self, diagnosis: str) -> MedicalFacts:
         sanitized_diagnosis = sanitize_diagnosis(diagnosis)
-        prompt = f"""
-Diagnosis: {sanitized_diagnosis}
-
-Extract concise medical grounding facts:
-- core symptoms
-- possible atypical symptoms
-- key risk factors
-
-Return JSON only.
-""".strip()
         return self.parse_response(
-            system_prompt=FACT_EXTRACTION_SYSTEM_PROMPT,
-            user_prompt=prompt,
+            system_prompt=load("generator", "fact_system"),
+            user_prompt=render(load("generator", "fact_user"), diagnosis=sanitized_diagnosis),
             response_model=MedicalFacts,
         )

@@ -1,0 +1,4 @@
+- Include some atypical or vague symptoms
+- Allow moderate ambiguity while preserving enough diagnostic support
+- Use a realistic mix of classic and non-specific findings
+- Keep the case medically correct and balanced

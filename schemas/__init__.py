@@ -9,6 +9,7 @@ from schemas.evaluation import (
 from schemas.investigation import ECGVisualPayload, InvestigationResult
 from schemas.performance import StudentPerformanceSummary
 from schemas.session_context import SessionContext
+from schemas.simulated_case import ScenarioState, SimulatedCase, Transition
 from schemas.simulation import SimulationResult, SimulationStep, SimulationSummary, StudentAction
 from schemas.simulation_audit import SimulationAudit, SimulationAuditFinding
 
@@ -21,7 +22,9 @@ __all__ = [
     "InvestigationInterpretationFeedback",
     "LearningRecommendations",
     "ReasoningFeedback",
+    "ScenarioState",
     "SessionContext",
+    "SimulatedCase",
     "SimulationAudit",
     "SimulationAuditFinding",
     "SimulationResult",
@@ -29,4 +32,5 @@ __all__ = [
     "SimulationSummary",
     "StudentPerformanceSummary",
     "StudentAction",
+    "Transition",
 ]
