@@ -156,3 +156,57 @@ def test_restore_tolerates_snapshot_drift():
     restored.restore(snap)                               # no TypeError
     assert restored.run.elapsed_seconds == 90
     assert restored.run.critical_errors == []
+
+
+# ── Room-of-Agents presence (RA-1, docs/room-of-agents.md C1) ─────────────────
+
+def test_in_room_actors_are_present_from_the_start():
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    present = engine.present_actor_ids()
+    assert {"patient", "ems", "nurse", "rt"} <= present      # bedside team is here at t=0
+
+
+def test_husband_is_absent_until_his_arrival_time():
+    # The husband is authored to arrive at available_after_seconds=300.
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    assert engine.is_present("husband") is False             # not here yet at t=0
+    assert engine.arrival_wait("husband") == 300
+    engine.tick(305)                                         # let the clock pass 300s
+    assert engine.is_present("husband") is True              # arrives on the clock
+    assert engine.arrival_wait("husband") is None
+
+
+def test_summon_brings_a_timed_actor_in_early():
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    assert engine.is_present("husband") is False
+    assert engine.summon("husband") is True                  # resident actively calls him
+    assert engine.is_present("husband") is True              # now in the room
+    assert engine.summon("husband") is False                 # idempotent
+
+
+def test_consultants_are_not_in_the_room_until_called():
+    # Consultants advise by phone / arrive on request — never present by the clock.
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    engine.tick(10_000)                                      # no amount of waiting summons them
+    assert engine.is_present("neuro") is False
+    assert engine.is_present("icu") is False
+    engine.summon("neuro")
+    assert engine.is_present("neuro") is True
+
+
+def test_presence_summons_survive_snapshot_roundtrip():
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    engine.summon("husband")
+    restored = SimulationEngine(load_case("myasthenic_crisis"))
+    restored.restore(engine.snapshot())
+    assert restored.is_present("husband") is True
+    assert restored.run.summoned_actors == ["husband"]
+
+
+def test_legacy_snapshot_without_summoned_actors_restores_to_empty():
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    snap = engine.snapshot()
+    snap["run"].pop("summoned_actors", None)                 # snapshot predating RA-1
+    restored = SimulationEngine(load_case("myasthenic_crisis"))
+    restored.restore(snap)                                   # additive field → default []
+    assert restored.run.summoned_actors == []

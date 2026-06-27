@@ -202,7 +202,7 @@
 
   /* ===== Live caption bar (appears during TTS playback) ===== */
   .caption-bar {
-    position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); z-index: 6;
+    position: fixed; bottom: 178px; left: 50%; transform: translateX(-50%); z-index: 6;
     max-width: 580px; width: calc(100vw - 48px); pointer-events: none;
     text-align: center; padding: 9px 18px; border-radius: 12px;
     background: rgba(10,15,23,0.72); border: 1px solid rgba(255,255,255,0.07);
@@ -228,7 +228,7 @@
 
   /* ===== State switcher (bottom left) ===== */
   .switcher {
-    position: fixed; bottom: 128px; left: 50%; transform: translateX(-50%); z-index: 5;
+    position: fixed; bottom: 164px; left: 50%; transform: translateX(-50%); z-index: 5;
     display: flex; gap: 26px;
   }
   .sw {
@@ -247,16 +247,17 @@
   .sw .sw-name { font-family:'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-500); }
   .sw.active .sw-name { color: var(--teal-glow); }
   .switcher-note {
-    /* sits in the open gap between the talk button (232px) and the switcher
-       (~195px top) — the old 104px landed on top of the vitals panel. */
-    position: fixed; bottom: 206px; left: 50%; transform: translateX(-50%); z-index: 5;
+    /* sits in the open gap between the talk button (268px) and the switcher
+       (~234px top). The whole mic cluster sits 36px above its old position to
+       free a slot for the addressee chips (114px) above the vitals panel. */
+    position: fixed; bottom: 242px; left: 50%; transform: translateX(-50%); z-index: 5;
     white-space: nowrap;
     font-family:'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-600);
   }
 
   /* ===== Push-to-talk button ===== */
   .talk {
-    position: fixed; bottom: 232px; left: 50%; transform: translateX(-50%); z-index: 6;
+    position: fixed; bottom: 268px; left: 50%; transform: translateX(-50%); z-index: 6;
     display:inline-flex; align-items:center; gap:10px; padding: 13px 24px; border-radius: 999px;
     font-family:'JetBrains Mono', monospace; font-size: 11.5px; letter-spacing:0.16em; text-transform:uppercase; font-weight:600;
     color: var(--ink-100); background: rgba(14,138,158,0.16); border: 1px solid rgba(95,216,230,0.38);
@@ -803,7 +804,7 @@
   /* ── Addressee chips ── */
   .addr-chips {
     display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
-    position: fixed; bottom: 68px; left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: 114px; left: 50%; transform: translateX(-50%);
     z-index: 6; padding: 6px 12px 6px 10px; border-radius: 22px;
     background: rgba(10,15,23,0.72); border: 1px solid rgba(255,255,255,0.07);
     backdrop-filter: blur(10px);
@@ -1400,7 +1401,6 @@
         SPEAKERS[r.speaker] = { ava: base.ava, who: r.role || base.who };
       }
     });
-    buildAddressIndex();
     buildRosterStrip();   // the top-centre presence avatars
     buildAddresseeChips(); // addressee chip row below the talk button
   }
@@ -1612,20 +1612,27 @@
   function jitter(base, spread){ return Math.round(base + (Math.random()-0.5)*spread); }
 
   // Audible monitor alarm — a short single beep, fires every 4s while any vital is in alarm.
-  let _alarmTimer = null;
+  let _alarmTimer = null, _vitalsReady = false;
   function _beep(freq, vol, dur){
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // Reuse the shared AudioContext when available — avoids creating dozens of
+      // orphaned contexts (one per alarm tick) which some browsers throttle or
+      // stack up into a buzzing artefact.
+      const ctx = (audioCtx && audioCtx.state !== 'closed') ? audioCtx
+                : new (window.AudioContext || window.webkitAudioContext)();
+      const ownCtx = ctx !== audioCtx;
       const osc = ctx.createOscillator(), g = ctx.createGain();
       osc.connect(g); g.connect(ctx.destination);
       osc.type = 'sine'; osc.frequency.setValueAtTime(freq, ctx.currentTime);
       g.gain.setValueAtTime(vol, ctx.currentTime);
       g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
       osc.start(ctx.currentTime); osc.stop(ctx.currentTime + dur);
-      setTimeout(() => { try { ctx.close(); } catch(e){} }, (dur + 0.1) * 1000);
+      if (ownCtx) setTimeout(() => { try { ctx.close(); } catch(e){} }, (dur + 0.1) * 1000);
     } catch(e){}
   }
   function tickAlarm(anyWarn, anyCrit){
+    // Don't fire before the session loads — placeholder vitals would trigger false alarms.
+    if (!_vitalsReady) return;
     if (!anyWarn && !anyCrit){ clearInterval(_alarmTimer); _alarmTimer = null; return; }
     if (!_alarmTimer){
       const beep = () => anyCrit ? (_beep(1047, 0.09, 0.18), setTimeout(() => _beep(1047, 0.07, 0.14), 220)) : _beep(880, 0.06, 0.22);
@@ -1698,6 +1705,7 @@
   // Apply a vitals snapshot from the SimulationEngine (source of truth).
   function applyVitals(v){
     if (!v) return;
+    _vitalsReady = true;   // real vitals from the engine — alarms may now fire
     // A pulseless rhythm with no perfusing HR/BP is an arrest — flag it so the
     // monitor shows dashes instead of the stale pre-arrest numbers.
     const rhythm = (v.rhythm || '').toLowerCase();
@@ -2134,7 +2142,9 @@
   });
   document.getElementById('pmHome').addEventListener('click', () => { location.href = '/home'; });
   document.getElementById('dbNew').addEventListener('click', () => { location.href = '/simulator'; });
-  document.getElementById('dbClose').addEventListener('click', () => debrief.classList.remove('open'));
+  // The case is over and the debrief is the terminal screen — closing it returns
+  // the resident home, not back into the finished room.
+  document.getElementById('dbClose').addEventListener('click', () => { location.href = '/home'; });
   document.getElementById('dbPrint').addEventListener('click', () => window.print());
 
   // ---------- click-to-order panels (the case's own menu, docked per tab) ----------
@@ -2244,7 +2254,7 @@
     if (reply && VOICE_BACKEND){            // speak only once a voice mode is chosen
       const native = VOICE_BACKEND === 'native' && recognition;
       if (native){ recoSuspend = true; try { recognition.stop(); } catch(e){} }
-      try { await playTTS(reply, speaker); } catch(e){}
+      try { await playTTS(reply, speaker, data.affect_stability ?? null); } catch(e){}
       await deliverCues(data);              // room nudges after the reply
       if (native && listening){ recoSuspend = false; try { recognition.start(); } catch(e){} }
     }
@@ -2272,7 +2282,7 @@
     addTurn(NURSE_CH, 'res', text);
     setNow(NURSE_CH, 'ordering…');
     try {
-      const data = await postJSON('/api/voice/llm', { session_id: SESSION_ID, text });
+      const data = await postJSON('/api/voice/turn', { session_id: SESSION_ID, text });
       await applyNurseData(data);
       setNow(NURSE_CH, listening ? 'listening for your next order…' : 'tap a test, or begin to talk');
     } catch(e){
@@ -2537,7 +2547,14 @@
     const url = SESSION_ID ? `/api/voice/stt?session_id=${encodeURIComponent(SESSION_ID)}` : '/api/voice/stt';
     const res = await fetch(url, { method:'POST', headers:{ 'Content-Type': blob.type }, body: blob });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || 'transcription failed');
+    if (!res.ok){
+      const raw = data.detail || 'transcription failed';
+      // Translate cryptic HTTP errors into actionable messages
+      const msg = /503|service unavailable/i.test(raw) ? 'speech-to-text service temporarily unavailable — try again in a moment'
+                : /502|bad gateway/i.test(raw)         ? 'speech-to-text service unreachable'
+                : raw;
+      throw new Error(msg);
+    }
     return (data.text || '').trim();
   }
   async function postJSON(url, body){
@@ -2547,41 +2564,11 @@
     return data;
   }
 
-  // Commands to the nurse start with "Nurse, …"; everything else goes to the patient.
-  // Addressee routing: a leading name ("Nurse, …", "Husband, …", "RT, …", a
-  // consultant) goes to the engine-grounded staff path and the server decides who
-  // answers; anything unaddressed is spoken to the patient.
-  function escapeRe(s){ return (s||'').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-  const SPEAKER_SYNS = {
-    nurse: ['nurse'],
-    ems: ['ems', 'paramedic', 'medic', 'prehospital'],
-    family: ['husband', 'wife', 'family', 'partner', 'mother', 'father', 'dad', 'mom', 'son', 'daughter', 'relative'],
-    rt: ['rt', 'respiratory therapist', 'respiratory', 'therapist'],
-    patient: ['patient'],
-  };
-  let ADDRESS = [{ word:'nurse', speaker:'nurse', toStaff:true }];
-  function buildAddressIndex(){
-    const out = [];
-    ROSTER.forEach(r => {
-      const words = new Set(SPEAKER_SYNS[r.speaker] || []);
-      String(r.role || '').toLowerCase().split(/[^a-z]+/).filter(w => w.length > 2).forEach(w => words.add(w));
-      String(r.id || '').toLowerCase().split(/[^a-z]+/).filter(w => w.length > 1).forEach(w => words.add(w));
-      words.forEach(w => out.push({ word: w, speaker: r.speaker, toStaff: r.speaker !== 'patient' }));
-    });
-    if (!out.some(a => a.speaker === 'nurse')) out.push({ word:'nurse', speaker:'nurse', toStaff:true });
-    out.sort((a, b) => b.word.length - a.word.length);   // longest match wins
-    ADDRESS = out;
-  }
-  function detectAddressee(said){
-    const low = (said || '').replace(/^\s+/, '').toLowerCase();
-    for (const a of ADDRESS){
-      if (new RegExp('^' + escapeRe(a.word) + '\\b[\\s,:.\\-—]*', 'i').test(low)){
-        const stripped = said.replace(new RegExp('^\\s*' + escapeRe(a.word) + '\\b[\\s,:.\\-—]*', 'i'), '').trim();
-        return { toStaff: a.toStaff, speaker: a.speaker, text: stripped || said };
-      }
-    }
-    return { toStaff: false, speaker: 'patient', text: said };
-  }
+  // NOTE: addressee routing now lives SERVER-SIDE (the Director). The browser sends
+  // the raw transcript to /api/voice/turn and the server decides who answers — see
+  // handleSaid(). The old client-side detectAddressee() keyword router (with its
+  // legacy "else → patient" default) was removed in Phase 2; addressee chips still
+  // let the resident force a recipient via forced_addressee.
 
   // ---------- caption bar ----------
   const captionBar = document.getElementById('captionBar');
@@ -2600,6 +2587,7 @@
   }
 
   function stopAudio(){ // halt any playing reply (barge-in / stop) and release the await
+    flushSpeak();        // drop anything queued behind the current line (barge-in wins)
     clearSpeaking();
     hideCaption();
     if (curAudio){ try { curAudio.pause(); } catch(e){} curAudio = null; }
@@ -2608,7 +2596,58 @@
     if (window.speechSynthesis){ try { speechSynthesis.cancel(); } catch(e){} }
     if (playResolve){ const r = playResolve; playResolve = null; r(); }
   }
-  async function playTTS(text, speaker, stabilityOverride){
+
+  // ── one speak queue so calls never overlap ───────────────────────────────────
+  // playTTS shares mutable audio globals (curAudio/curAbortCtrl/curPCMGain/
+  // playResolve); two concurrent calls (a reply + a proactive WS cue) would clobber
+  // each other and one would silently drop ("answer but no audio"). Every caller now
+  // chains through `speakChain`, so the reply, inline cues, and background cues play
+  // strictly in order. `speakGen` invalidates everything still queued on a barge-in.
+  let speakChain = Promise.resolve();
+  let speakGen = 0;
+  function flushSpeak(){ speakGen++; }
+
+  // ── dispatch filler: mask LLM latency with a brief spoken acknowledgement ─────
+  // Only fires if a turn is genuinely slow (the reply hasn't arrived within
+  // FILLER_DELAY_MS); the real reply queues after it via the speak queue, so there's
+  // no overlap. Cancelled the moment the reply is ready. Set FILLER_ENABLED=false to
+  // turn the room silent-while-thinking again.
+  const FILLER_ENABLED = true;
+  const FILLER_DELAY_MS = 850;
+  const FILLERS = ['One moment.', 'Okay.', 'Let me see.', 'Right.', 'Bear with me.'];
+  let fillerTimer = 0;
+  function scheduleFiller(){
+    if (!FILLER_ENABLED || VOICE_BACKEND === 'native') return;
+    clearTimeout(fillerTimer);
+    fillerTimer = setTimeout(() => {
+      if (!processing) return;                 // reply already arrived — no dead air to mask
+      const f = FILLERS[Math.floor(Math.random() * FILLERS.length)];
+      playTTS(f, 'nurse');                      // queues; the real reply follows in order
+    }, FILLER_DELAY_MS);
+  }
+  function cancelFiller(){ clearTimeout(fillerTimer); fillerTimer = 0; }
+  function playTTS(text, speaker, stabilityOverride){
+    const gen = speakGen;
+    const run = async () => {
+      if (gen !== speakGen) return;        // a barge-in invalidated this queued line
+      try { await _playTTSNow(text, speaker, stabilityOverride); }
+      catch(e){
+        if (e && e.name === 'AbortError') return;
+        // A real synthesis failure used to be swallowed by callers — retry once, then
+        // surface it instead of looking like a dropped reply with no audio.
+        try { await _playTTSNow(text, speaker, stabilityOverride); }
+        catch(e2){
+          if (e2 && e2.name === 'AbortError') return;
+          setNow(ROOM, 'audio unavailable for that line — tap to continue');
+          ROOM.root.classList.remove('collapsed');
+        }
+      }
+    };
+    speakChain = speakChain.then(run, run);
+    return speakChain;
+  }
+
+  async function _playTTSNow(text, speaker, stabilityOverride){
     selectState('responding');
     rememberSpoken(text);
     if (VOICE_BACKEND === 'native') return speakNative(text, speaker);
@@ -2667,7 +2706,8 @@
     let leftover = new Uint8Array(0);
     let lastSrc = null;
 
-    await new Promise(async (resolve) => {
+    let fetchAborted = false;
+    await new Promise(async (resolve, reject) => {
       playResolve = resolve;
       try {
         while (true) {
@@ -2700,7 +2740,8 @@
           lastSrc = src;
         }
       } catch(e) {
-        if (e.name !== 'AbortError') console.warn('[pcm stream]', e);
+        if (e.name === 'AbortError') fetchAborted = true;
+        else console.warn('[pcm stream]', e);
       }
       if (lastSrc) {
         // Safety timeout resolves if onended never fires (e.g. browser suspend)
@@ -2708,7 +2749,11 @@
         const tOut = setTimeout(() => { if (playResolve){ playResolve = null; resolve(); } }, safetyMs);
         lastSrc.onended = () => { clearTimeout(tOut); if (playResolve){ playResolve = null; resolve(); } };
       } else {
-        if (playResolve){ playResolve = null; resolve(); }
+        if (playResolve){ playResolve = null; }
+        // Empty stream: if not a deliberate abort, surface the failure so the
+        // caller (playHandoff) can show an error rather than silently doing nothing.
+        if (fetchAborted) resolve();
+        else reject(new Error('voice service unavailable'));
       }
     });
     curPCMGain = null;
@@ -2814,49 +2859,37 @@
     leaveAskMode();
 
     try {
-      // Determine routing: chip/forced addressee overrides the keyword detector.
-      let route;
-      if (effectiveAddr){
-        const actor = ROSTER.find(r => r.id === effectiveAddr);
-        const isPatient = actor && actor.speaker === 'patient';
-        route = { toStaff: !isPatient, speaker: actor?.speaker || 'nurse',
-                  text: said, forcedAddr: effectiveAddr };
-      } else {
-        route = detectAddressee(said);
-      }
       addTurn(ROOM, 'res', said);
 
-      let reply = '', speaker = route.speaker, lastTurnData = null, patientStability = null;
-      if (route.toStaff){
-        const body = { session_id: SESSION_ID, text: said };
-        if (route.forcedAddr) body.forced_addressee = route.forcedAddr;
-        const data = await postJSON('/api/voice/llm', body);
-        lastTurnData = data;
-        reply = (data.reply || '').trim();
-        speaker = data.speaker || 'nurse';
-        addTurn(ROOM, speaker, reply);
-        applyEngine(data);
+      // Single unified endpoint: the SERVER-SIDE Director decides who answers
+      // (nurse / bystander / patient) from the utterance content. The browser no
+      // longer pre-routes — it just sends the raw transcript and an optional chip.
+      const body = { session_id: SESSION_ID, text: said };
+      if (effectiveAddr) body.forced_addressee = effectiveAddr;
+      scheduleFiller();                          // mask the dispatch latency if it's slow
+      let data;
+      try { data = await postJSON('/api/voice/turn', body); }
+      finally { cancelFiller(); }
 
-        // Director ask-back: store the utterance and illuminate the chips.
-        if (data.needs_addressee){
-          pendingTranscript = said;
-          enterAskMode();
-        }
-      } else {
-        speaker = 'patient';
-        const body = { session_id: SESSION_ID, text: said };
-        if (route.forcedAddr) body.forced_addressee = route.forcedAddr;
-        const data = await postJSON('/api/voice/llm-patient', body);
-        reply = (data.reply || '').trim();
-        patientStability = data.affect_stability ?? null;
-        addTurn(ROOM, 'patient', reply);
+      const reply = (data.reply || '').trim();
+      const speaker = data.speaker || 'nurse';
+      const patientStability = data.affect_stability ?? null;
+      addTurn(ROOM, speaker, reply);
+      applyEngine(data);
+
+      // Director ask-back: store the utterance and illuminate the addressee chips.
+      if (data.needs_addressee){
+        pendingTranscript = said;
+        enterAskMode();
       }
 
       processing = false;
       if (!capturing) setMic(listening ? 'listen' : 'off');
-      if (reply) await playTTS(reply, speaker, speaker === 'patient' ? patientStability : null);
-      if (route.toStaff) await deliverCues(lastTurnData);
-      setNow(ROOM, route.toStaff ? 'listening for your next order…' : 'listening…');
+      // affect_stability is the speaker's live EmotionalState (Phase 5): set for the
+      // patient and a frightened relative, absent for the steady professionals.
+      if (reply) await playTTS(reply, speaker, patientStability);
+      await deliverCues(data);
+      setNow(ROOM, 'listening for your next order…');
       if (pendingEnd){ pendingEnd = false; concludeCase(); }
     } catch(e){
       setNow(ROOM, (e && e.message) ? e.message : 'something went wrong');
@@ -2871,8 +2904,16 @@
   // Play the one-time spoken handoff before the floor opens (both backends).
   async function playHandoff(){
     if (INTRO_TEXT && !introPlayed){
-      introPlayed = true; setMic('busy');
-      try { await playTTS(INTRO_TEXT, 'nurse'); } catch(e){}
+      setMic('busy');
+      try {
+        await playTTS(INTRO_TEXT, 'nurse');
+        introPlayed = true;            // mark played ONLY after it actually played, so a
+      }                                // transient TTS failure doesn't silently swallow the
+      catch(e){                        // one-time briefing for the whole session.
+        setNow(NURSE_CH, (e && e.message) || 'voice service unavailable — tap again to hear the handoff');
+        NURSE_CH.root.classList.remove('collapsed');
+        return true;                   // let the floor open; they can retry the tap
+      }
       if (!listening) return false;     // resident stopped during the handoff
       setMic('listen');
     }

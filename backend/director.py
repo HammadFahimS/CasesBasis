@@ -1,73 +1,46 @@
-"""Director — the single seam that decides 'who speaks this turn?'.
+"""Director — proactive cue firing and speaker voice routing.
 
 Extracted from :mod:`nurse_brain`.  Owns:
 
-- **Addressee resolution** — explicit vocative → forced chip selection → ask-back
-  when confidence is too low.
-- **Speaker voice routing** — nurse vs EMS/family/patient/RT vs consult.
+- **Speaker voice routing** — once the Router (:mod:`backend.routing`) has decided
+  *who* is addressed, :func:`voice_reply` voices the right one (nurse vs
+  EMS/family/patient/RT vs consult).
 - **Proactive cue firing** — authored room prompts that come due mid-session.
+- **Ask-back phrasing** — the line that names the available history-holders when the
+  Router flags an ambiguous addressee.
 
-The Director is ~80 % deterministic.  The one LLM touch-point (phrasing the
-nurse's reply) stays in :mod:`nurse_brain.speak`; the Director calls it via a
-lazy import to avoid a module-level circular dependency.
+Addressee resolution itself now lives in :mod:`backend.routing` (Room-of-Agents
+C2); the old ``resolve_addressee`` chain was removed once the Router reached parity.
+The one LLM touch-point (phrasing the nurse's reply) stays in
+:mod:`nurse_brain.speak`; the Director calls it via a lazy import to avoid a
+module-level circular dependency.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
 _ASK_BACK_PROMPT = "Whom should I direct that to?"
 
 
-# ── Decision dataclass ────────────────────────────────────────────────────────
+# ── Diagnostics boundary (C4) ─────────────────────────────────────────────────
 
-@dataclass
-class RouteDecision:
-    """The Director's verdict for one turn."""
-    ask_back: bool = False           # unsure who this is for → ask the resident
-    forced_speaker: str | None = None  # honour a chip tap
-
-
-# ── Addressee resolution ──────────────────────────────────────────────────────
-
-def resolve_addressee(
-    intent,
-    engine,
-    forced_addressee: str | None = None,
-) -> RouteDecision:
-    """Return the routing verdict for this turn.
-
-    Priority:
-    1. ``forced_addressee`` (user tapped an addressee chip) — trusted completely.
-    2. Ask-back: interpreter flagged uncertainty on an ask_history turn AND the
-       case has 2+ history-holding providers (patient + at least one bystander).
-    3. No override — existing :func:`nurse_brain._apply_addressee` handles it.
-    """
-    if forced_addressee:
-        return RouteDecision(forced_speaker=forced_addressee)
-    if _should_ask_back(intent, engine):
-        return RouteDecision(ask_back=True)
-    return RouteDecision()
+def _announce_study(inv) -> str:
+    """A deterministic 'it's ready, go read it' line for a visual study — never the
+    interpretation. Templated off the study type so the LLM can't leak a read."""
+    name = (inv.name or "study").strip()
+    has_image = bool(getattr(inv, "image_ref", None) or getattr(inv, "visual_dx", None)) \
+        or inv.category == "ecg"
+    if inv.category == "ecg":
+        return f"{name} is recorded — the tracing's up on the monitor for you to read."
+    if has_image:
+        return f"The {name} is up on the screen for you to review."
+    return f"The {name} is back — the report's on the screen for you to read."
 
 
-def _should_ask_back(intent, engine) -> bool:
-    """True only when the Director is genuinely unsure who the question is for.
-
-    Conservative by design — only fires when the interpreter itself expressed
-    uncertainty (clarify=True) on a history-taking turn, AND the case roster
-    has 2+ providers who could plausibly answer."""
-    if not getattr(intent, "clarify", False):
-        return False
-    if getattr(intent, "op", None) != "ask_history":
-        return False
-    from backend.actor_voice import provider_speaker
-    providers = {provider_speaker(h.provider) for h in engine.case.history}
-    providers.discard("nurse")
-    return len(providers) >= 2
-
+# ── Ask-back phrasing ─────────────────────────────────────────────────────────
 
 def ask_back_prompt(engine) -> str:
     """Generate a spoken ask-back line that names the available providers."""
@@ -106,7 +79,9 @@ def fire_cues(session) -> list[dict]:
         line = voice_cue(session, actor, speaker, cue["text"])
         if not line:
             continue
-        session.history.append({"role": "nurse", "text": line})
+        # Persist under the actor who actually spoke the cue, not a blanket "nurse"
+        # (S2) — the transcript must record real identities.
+        session.history.append({"role": speaker, "text": line})
         out.append({"speaker": speaker, "text": line})
     return out
 
@@ -149,9 +124,9 @@ def voice_reply(
                         intent.op, intent.target, provider, speaker)
             return reply, speaker
 
-    # Bedside measurements are reported by the RT (if the case has one).
     if intent.op == "order_investigation" and result is not None and result.revealed:
         inv = next((i for i in engine.case.investigations if i.id == intent.target), None)
+        # Bedside measurements (VC/NIF) are reported as a number by the RT.
         if inv is not None and inv.category == "bedside":
             from backend.actor_voice import voice_bedside
             reply, rt_speaker = voice_bedside(session, result.revealed, transcript)
@@ -159,8 +134,17 @@ def voice_reply(
                 logger.info("turn: op=%s target=%s speaker=%s",
                             intent.op, intent.target, rt_speaker)
                 return reply, rt_speaker
+        # Visual studies (ECG, imaging) → announce availability ONLY, deterministically.
+        # The interpretation belongs on the card for the resident to read; it must
+        # never be voiced (C4) — and never routed through the embellishing LLM, which
+        # would otherwise inject a read ("…showing sinus tach"). Card is built upstream.
+        if inv is not None and inv.category in ("ecg", "imaging"):
+            reply = _announce_study(inv)
+            logger.info("turn: op=%s target=%s speaker=nurse (announce-only)",
+                        intent.op, intent.target)
+            return reply, speaker
 
     reply = speak(transcript, intent, result, vitals, session.history,
-                  already_asked=already_asked)
+                  already_asked=already_asked, engine=engine)
     logger.info("turn: op=%s target=%s speaker=%s", intent.op, intent.target, speaker)
     return reply, speaker

@@ -1,0 +1,17 @@
+# FAILING — the resident commits to the WRONG diagnosis early. The system should
+# record it neutrally (the nurse does not confirm or correct mid-run), keep going,
+# and let the debrief reflect the miss — not trip a critical error, not grade live.
+case: myasthenic_crisis
+name: failing_premature_wrong_diagnosis
+turns:
+  # A committed diagnosis is a staff op — server routing sends it to the nurse with
+  # no addressee prefix (it is recorded, not graded live).
+  - say: "I think this is a stroke — let's call a code stroke."
+    intent: { op: diagnose, action_text: "acute stroke" }
+    expect: { endpoint: staff, speaker: nurse, op: diagnose, critical_error: false }
+
+final:
+  working_dx_contains: "stroke"
+  critical_error: false
+  # Wrong dx → recognition criterion unmet → score reflects the miss.
+  max_score: 60

@@ -31,6 +31,42 @@ from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
+# LangSmith tracing for the voice/character path. The structured-output agent
+# (agents.base.OpenAIJsonAgent) is already @traceable; voice turns go through
+# `complete` below, so without this they never reach LangSmith. Optional — a no-op
+# when the SDK is absent, and the SDK itself only ships spans when
+# LANGCHAIN_TRACING_V2 / LANGSMITH_TRACING is set, so tests and untraced runs pay
+# nothing.
+try:
+    from langsmith import traceable as _ls_traceable
+    from langsmith.run_helpers import get_current_run_tree as _ls_run_tree
+except Exception:  # langsmith not installed / import error → tracing disabled
+    _ls_traceable = None
+    _ls_run_tree = None
+
+
+def _traced(func):
+    """Wrap `complete` as a LangSmith LLM run when the SDK is available."""
+    if _ls_traceable is None:
+        return func
+    return _ls_traceable(run_type="llm", name="voice.complete")(func)
+
+
+def _annotate_run(kind: str | None, provider: str, model: str) -> None:
+    """Tag the active LangSmith run with kind/provider/model and a readable name."""
+    if _ls_run_tree is None:
+        return
+    try:
+        run = _ls_run_tree()
+        if run is None:
+            return
+        run.name = f"voice.{kind or 'nurse'}"
+        meta = run.extra.setdefault("metadata", {}) if run.extra is not None else {}
+        meta.update({"kind": kind, "provider": provider, "model": model})
+    except Exception:  # tracing must never break a turn
+        logger.debug("langsmith run annotation failed", exc_info=True)
+
+
 # Interactive budget: a hung provider should degrade within seconds, not stall a
 # turn for a minute. Bounds the *caller's* wait regardless of provider (the
 # underlying request can't be cancelled, but the room stops waiting on it).
@@ -106,6 +142,7 @@ def _emit(trace: CompletionTrace) -> None:
             logger.debug("agent trace_hook raised", exc_info=True)
 
 
+@_traced
 def complete(
     system_prompt: str,
     user_prompt: str,
@@ -126,6 +163,7 @@ def complete(
     max_attempts = (DEFAULT_RETRIES if retries is None else retries) + 1
 
     provider, client, model = _resolve()
+    _annotate_run(kind, provider, model)
     started = time.monotonic()
     last_exc: Exception | None = None
 

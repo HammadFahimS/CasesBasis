@@ -1,0 +1,15 @@
+# FAILING — the resident does nothing. The autonomous clock keeps moving: the
+# world should advance on inaction (baseline → recognition fires on the timed
+# transition) rather than freezing politely while the resident deliberates.
+case: myasthenic_crisis
+name: failing_inaction_clock_advances
+turns:
+  - tick: 250        # > the 240s baseline→recognition timed transition
+
+final:
+  reached_state: recognition
+  critical_error: false
+  # No diagnosis, no intervention: recognition criterion unmet. The only point
+  # scored is "avoided critical errors" (vacuously true on inaction) → 50, the
+  # honest ceiling for doing nothing.
+  max_score: 50

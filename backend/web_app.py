@@ -243,6 +243,7 @@ from backend.routers.voice import (  # noqa: E402,F401
     api_voice_sessions,
     api_voice_stt,
     api_voice_tts,
+    api_voice_turn,
     api_voice_unpause,
     api_voice_resume,
     get_graph_data,

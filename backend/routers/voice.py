@@ -305,14 +305,72 @@ async def api_voice_stt(request: Request) -> dict[str, Any]:
     return {"text": text}
 
 
+def _run_grounded_turn(session: Any, text: str, forced_addressee: str | None) -> dict[str, Any]:
+    """Run one resident utterance through the unified Director pipeline and shape it.
+
+    The Director is the single router (S1): it decides whether the nurse, a named
+    bystander, or the patient answers — the caller no longer pre-routes. The patient
+    payload carries ``affect_stability`` so the front-end can colour its TTS."""
+    from backend.nurse_brain import run_turn
+    t0 = time.perf_counter()
+    turn = run_turn(session, text, forced_addressee=forced_addressee)
+    llm_ms = (time.perf_counter() - t0) * 1000
+    logger.info("[LATENCY] session=%s llm=%.0fms op=%s speaker=%s",
+                session.id[:8], llm_ms, turn.intent.op, turn.speaker)
+    _persist_turn(session, turn)
+    payload = _turn_payload(turn)
+    # Hand the front-end this speaker's live EmotionalState stability (Phase 5) so the
+    # patient and a frightened relative are voiced with more affect; the professionals
+    # resolve to None and keep their configured default voice.
+    from backend.emotional_state import for_speaker
+    stability = for_speaker(turn.speaker, session.engine).stability
+    if stability is not None:
+        payload["affect_stability"] = stability
+    return payload
+
+
+def _owned_session_or_404(session_id: str, resident_id: str) -> Any:
+    from backend.voice_session import AccessDenied, CaseNotFound, get_session
+    try:
+        return get_session(session_id, resident_id)
+    except CaseNotFound:
+        raise HTTPException(status_code=404, detail="session not found")
+    except AccessDenied:
+        raise HTTPException(status_code=403, detail="access denied")
+
+
+@router.post("/api/voice/turn")
+@limiter.limit("60/minute")
+def api_voice_turn(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """One resident utterance → the room's grounded reply (the unified endpoint).
+
+    The browser sends the raw transcript (and an optional ``forced_addressee`` chip);
+    the server-side Director decides who answers — nurse, bystander, or patient.
+    This supersedes the split ``/api/voice/llm`` (staff) + ``/api/voice/llm-patient``
+    (patient) endpoints, which remain as thin aliases during migration."""
+    resident_id = require_resident(request)
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="empty text")
+    session_id = (body.get("session_id") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    session = _owned_session_or_404(session_id, resident_id)
+    forced_addressee = (body.get("forced_addressee") or "").strip() or None
+    try:
+        return _run_grounded_turn(session, text, forced_addressee)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("voice turn failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"voice turn failed: {exc}")
+
+
 @router.post("/api/voice/llm")
 @limiter.limit("60/minute")
 def api_voice_llm(body: dict[str, Any], request: Request) -> dict[str, Any]:
-    """The nurse's reply to one resident utterance.
+    """Deprecated alias of ``/api/voice/turn`` (kept for in-flight clients).
 
-    With a ``session_id`` the reply is grounded in the live SimulationEngine
-    (real vitals/results, state transitions). Without one it falls back to the
-    stateless generic nurse — both via the app's Cerebras provider."""
+    With a ``session_id`` the reply is grounded in the live SimulationEngine and
+    the Director routes it. Without one it falls back to the stateless generic nurse."""
     resident_id = require_resident(request)
     text = (body.get("text") or "").strip()
     if not text:
@@ -327,25 +385,13 @@ def api_voice_llm(body: dict[str, Any], request: Request) -> dict[str, Any]:
             logging.getLogger(__name__).warning("LLM reply failed: %s", exc)
             raise HTTPException(status_code=502, detail=f"nurse reply failed: {exc}")
 
-    from backend.nurse_brain import run_turn
-    from backend.voice_session import AccessDenied, CaseNotFound, get_session
-    try:
-        session = get_session(session_id, resident_id)
-    except CaseNotFound:
-        raise HTTPException(status_code=404, detail="session not found")
-    except AccessDenied:
-        raise HTTPException(status_code=403, detail="access denied")
+    session = _owned_session_or_404(session_id, resident_id)
     forced_addressee = (body.get("forced_addressee") or "").strip() or None
-    t0 = time.perf_counter()
     try:
-        turn = run_turn(session, text, forced_addressee=forced_addressee)
+        return _run_grounded_turn(session, text, forced_addressee)
     except Exception as exc:
         logging.getLogger(__name__).warning("nurse turn failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"nurse reply failed: {exc}")
-    llm_ms = (time.perf_counter() - t0) * 1000
-    logger.info("[LATENCY] session=%s llm=%.0fms op=%s", session_id[:8], llm_ms, turn.intent.op)
-    _persist_turn(session, turn)
-    return _turn_payload(turn)
 
 
 @router.post("/api/voice/action")
@@ -383,12 +429,12 @@ def api_voice_action(body: dict[str, Any], request: Request) -> dict[str, Any]:
 @router.post("/api/voice/llm-patient")
 @limiter.limit("60/minute")
 def api_voice_patient(body: dict[str, Any], request: Request) -> dict[str, Any]:
-    """The patient's spoken reply: grounded for history beats, free roleplay otherwise.
+    """Deprecated alias of ``/api/voice/turn`` for in-flight clients still on the
+    split patient channel.
 
-    When the utterance maps to a patient-held history beat, routes through the
-    engine (grounding the reveal and tracking it in run.revealed_history) and
-    returns the full turn payload. For conversational exchanges that don't map to
-    an authored beat, falls through to free-roleplay patient_reply."""
+    Routing now lives server-side: the Director decides the patient answers from
+    the utterance content, so this simply forwards to the unified pipeline (which
+    grounds patient history beats through the engine and otherwise free-roleplays)."""
     resident_id = require_resident(request)
     text = (body.get("text") or "").strip()
     if not text:
@@ -396,36 +442,13 @@ def api_voice_patient(body: dict[str, Any], request: Request) -> dict[str, Any]:
     session_id = (body.get("session_id") or "").strip()
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
-    from backend.voice_session import AccessDenied, CaseNotFound, get_session
+    session = _owned_session_or_404(session_id, resident_id)
+    forced_addressee = (body.get("forced_addressee") or "").strip() or None
     try:
-        session = get_session(session_id, resident_id)
-    except CaseNotFound:
-        raise HTTPException(status_code=404, detail="session not found")
-    except AccessDenied:
-        raise HTTPException(status_code=403, detail="access denied")
-    # Grounded path: if the utterance maps to a patient history beat, use the engine
-    try:
-        from backend.nurse_brain import run_patient_turn
-        turn = run_patient_turn(session, text)
+        return _run_grounded_turn(session, text, forced_addressee)
     except Exception as exc:
-        logging.getLogger(__name__).warning("patient grounded turn failed: %s", exc)
-        turn = None
-    if turn is not None:
-        _persist_turn(session, turn)
-        payload = _turn_payload(turn)
-        from backend.patient_voice import _affect_stability
-        payload["affect_stability"] = _affect_stability(session.engine)
-        return payload
-    # Free-roleplay fallback for conversational exchanges
-    try:
-        from backend.patient_voice import _affect_stability, patient_reply
-        reply = patient_reply(session, text)
-    except Exception as exc:
-        logging.getLogger(__name__).warning("patient reply failed: %s", exc)
+        logging.getLogger(__name__).warning("patient turn failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"patient reply failed: {exc}")
-    from backend.voice_session import persist_session
-    persist_session(session)
-    return {"reply": reply, "speaker": "patient", "affect_stability": _affect_stability(session.engine)}
 
 
 @router.post("/api/voice/debrief")
@@ -568,29 +591,48 @@ def api_voice_tts(body: dict[str, Any], request: Request):
     t0 = time.perf_counter()
     media_type, chunks = synthesize_stream(text, voice, stability_override=stability_override)
 
-    if media_type == "audio/pcm":
-        def _pcm_gen():
-            first = True
-            try:
-                for chunk in chunks:
-                    if first:
-                        first = False
-                        logger.info("[LATENCY] tts_first=%.0fms chars=%d speaker=%s",
-                                    (time.perf_counter() - t0) * 1000, len(text), speaker_label)
-                    yield chunk
-            except Exception as exc:
-                logger.warning("ElevenLabs stream TTS error mid-stream: %s", exc)
-        return StreamingResponse(_pcm_gen(), media_type="audio/pcm")
-
-    # Together / Cartesia path — consume synchronously so errors become 502
+    # ElevenLabs streams PCM-16000 (audio/pcm). Probe the first chunk before
+    # committing to the content-type so a failed stream (auth/voice/quota error,
+    # which comes back empty) doesn't send an empty body the browser silently
+    # ignores — and so we can recover via a single non-streaming retry.
     try:
-        audio = b"".join(chunks)
+        first_chunk: bytes = next(chunks)
+    except StopIteration:
+        first_chunk = b""
     except Exception as exc:
-        logging.getLogger(__name__).warning("TTS failed: %s", exc)
-        raise HTTPException(status_code=502, detail=f"synthesis failed: {exc}")
-    logger.info("[LATENCY] tts=%.0fms chars=%d speaker=%s",
-                (time.perf_counter() - t0) * 1000, len(text), speaker_label)
-    return Response(content=audio, media_type="audio/mpeg")
+        logger.warning("ElevenLabs TTS failed at stream start: %s", exc)
+        first_chunk = b""
+
+    if not first_chunk:
+        logger.info("EL TTS stream returned no bytes for speaker=%s; retrying non-streaming", speaker_label)
+        from backend.voice_service import synthesize
+        try:
+            audio = synthesize(text, voice, stability_override=stability_override)
+            return Response(content=audio, media_type="audio/mpeg")
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"synthesis failed: {exc}")
+
+    # Defensive: ElevenLabs only returns MP3 here if output_format ever regresses
+    # to the body (it belongs in the query string). MP3 bytes carry an ID3 / frame
+    # -sync header; if the browser plays those through the PCM decoder it's loud
+    # static, so detect the real format and serve the correct content-type.
+    is_mp3 = first_chunk[:3] == b"ID3" or (
+        len(first_chunk) >= 2 and first_chunk[0] == 0xFF and (first_chunk[1] & 0xE0) == 0xE0
+    )
+    media = "audio/mpeg" if is_mp3 else "audio/pcm"
+    if is_mp3:
+        logger.warning("EL TTS returned MP3 (not PCM) for speaker=%s; serving as audio/mpeg", speaker_label)
+    else:
+        logger.info("[LATENCY] tts_first=%.0fms chars=%d speaker=%s",
+                    (time.perf_counter() - t0) * 1000, len(text), speaker_label)
+
+    def _gen():
+        try:
+            yield first_chunk
+            yield from chunks
+        except Exception as exc:
+            logger.warning("ElevenLabs stream TTS error mid-stream: %s", exc)
+    return StreamingResponse(_gen(), media_type=media)
 
 
 @router.get("/api/voice/sample")

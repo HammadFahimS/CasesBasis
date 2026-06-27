@@ -80,8 +80,9 @@ def _persona(actor, speaker: str) -> str:
 
 
 def _voice_as(actor, speaker: str, content: str, transcript: str,
-              already_asked: bool = False) -> str:
+              already_asked: bool = False, emotion: str = "") -> str:
     """Role-play ``actor`` saying the grounded ``content`` aloud. Fails soft."""
+    emotion_note = f"\n\nHow you feel right now: {emotion}" if emotion else ""
     repeat_note = (
         "\n\n(The doctor is asking about something you already told them. "
         "Acknowledge briefly that you already mentioned it, then give a "
@@ -99,7 +100,7 @@ def _voice_as(actor, speaker: str, content: str, transcript: str,
         if speaker == "family" else ""
     )
     user = (
-        f"{_persona(actor, speaker)}\n\n"
+        f"{_persona(actor, speaker)}{emotion_note}\n\n"
         f"The resident said: \"{transcript}\"\n\n"
         f"What you know and are telling them:\n{content}{pov_note}{repeat_note}\n\nYou:"
     )
@@ -116,13 +117,16 @@ def voice_history(session, provider: str | None, content: str, transcript: str,
 
     Returns ``(reply, speaker)``. ``speaker`` is the styling/voice class
     (``ems``/``family``/``patient``/``nurse``). Grounded in ``content`` — the
-    person paraphrases it aloud without inventing.
-    """
+    person paraphrases it aloud without inventing. The speaker's live EmotionalState
+    (Phase 5) colours how they say it (e.g. a frightened relative)."""
     speaker = provider_speaker(provider)
     if speaker == "nurse" or not content:
         return content or "", "nurse"
     actor = find_actor(session.engine.case, provider, speaker)
-    return _voice_as(actor, speaker, content, transcript, already_asked=already_asked), speaker
+    from backend.emotional_state import for_speaker
+    emotion = for_speaker(speaker, session.engine).instruction
+    return _voice_as(actor, speaker, content, transcript,
+                     already_asked=already_asked, emotion=emotion), speaker
 
 
 CUE_SYSTEM = (

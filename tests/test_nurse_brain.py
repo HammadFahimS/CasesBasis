@@ -287,10 +287,11 @@ def test_run_turn_consult_produces_consult_card(db_path, monkeypatch):
     assert turn.diagnostic["category"] == "consult"   # routes to the Consults pane
     assert turn.diagnostic["title"] == "Neurology consultant"
     assert "IVIG" in turn.reply
-    # the consult is recorded exactly once on the nurse channel
+    # the consult is recorded once, under the speaker who actually voiced it (S2):
+    # the consultant, not a blanket "nurse".
     assert session.history[-2:] == [
         {"role": "resident", "text": "call neurology"},
-        {"role": "nurse", "text": turn.reply},
+        {"role": "consult", "text": turn.reply},
     ]
 
 

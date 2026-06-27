@@ -85,6 +85,18 @@ class RunState:
     fired_cues: list[str] = field(default_factory=list)
     log: list[dict[str, object]] = field(default_factory=list)
     ended: bool = False
+    # Turn-spanning protocol state: a confirmable action (e.g. a high-alert med
+    # awaiting its dose, or an ICU admission awaiting a read-back confirmation) the
+    # nurse has parked across turns. Lives on the run so it survives park/resume.
+    # Shape: {op, target, dose, action_text, label, status}; status is one of
+    # "awaiting_info" (a slot is missing) | "awaiting_confirm" (read back, awaiting
+    # go-ahead). None when nothing is pending. Owned by nurse_brain.dispatch.
+    pending_action: dict | None = None
+    # Room-of-Agents presence (RA-1): actor ids the resident has explicitly summoned
+    # ("call the husband", "page neurology"). Presence itself is *computed* live by
+    # SimulationEngine.is_present (time-arrival + summon); only the summon events
+    # need to persist. See docs/room-of-agents.md C1.
+    summoned_actors: list[str] = field(default_factory=list)
 
 
 class SimulationEngine:
@@ -115,13 +127,83 @@ class SimulationEngine:
                 return inv
         return None
 
+    # ----------------------------------------------------------------- presence #
+    # Room-of-Agents C1: the room knows who is here. The Router consults this so
+    # that addressing an absent actor yields an honest "they're not here yet" line
+    # instead of falling to the nurse sink. See docs/room-of-agents.md.
+
+    def _actor(self, actor_id: str | None):
+        if not actor_id:
+            return None
+        return next((a for a in self.case.actors if a.id == actor_id), None)
+
+    def is_present(self, actor_id: str | None) -> bool:
+        """Is this actor in the room (addressable directly) right now?
+
+        Presence = explicitly summoned, OR a non-consultant who has arrived:
+        ``available_after_seconds`` is None (here from the start) or has elapsed.
+        Consultants are never "in the room" by the clock — they are reached only by
+        being called (``summon`` via request_consult), since they advise by phone /
+        arrive on request."""
+        actor = self._actor(actor_id)
+        if actor is None:
+            return False
+        if actor.id in self.run.summoned_actors:
+            return True
+        from backend.actor_voice import actor_speaker
+        if actor_speaker(actor) == "consult":
+            return False
+        after = getattr(actor, "available_after_seconds", None)
+        return after is None or self.run.elapsed_seconds >= after
+
+    def present_actor_ids(self) -> set[str]:
+        """The set of actor ids currently in the room."""
+        return {a.id for a in self.case.actors if self.is_present(a.id)}
+
+    def _beat_holder_present(self, beat) -> bool:
+        """Is the actor who holds this history beat currently in the room? Maps the
+        beat's provider kind to a case actor and checks presence (used so an
+        early-summoned holder's timer-gated beats become answerable)."""
+        from backend.actor_voice import actor_speaker, provider_speaker
+        kind = provider_speaker(beat.provider)
+        holder = next((a for a in self.case.actors if actor_speaker(a) == kind), None)
+        return holder is not None and self.is_present(holder.id)
+
+    def arrival_wait(self, actor_id: str | None) -> int | None:
+        """Seconds until a timed-arrival actor shows up, or None if not applicable
+        (already present, summoned, a consultant, or no timer)."""
+        actor = self._actor(actor_id)
+        if actor is None or self.is_present(actor_id):
+            return None
+        after = getattr(actor, "available_after_seconds", None)
+        if after is None:
+            return None
+        return max(0, after - self.run.elapsed_seconds)
+
+    def summon(self, actor_id: str) -> bool:
+        """Bring an actor into the room now (resident actively called them). Returns
+        True if this changed presence. Idempotent."""
+        actor = self._actor(actor_id)
+        if actor is None or actor_id in self.run.summoned_actors:
+            return False
+        self.run.summoned_actors.append(actor_id)
+        self._log("summon", actor_id)
+        return True
+
     # --------------------------------------------------------------- actions #
     def ask(self, history_id: str) -> StepResult:
         """Reveal a gated history beat if it's available."""
         beat = next((h for h in self.case.history if h.id == history_id), None)
         if beat is None:
             return self._result(message=f"No history beat '{history_id}'.")
-        if beat.available_after_seconds and self.run.elapsed_seconds < beat.available_after_seconds:
+        if (
+            beat.available_after_seconds
+            and self.run.elapsed_seconds < beat.available_after_seconds
+            and not self._beat_holder_present(beat)
+        ):
+            # The beat's timer is a proxy for "its holder isn't here yet". Once the
+            # holder is in the room (e.g. the husband was summoned early), presence
+            # supersedes the timer — they can answer for themselves (RA-1/C1).
             wait = beat.available_after_seconds - self.run.elapsed_seconds
             return self._result(message=f"Not available yet ({wait}s) — {beat.label}.")
         if history_id not in self.run.revealed_history:
@@ -330,6 +412,7 @@ class SimulationEngine:
         self.run.state_entered_at = self.run.elapsed_seconds
         self.run.actions_this_state = []
         self.run.vitals_override = {}
+        self.run.pending_action = None  # a new state is fresh context — drop any parked action
         if record:
             self.run.visited_states.append(state_id)
         if state.is_terminal:

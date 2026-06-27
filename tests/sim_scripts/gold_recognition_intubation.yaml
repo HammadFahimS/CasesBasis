@@ -1,0 +1,52 @@
+# GOLD — the resident runs the case correctly, end to end.
+# EMS handover → neuro recognition → elective intubation → correct paralytic
+# (rocuronium, dosed) → ICU disposition. Every actor speaks for themselves and
+# the case advances along the authored path.
+#
+# `intent:` is what the interpreter would emit for that utterance (the LLM seam is
+# stubbed); everything downstream — addressee, dispatch, voice routing, scoring —
+# runs for real.
+case: myasthenic_crisis
+name: gold_recognition_and_intubation
+# Post-Phase-2: routing is server-side, decided from intent — so these lines need
+# NO "Nurse,"/addressee prefix. The Director sends orders/actions/diagnosis to the
+# nurse, and the EMS handover to EMS, purely from content.
+turns:
+  - say: "EMS, what's the story?"
+    intent: { op: ask_history, target: ems_handover }
+    expect: { endpoint: staff, speaker: ems, op: ask_history, reveals: "Called 20" }
+
+  - say: "Examine her neuro system."
+    intent: { op: perform_exam, target: Neurological }
+    expect: { endpoint: staff, speaker: nurse, op: perform_exam, state: recognition, transitioned: true }
+
+  - say: "She's tiring — let's intubate her electively."
+    intent: { op: perform_action, action_text: "intubate electively" }
+    expect: { endpoint: staff, op: perform_action, state: intubation_prep, transitioned: true }
+
+  # MG patients are markedly sensitive to non-depolarisers → a *reduced* dose is the
+  # correct call (the rubric credits the reduction). A high-alert drug stated WITH a
+  # dose is the closed loop — it administers and advances in one turn.
+  - say: "Give a reduced dose of rocuronium, point three mig per kig."
+    intent: { op: order_medication, target: rocuronium, action_text: "reduced dose 0.3 mg/kg" }
+    expect: { endpoint: staff, speaker: nurse, op: order_medication, state: post_intubation, transitioned: true }
+
+  - say: "I think this is a myasthenic crisis."
+    intent: { op: diagnose, action_text: "myasthenic crisis" }
+    expect: { endpoint: staff, speaker: nurse, op: diagnose }
+
+  # Disposition is confirmable (S3): the order is read back and PARKED, then a plain
+  # "proceed" commits it — no confirm-loop.
+  - say: "Admit her to the ICU on IVIG and steroids."
+    intent: { op: perform_action, action_text: "admit to ICU on IVIG and steroids" }
+    expect: { endpoint: staff, speaker: nurse, op: perform_action, state: post_intubation, transitioned: false }
+
+  - say: "Yes, please proceed."
+    intent: { op: confirm_pending }
+    expect: { endpoint: staff, speaker: nurse, op: confirm_pending, state: disposition, transitioned: true }
+
+final:
+  reached_state: disposition
+  working_dx_contains: "myasthenic"
+  critical_error: false
+  min_score: 90

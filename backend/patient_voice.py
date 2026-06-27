@@ -81,64 +81,20 @@ def _persona(case) -> str:
 
 
 # States in which the patient is sedated/unresponsive and cannot speak.
-_SILENT_STATES = {"post_intubation", "pea_arrest", "icu_admission"}
+# The patient's live emotional model now lives in backend.emotional_state (Phase 5),
+# generalised across the cast. These thin shims preserve the call sites here.
+from backend.emotional_state import SILENT_STATES as _SILENT_STATES
+from backend.emotional_state import for_speaker as _emotion_for
 
 
 def _affect_stability(engine) -> float:
-    """ElevenLabs stability for the patient this turn — lower = more affect/expression.
-
-    Mirrors the emotional escalation in :func:`_affect_instruction`: calm at
-    baseline, increasingly expressive (lower stability) as the patient tires."""
-    state_id = engine.run.current_state_id
-    if state_id in _SILENT_STATES:
-        return 0.30   # moot — no speech; keep the default
-    if "intubation" in state_id and "post" not in state_id:
-        return 0.15   # near-failure: maximum affect, almost no stability
-    elapsed = engine.elapsed_in_state
-    if elapsed > 180:
-        return 0.20
-    if elapsed > 60:
-        return 0.25
-    return 0.30   # baseline breathless anxiety
+    """ElevenLabs stability for the patient this turn (delegates to emotional_state)."""
+    return _emotion_for("patient", engine).stability
 
 
 def _affect_instruction(engine) -> str:
-    """A behavioral modifier injected into the patient's turn prompt.
-
-    Escalates distress as the patient deteriorates — shorter replies, more
-    breathless language, eventual silence when sedated. Derived from the
-    engine's current state and time elapsed in that state, so it generalizes
-    to any case whose states follow the same patient-status pattern."""
-    state_id = engine.run.current_state_id
-    if state_id in _SILENT_STATES:
-        return (
-            "You are sedated and cannot speak. Do not reply with words — "
-            "respond with silence (output an empty string)."
-        )
-    elapsed = engine.elapsed_in_state
-    # intubation_prep: respiratory muscles nearly failing
-    if "intubation" in state_id and "post" not in state_id:
-        return (
-            "You are exhausted and barely able to breathe. Reply in at most "
-            "four words. Every breath is a visible effort — do not form full "
-            "sentences. You may trail off mid-word."
-        )
-    # Escalate within baseline/recognition as time passes
-    if elapsed > 180:
-        return (
-            "Your breathing has worsened over the last few minutes. Keep each "
-            "reply to one very short phrase (≤6 words). Show increasing "
-            "exhaustion and breathlessness."
-        )
-    if elapsed > 60:
-        return (
-            "You are noticeably more breathless than when the doctor arrived. "
-            "Limit replies to short sentences and convey effort with each word."
-        )
-    return (
-        "You are breathless and anxious but can still speak in short sentences. "
-        "You cannot complete full sentences without pausing to breathe."
-    )
+    """The patient's behavioural modifier this turn (delegates to emotional_state)."""
+    return _emotion_for("patient", engine).instruction
 
 
 def _recent(history: list[dict], limit: int = 6) -> str:

@@ -53,7 +53,16 @@ OPS = {
     "perform_action",
     "request_consult",
     "diagnose",
+    "confirm_pending",   # "yes / proceed / go ahead" — execute the parked action
+    "cancel_pending",    # "no / hold it / cancel" — drop the parked action
     "chitchat",
+}
+
+# Ops that represent a fresh actionable order — one of these supersedes a parked
+# pending action rather than being read as a reply to the nurse's confirm question.
+_PARKABLE_OPS = {
+    "order_medication", "perform_action", "order_investigation",
+    "perform_exam", "request_consult", "diagnose",
 }
 
 INTERPRET_SYSTEM = (
@@ -77,7 +86,11 @@ INTERPRET_SYSTEM = (
     "(e.g. intubate, CPR, defibrillate, position the patient) — set action_text. "
     "diagnose when the resident commits a working or differential diagnosis "
     "('I think this is …', 'my working diagnosis is …') — set action_text to the "
-    "diagnosis. chitchat for anything social or unclear. "
+    "diagnosis. confirm_pending when the resident is AFFIRMING a pending order the "
+    "nurse just read back ('yes', 'proceed', 'go ahead', 'do it', 'confirm', "
+    "'that's right') — NOT a new order. cancel_pending when they are CALLING IT OFF "
+    "('no', 'hold it', 'cancel that', 'stop', 'don't'). chitchat for anything "
+    "social or unclear. "
     "Only use an id/name that appears in the lists. "
     "Set clarify:true when: the stated test or procedure name is unclear or a "
     "plausible mishearing of multiple catalogue entries (e.g. 'ACG' could be ABG "
@@ -147,10 +160,17 @@ def _catalogue(engine: SimulationEngine) -> str:
     return "\n".join(lines)
 
 
+_ROLE_LABELS = {
+    "resident": "Resident", "nurse": "Nurse", "patient": "Patient",
+    "ems": "EMS", "family": "Family", "rt": "RT", "consult": "Consultant",
+}
+
+
 def _history_lines(history: list[dict], limit: int = 6) -> str:
     out = []
     for turn in history[-limit:]:
-        who = "Resident" if turn.get("role") == "resident" else "Nurse"
+        role = turn.get("role")
+        who = _ROLE_LABELS.get(role, role.title() if role else "Nurse")
         line = (turn.get("text") or "").strip()
         if line:
             out.append(f"{who}: {line}")
@@ -234,14 +254,85 @@ def interpret(transcript: str, engine: SimulationEngine, history: list[dict]) ->
     return _apply_addressee(intent, transcript, engine)
 
 
+# Bare affirmations / negations that resolve a parked pending action even when the
+# interpreter under-classified them as chitchat (the anti-loop safety net for S3).
+_AFFIRM_RE = re.compile(
+    r"\b(yes|yeah|yep|yup|correct|confirm(?:ed)?|proceed|go ahead|do it|"
+    r"go for it|that's right|affirmative|please do|sounds good|ok(?:ay)?)\b",
+    re.IGNORECASE,
+)
+_CANCEL_RE = re.compile(
+    r"\b(no|nope|hold (?:it|off|on)|cancel|stop|don't|do not|wait|never mind|abort)\b",
+    re.IGNORECASE,
+)
+# perform_action utterances that are a disposition/admission decision — confirmable
+# (read back before committing), unlike an immediate intervention (intubate, CPR).
+_DISPOSITION_RE = re.compile(
+    r"\b(admit|admission|icu|intensive care|transfer (?:to|her|him|them)|"
+    r"disposition|plasma exchange|send (?:her|him|them|up)|up to the unit)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_affirmation(text: str) -> bool:
+    return bool(_AFFIRM_RE.search(text or ""))
+
+
+def _is_cancellation(text: str) -> bool:
+    return bool(_CANCEL_RE.search(text or ""))
+
+
+def _is_disposition(text: str) -> bool:
+    return bool(_DISPOSITION_RE.search(text or ""))
+
+
+def _execute_pending(engine: SimulationEngine, pending: dict, transcript: str,
+                     intent: NurseIntent) -> StepResult | None:
+    """Run a parked action now that it's confirmed (clearing it first)."""
+    from backend.medication import _extract_dose
+    engine.run.pending_action = None
+    if pending["op"] == "order_medication":
+        dose = pending.get("dose") or _extract_dose(transcript, intent.action_text)
+        text = pending["target"] + (f" {dose}" if dose else "")
+        return engine.act(LearnerAction(kind="medicate", text=text))
+    if pending["op"] == "perform_action":
+        return engine.act(LearnerAction(kind="intervene", text=pending.get("action_text") or ""))
+    return None
+
+
 def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> StepResult | None:
     """Run the intent on the engine. Pure/deterministic — no LLM.
 
-    Returns the engine's :class:`StepResult` (None for read_vitals/chitchat,
-    which don't mutate state). When ``intent.clarify`` is True, execution is
-    withheld so the nurse can ask for confirmation first."""
+    Returns the engine's :class:`StepResult` (None for read_vitals/chitchat, and
+    for a freshly *parked* confirmable action, which mutate no clinical state yet).
+
+    Turn-spanning protocol (S3): a high-alert medication ordered without a dose, or
+    a disposition/admission, is **not executed** — it's parked on
+    ``engine.run.pending_action`` and the nurse reads it back. A following
+    affirmation ("proceed"), or the missing dose, executes it; a negation cancels
+    it; a brand-new order supersedes it."""
     if intent.clarify:
         return None  # hold — let speak() produce a "did you mean X?" line
+
+    # 1 — resolve a parked action against this utterance, before normal routing.
+    pending = engine.run.pending_action
+    if pending:
+        if intent.op == "cancel_pending" or _is_cancellation(transcript):
+            engine.run.pending_action = None
+            return None
+        supplies_dose = (
+            pending["op"] == "order_medication"
+            and pending.get("status") == "awaiting_info"
+            and _med_dose(transcript, intent.action_text) is not None
+        )
+        if intent.op == "confirm_pending" or _is_affirmation(transcript) or supplies_dose:
+            return _execute_pending(engine, pending, transcript, intent)
+        if intent.op in _PARKABLE_OPS:
+            engine.run.pending_action = None  # a new order supersedes — fall through
+        else:
+            return None  # unrelated chatter while a confirm is pending — keep it
+
+    # 2 — normal routing (confirmables park instead of executing).
     if intent.op == "ask_history" and intent.target:
         return engine.ask(intent.target)
     if intent.op == "order_investigation" and intent.target:
@@ -250,17 +341,38 @@ def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> 
         return engine.examine(intent.target)
     if intent.op == "order_medication":
         med = parse_med(intent.target, intent.action_text or transcript)
+        if needs_dose_confirm(med) and not med.dose:
+            # High-alert with no dose stated → park and read back for the dose.
+            engine.run.pending_action = {
+                "op": "order_medication", "target": med.drug, "dose": None,
+                "action_text": med.detail, "label": med.drug, "status": "awaiting_info",
+            }
+            return None
         text = med.drug + (f" {med.dose}" if med.dose else "")
         return engine.act(LearnerAction(kind="medicate", text=text))
     if intent.op == "diagnose":
         return engine.diagnose(intent.action_text or transcript)
     if intent.op == "perform_action":
-        return engine.act(LearnerAction(kind="intervene", text=intent.action_text or transcript))
-    return None  # read_vitals / chitchat / malformed target
+        action_text = intent.action_text or transcript
+        if _is_disposition(action_text):
+            # A disposition decision → read it back and confirm before committing.
+            engine.run.pending_action = {
+                "op": "perform_action", "target": None, "dose": None,
+                "action_text": action_text, "label": "the admission/disposition",
+                "status": "awaiting_confirm",
+            }
+            return None
+        return engine.act(LearnerAction(kind="intervene", text=action_text))
+    return None  # read_vitals / chitchat / confirm/cancel with nothing pending
+
+
+def _med_dose(transcript: str, action_text: str) -> str | None:
+    from backend.medication import _extract_dose
+    return _extract_dose(transcript, action_text)
 
 
 def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict,
-                   already_asked: bool = False) -> str:
+                   already_asked: bool = False, engine: SimulationEngine | None = None) -> str:
     """The factual nugget speak() must report — the engine's real output."""
     # Clarification guard: interpreter flagged ambiguous/uncertain match
     if intent.clarify and intent.op in ("order_investigation", "order_medication", "perform_action"):
@@ -269,6 +381,28 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict,
             f"You were uncertain what the resident meant. Ask them to clarify: "
             f"'Did you mean {label}? Please say it again so I can confirm.'"
         )
+
+    # ── turn-spanning confirmation protocol (S3) ──────────────────────────────
+    pending = engine.run.pending_action if engine is not None else None
+    if intent.op == "cancel_pending":
+        return ("The resident called off the pending order. Acknowledge you're holding "
+                "it and await further instruction.")
+    if intent.op == "confirm_pending":
+        if result is None:
+            return "There was nothing pending to confirm — respond briefly and stay in role."
+        parts = ["The resident confirmed the pending order; it's being carried out now."]
+        if result.transitioned:
+            parts.append(f"The patient's condition changed: {result.message}")
+        if result.critical_error:
+            parts.append("This was a serious misstep with a bad outcome — convey concern.")
+        return " ".join(parts)
+    if pending is not None and result is None and intent.op == "perform_action" \
+            and pending.get("status") == "awaiting_confirm":
+        return (
+            f"The resident is directing a disposition: '{pending['action_text']}'. Read "
+            "it back and ask them to confirm before you set it in motion. Do not act yet."
+        )
+
     if intent.op == "read_vitals":
         keep = {k: v for k, v in vitals.items() if v not in (None, {}, "")}
         return "Current vitals: " + json.dumps(keep)
@@ -329,12 +463,13 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict,
 def speak(
     transcript: str, intent: NurseIntent, result: StepResult | None,
     vitals: dict, history: list[dict], already_asked: bool = False,
+    engine: SimulationEngine | None = None,
 ) -> str:
     """Phrase the nurse's spoken reply from the real engine outcome (one LLM call)."""
     user = (
         f"Recent exchange:\n{_history_lines(history) or '(none)'}\n\n"
         f'Resident said: "{transcript}"\n'
-        f"{_outcome_brief(intent, result, vitals, already_asked=already_asked)}\n\n"
+        f"{_outcome_brief(intent, result, vitals, already_asked=already_asked, engine=engine)}\n\n"
         "Nurse (spoken reply):"
     )
     try:
@@ -517,7 +652,8 @@ def _resolve_turn(
         )
 
     session.history.append({"role": "resident", "text": transcript})
-    session.history.append({"role": "nurse", "text": reply})
+    # Persist under the speaker who actually voiced the reply (S2), not "nurse".
+    session.history.append({"role": speaker, "text": reply})
     if card:
         session.cards.append(card)  # kept so a parked run rebuilds its drawer on resume
 
@@ -547,42 +683,199 @@ def _resolve_turn(
 def run_turn(
     session: VoiceSession, transcript: str, forced_addressee: str | None = None
 ) -> NurseTurn:
-    """Full grounded turn: advance clock, Director routing, interpret, dispatch, speak.
+    """Full grounded turn — the single unified pipeline the Director routes.
+
+    advance clock → interpret → **Director decides the addressee** (staff, a named
+    bystander, or the patient) → dispatch/voice. The patient is just another routed
+    actor here: a grounded patient history beat is voiced through the engine, and a
+    conversational utterance falls to the patient's free roleplay — no separate
+    client endpoint, no ``else → patient`` default (S1).
 
     ``forced_addressee`` is set when the resident taps an addressee chip after a
-    Director ask-back.  It bypasses confidence checking and routes directly to the
-    named actor."""
+    Director ask-back; it routes directly to the named actor (or the patient)."""
     with session.lock:
+        engine = session.engine
         clock = advance_clock(session)
-        intent = interpret(transcript, session.engine, session.history)
+        intent = interpret(transcript, engine, session.history)
 
-        from backend.director import ask_back_prompt, resolve_addressee
-        decision = resolve_addressee(intent, session.engine, forced_addressee=forced_addressee)
+        from backend.routing import route
+        decision = route(intent, engine, transcript, forced_addressee=forced_addressee)
+        logger.info("route: addressee=%s present=%s summon=%s reason=%s",
+                    decision.addressee, decision.present, decision.summon, decision.reason)
 
         if decision.ask_back:
-            # Director is unsure — ask the resident before dispatching anything.
-            vitals = session.engine.current_vitals().model_dump(exclude_none=True)
+            from backend.director import ask_back_prompt
+            vitals = engine.current_vitals().model_dump(exclude_none=True)
             session.history.append({"role": "resident", "text": transcript})
             return NurseTurn(
-                reply=ask_back_prompt(session.engine),
-                intent=intent,
-                vitals=vitals,
-                state_id=session.engine.run.current_state_id,
-                state_name=session.engine.state.name,
+                reply=ask_back_prompt(engine), intent=intent, vitals=vitals,
+                state_id=engine.run.current_state_id, state_name=engine.state.name,
                 clock_events=[c.message for c in clock if c.message],
-                speaker="nurse",
-                needs_addressee=True,
+                speaker="nurse", needs_addressee=True,
             )
 
-        if decision.forced_speaker:
-            # Chip selected: route to the specified actor's best history beat.
-            beat_id = _beat_for_speaker(session.engine, decision.forced_speaker)
+        # A pure "call the husband" — the nurse fetches them; she acknowledges and
+        # the actor enters the room (addressable next turn).
+        if decision.summon and decision.addressee == "nurse":
+            return _summon_turn(session, intent, transcript, clock, decision)
+        # Calling a consultant summons them inline and they still answer this turn.
+        if decision.summon:
+            engine.summon(decision.summon)
+
+        # The addressee is a real person not in the room → answer honestly (the
+        # nurse states the room fact), never fabricate a reply for them (C1/C3).
+        if not decision.present:
+            return _absent_actor_turn(session, intent, transcript, clock, decision)
+
+        if decision.addressee == "patient":
+            return _patient_routed_turn(session, intent, transcript, clock)
+
+        # A present bystander (EMS / family / RT) answers from their OWN knowledge —
+        # positive routing (C3): a history/conversational turn reaches them, never the
+        # nurse covering. If they hold a relevant beat we ground to it; if they hold
+        # none (e.g. the RT has no history), they decline in character rather than the
+        # nurse fabricating a cover. Orders to them fall through to normal dispatch.
+        if decision.addressee in ("ems", "family", "rt") and intent.op in ("ask_history", "chitchat"):
+            beat_id = _beat_for_speaker(engine, decision.addressee)
             if beat_id:
                 intent = NurseIntent(
                     op="ask_history", target=beat_id, action_text=intent.action_text
                 )
+            else:
+                return _refusal_turn(session, intent, transcript, clock, decision)
 
         return _resolve_turn(session, intent, transcript, clock)
+
+
+def _patient_routed_turn(
+    session: VoiceSession, intent: NurseIntent, transcript: str, clock: list,
+) -> NurseTurn:
+    """The patient speaks this turn — grounded on an authored beat where the words
+    map to one, else free roleplay.
+
+    Symptom-directed conversation ("how are you feeling?", "when did this start?")
+    is grounded against an unrevealed patient history beat so the reveal is tracked
+    in ``run.revealed_history``; anything else is the patient's free roleplay,
+    voiced through :func:`patient_voice.patient_reply`."""
+    from backend.actor_voice import provider_speaker
+    engine = session.engine
+    patient_beats = [
+        h for h in engine.case.history if provider_speaker(h.provider) == "patient"
+    ]
+    # Symptom-directed → ground to the next unrevealed patient beat (engine reveal).
+    if patient_beats and (set(transcript.lower().split()) & _SYMPTOM_WORDS):
+        unrevealed = [h for h in patient_beats
+                      if h.id not in engine.run.revealed_history]
+        if unrevealed:
+            grounded = NurseIntent(op="ask_history", target=unrevealed[0].id)
+            return _resolve_turn(session, grounded, transcript, clock)
+
+    # Free roleplay — patient_reply records the exchange on the patient channel.
+    from backend.patient_voice import patient_reply
+    reply = patient_reply(session, transcript)
+    vitals = engine.current_vitals().model_dump(exclude_none=True)
+    cues = _fire_cues(session)
+    transitioned = bool(clock)
+    critical = any(c.critical_error for c in clock)
+    return NurseTurn(
+        reply=reply,
+        intent=intent,
+        vitals=vitals,
+        state_id=engine.run.current_state_id,
+        state_name=engine.state.name,
+        transitioned=transitioned,
+        critical_error=critical,
+        ended=engine.run.ended,
+        clock_events=[c.message for c in clock if c.message],
+        speaker="patient",
+        working_dx=engine.run.working_diagnoses[-1] if engine.run.working_diagnoses else None,
+        cues=cues,
+    )
+
+
+def _absent_actor_turn(
+    session: VoiceSession, intent: NurseIntent, transcript: str, clock: list, decision,
+) -> NurseTurn:
+    """The resident addressed someone who is not in the room. The nurse states the
+    room fact honestly and offers to call them — no fabricated reply, no silent
+    drop (C1). This is a *room-state* line, not invented clinical content."""
+    engine = session.engine
+    actor = next((a for a in engine.case.actors if a.id == decision.actor_id), None)
+    role = (actor.role if actor else decision.addressee).strip()
+    wait = engine.arrival_wait(decision.actor_id)
+    if wait and wait > 0:
+        mins = max(1, round(wait / 60))
+        reply = (f"{role} isn't here yet — about {mins} minute{'s' if mins != 1 else ''} out. "
+                 f"Want me to call ahead?")
+    else:
+        reply = f"{role} isn't at the bedside right now. Should I call them in?"
+
+    session.history.append({"role": "resident", "text": transcript})
+    session.history.append({"role": "nurse", "text": reply})
+    vitals = engine.current_vitals().model_dump(exclude_none=True)
+    cues = _fire_cues(session)
+    return NurseTurn(
+        reply=reply, intent=intent, vitals=vitals,
+        state_id=engine.run.current_state_id, state_name=engine.state.name,
+        transitioned=bool(clock), critical_error=any(c.critical_error for c in clock),
+        ended=engine.run.ended, clock_events=[c.message for c in clock if c.message],
+        speaker="nurse",
+        working_dx=engine.run.working_diagnoses[-1] if engine.run.working_diagnoses else None,
+        cues=cues,
+    )
+
+
+def _summon_turn(
+    session: VoiceSession, intent: NurseIntent, transcript: str, clock: list, decision,
+) -> NurseTurn:
+    """The resident asked to bring someone in ("call the husband"). The nurse fetches
+    them (engine.summon) and acknowledges; the actor is in the room from now on, so a
+    direct address next turn reaches them (C1)."""
+    engine = session.engine
+    engine.summon(decision.summon)
+    actor = next((a for a in engine.case.actors if a.id == decision.summon), None)
+    role = (actor.role if actor else decision.summon).strip()
+    reply = f"Calling {role} in now — they're on their way over."
+
+    session.history.append({"role": "resident", "text": transcript})
+    session.history.append({"role": "nurse", "text": reply})
+    vitals = engine.current_vitals().model_dump(exclude_none=True)
+    cues = _fire_cues(session)
+    return NurseTurn(
+        reply=reply, intent=intent, vitals=vitals,
+        state_id=engine.run.current_state_id, state_name=engine.state.name,
+        transitioned=bool(clock), critical_error=any(c.critical_error for c in clock),
+        ended=engine.run.ended, clock_events=[c.message for c in clock if c.message],
+        speaker="nurse",
+        working_dx=engine.run.working_diagnoses[-1] if engine.run.working_diagnoses else None,
+        cues=cues,
+    )
+
+
+def _refusal_turn(
+    session: VoiceSession, intent: NurseIntent, transcript: str, clock: list, decision,
+) -> NurseTurn:
+    """A present actor was asked something outside what they hold → they decline in
+    character (C3), instead of the nurse fabricating a cover. No engine change."""
+    from backend.agents import refuse
+    engine = session.engine
+    speaker = decision.addressee
+    actor = next((a for a in engine.case.actors if a.id == decision.actor_id), None)
+    reply = refuse(speaker, actor)
+
+    session.history.append({"role": "resident", "text": transcript})
+    session.history.append({"role": speaker, "text": reply})
+    vitals = engine.current_vitals().model_dump(exclude_none=True)
+    cues = _fire_cues(session)
+    return NurseTurn(
+        reply=reply, intent=intent, vitals=vitals,
+        state_id=engine.run.current_state_id, state_name=engine.state.name,
+        transitioned=bool(clock), critical_error=any(c.critical_error for c in clock),
+        ended=engine.run.ended, clock_events=[c.message for c in clock if c.message],
+        speaker=speaker,
+        working_dx=engine.run.working_diagnoses[-1] if engine.run.working_diagnoses else None,
+        cues=cues,
+    )
 
 
 def _action_label(session: VoiceSession, op: str, target: str | None) -> str:
