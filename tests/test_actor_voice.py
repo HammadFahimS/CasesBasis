@@ -60,7 +60,12 @@ def test_ask_history_ems_handover_is_voiced_by_ems(monkeypatch):
 def test_bedside_investigation_is_reported_by_rt(monkeypatch):
     monkeypatch.setattr(actor_voice, "_complete", lambda s, u: "Vital capacity is under twenty mils per kilo.")
     s = _session()
-    s.engine.run.elapsed_seconds = 9999   # clear the 60s gate on vital_capacity
+    # Exercise the immediate-report path: a bedside test with no turn-around returns
+    # its value in-turn, voiced by the RT. (The gold case's VC/NIF carry a latency, so
+    # there they instead report back via the deferred callback — see test_live_sim.)
+    inv = next(i for i in s.engine.case.investigations if i.id == "vital_capacity")
+    monkeypatch.setattr(inv, "result_latency_seconds", None)   # auto-restored (cached case)
+    monkeypatch.setattr(inv, "available_after_seconds", None)
     intent = NurseIntent(op="order_investigation", target="vital_capacity")
     turn = _resolve_turn(s, intent, "get me a vital capacity", [])
     assert turn.speaker == "rt"
@@ -81,6 +86,7 @@ def test_lingering_fires_a_cue_voiced_by_its_actor(monkeypatch):
     monkeypatch.setattr(nurse_brain, "_complete", lambda s, u: "Heart rate's 106, still tachypnoeic.")
     monkeypatch.setattr(actor_voice, "_complete", lambda s, u: "Doctor, should we get the husband for collateral?")
     s = _session()
+    s.engine.summon("husband")                      # the husband-cue is presence-gated (C1)
     s.engine.tick(s.engine.CUE_AFTER_SECONDS + 1)   # linger in baseline past the cue threshold
     turn = _resolve_turn(s, NurseIntent(op="read_vitals"), "what's her heart rate?", [])
     assert turn.cues and turn.cues[0]["speaker"] == "nurse"   # baseline cue is the nurse's

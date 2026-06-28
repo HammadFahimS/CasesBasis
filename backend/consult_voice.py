@@ -29,6 +29,11 @@ _NON_CONSULT = (
     "patient", "nurse", "ems", "paramedic", "medic", "husband", "wife", "mother",
     "father", "son", "daughter", "family", "partner", "relative", "bystander",
     "friend", "carer", "caregiver",
+    # The RT is a bedside team member who *holds* orderable investigations (VC/NIF),
+    # not a phone consultant. Treating "RT, get me a vital capacity" as a consult
+    # role-played it into an empty "I'll get it" that never reached the engine — the
+    # decision-driving numbers never came back. Route it as an order instead.
+    "rt", "respiratory", "therapist",
 )
 
 

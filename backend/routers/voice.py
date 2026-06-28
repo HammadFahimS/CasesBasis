@@ -195,6 +195,9 @@ def api_voice_resume(body: dict[str, Any], request: Request) -> dict[str, Any]:
     payload["history"] = session.history
     payload["patient_history"] = session.patient_history
     payload["cards"] = session.cards
+    # Restore any orders still in flight so the round-table shows the holder working.
+    from backend.director import pending_deferred
+    payload["pending"] = pending_deferred(session)
     return payload
 
 
@@ -317,8 +320,15 @@ def _run_grounded_turn(session: Any, text: str, forced_addressee: str | None) ->
     llm_ms = (time.perf_counter() - t0) * 1000
     logger.info("[LATENCY] session=%s llm=%.0fms op=%s speaker=%s",
                 session.id[:8], llm_ms, turn.intent.op, turn.speaker)
+    # Any scheduled results that came due this turn report back now (the room talking
+    # back). Fired before persist so the spoken line + panel card survive a park.
+    from backend.director import fire_deferred, pending_deferred
+    deferred = fire_deferred(session)
     _persist_turn(session, turn)
     payload = _turn_payload(turn)
+    payload["deferred"] = deferred
+    # In-flight orders (scheduled, not yet back) so the room shows the holder working.
+    payload["pending"] = pending_deferred(session)
     # Hand the front-end this speaker's live EmotionalState stability (Phase 5) so the
     # patient and a frightened relative are voiced with more affect; the professionals
     # resolve to None and keep their configured default voice.
@@ -422,8 +432,16 @@ def api_voice_action(body: dict[str, Any], request: Request) -> dict[str, Any]:
     except Exception as exc:
         logging.getLogger(__name__).warning("voice action failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"action failed: {exc}")
+    # Parity with the spoken-turn path: fire any results that came due (the room
+    # talks back) and surface the in-flight set so a panel-click order shows the
+    # holder working until it lands.
+    from backend.director import fire_deferred, pending_deferred
+    deferred = fire_deferred(session)
     _persist_turn(session, turn)
-    return _turn_payload(turn)
+    payload = _turn_payload(turn)
+    payload["deferred"] = deferred
+    payload["pending"] = pending_deferred(session)
+    return payload
 
 
 @router.post("/api/voice/llm-patient")
@@ -595,13 +613,25 @@ def api_voice_tts(body: dict[str, Any], request: Request):
     # committing to the content-type so a failed stream (auth/voice/quota error,
     # which comes back empty) doesn't send an empty body the browser silently
     # ignores — and so we can recover via a single non-streaming retry.
-    try:
-        first_chunk: bytes = next(chunks)
-    except StopIteration:
-        first_chunk = b""
-    except Exception as exc:
-        logger.warning("ElevenLabs TTS failed at stream start: %s", exc)
-        first_chunk = b""
+    def _probe(gen):
+        try:
+            return next(gen), gen
+        except StopIteration:
+            return b"", gen
+        except Exception as exc:
+            logger.warning("ElevenLabs TTS failed at stream start: %s", exc)
+            return b"", gen
+
+    first_chunk, chunks = _probe(chunks)
+
+    # A cold/less-used agent voice (RT, family, the patient) intermittently returns
+    # an empty PCM stream on first hit while the warm nurse voice succeeds — which
+    # reads as "the agents have no TTS". Re-open the stream once before giving up on
+    # PCM, so a single ElevenLabs hiccup doesn't silence a non-nurse speaker.
+    if not first_chunk:
+        logger.info("EL TTS stream empty for speaker=%s; retrying the stream once", speaker_label)
+        _media2, chunks2 = synthesize_stream(text, voice, stability_override=stability_override)
+        first_chunk, chunks = _probe(chunks2)
 
     if not first_chunk:
         logger.info("EL TTS stream returned no bytes for speaker=%s; retrying non-streaming", speaker_label)

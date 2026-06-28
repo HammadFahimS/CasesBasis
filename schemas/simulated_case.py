@@ -195,6 +195,15 @@ class InvestigationDef(StrictModel):
     interpretation: str = ""
     image_ref: str | None = None
     available_after_seconds: int | None = None
+    # Turn-around time *relative to when the test is ordered* (vs the absolute-clock
+    # ``available_after_seconds``). When set, ordering the test schedules a deferred
+    # result: the holding actor reports the number back ~this many seconds later and
+    # the card lands in the diagnostics panel then — the "room talks back" loop for
+    # bedside spirometry, sent labs, etc. See SimulationEngine.due_deferred.
+    result_latency_seconds: int | None = None
+    # Which actor delivers the result aloud when it comes back (e.g. the RT for
+    # bedside VC/NIF). Defaults by category (bedside→RT, else the nurse).
+    result_actor_id: str | None = None
     # Diagnosis/finding hint that drives the real ECG/CXR image generators
     # (e.g. "sinus tachycardia", "normal chest"). Falls back to the result text.
     visual_dx: str | None = None
@@ -270,6 +279,11 @@ class Cue(StrictModel):
     actor_id: str | None = None
     when: str = ""
     after_seconds: int | None = None
+    # Presence gate (Room-of-Agents C1): the cue only fires once *every* actor id
+    # listed here is in the room. A cue that references the husband ("ask him about
+    # her symptoms") must not fire while he's still en route — otherwise the room
+    # announces an arrival that hasn't happened. Empty = no presence requirement.
+    requires_present: list[str] = Field(default_factory=list)
 
 
 class ScenarioState(StrictModel):
@@ -368,6 +382,19 @@ class SimulatedCase(StrictModel):
                     raise ValueError(
                         f"cue in state '{state.id}' references unknown actor '{cue.actor_id}'"
                     )
+                for aid in cue.requires_present:
+                    if aid not in actor_ids:
+                        raise ValueError(
+                            f"cue in state '{state.id}' requires unknown actor '{aid}'"
+                        )
+
+        # Referential check for investigation result holders.
+        for inv in self.investigations:
+            if inv.result_actor_id and inv.result_actor_id not in actor_ids:
+                raise ValueError(
+                    f"investigation '{inv.id}' names unknown result_actor_id "
+                    f"'{inv.result_actor_id}'"
+                )
         return self
 
     def state(self, state_id: str) -> ScenarioState:

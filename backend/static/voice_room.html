@@ -62,11 +62,13 @@
   }
   .exit:hover { color: var(--teal-glow); border-color: rgba(95,216,230,0.3); }
 
-  /* ===== Freed central results space ===== */
+  /* ===== Status caption — retired: it printed over the address-to bar. Kept in the
+     DOM (hidden) so result/critical writes to #stageLabel/#stageHint never error. ===== */
   .stage-empty {
-    position: absolute; left: 50%; top: 47%; transform: translate(-50%,-50%);
+    display: none;
+    position: absolute; left: 50%; bottom: 118px; transform: translateX(-50%);
     text-align: center; pointer-events: none; z-index: 1;
-    max-width: 480px; padding: 0 20px;
+    max-width: 520px; padding: 0 20px;
   }
   .stage-empty .se-label {
     font-family:'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.26em; text-transform: uppercase;
@@ -78,10 +80,186 @@
   }
   @keyframes blip { 0%,100%{opacity:.3;} 50%{opacity:1;} }
   .stage-empty .se-hint {
-    margin-top: 16px; font-family:'Instrument Serif', Georgia, serif; font-style: italic;
-    font-size: 19px; line-height: 1.5; color: var(--ink-600);
+    margin-top: 10px; font-family:'Instrument Serif', Georgia, serif; font-style: italic;
+    font-size: 14px; line-height: 1.5; color: var(--ink-600);
   }
   .stage-empty .se-hint b { color: var(--ink-400); font-weight: 400; font-style: normal; }
+
+  /* ===== Circle conversation theater (centre) ===== */
+  .circle-stage {
+    position: absolute; left: 50%; top: 47%; transform: translate(-50%,-50%);
+    width: min(560px, 56vh); height: min(560px, 56vh); z-index: 2;
+    --ac: #5fd8e6;
+  }
+  .cs-ring {
+    position: absolute; inset: 9%; border-radius: 50%;
+    border: 1px dashed rgba(255,255,255,0.055);
+    box-shadow: inset 0 0 70px rgba(95,216,230,0.035);
+  }
+  .cs-ring::before {
+    content:''; position:absolute; inset: 18%; border-radius:50%;
+    border: 1px solid rgba(255,255,255,0.03);
+  }
+
+  /* central AI hub */
+  .hub {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    width: 116px; height: 116px; display: grid; place-items: center; z-index: 3;
+  }
+  .hub canvas { width: 100%; height: 100%; display: block; }
+  .hub-label {
+    position: absolute; bottom: -34px; left: 50%; transform: translateX(-50%);
+    text-align: center; white-space: nowrap;
+  }
+  .hl-eyebrow {
+    font-family:'JetBrains Mono', monospace; font-size: 7.5px; letter-spacing: 0.24em; text-transform: uppercase;
+    color: var(--ink-600);
+  }
+  .hl-state {
+    margin-top: 5px;
+    font-family:'JetBrains Mono', monospace; font-size: 12px; font-weight: 600;
+    letter-spacing: 0.34em; text-transform: uppercase; text-indent: 0.34em;
+    color: var(--teal-glow); transition: color 0.5s ease;
+  }
+
+  /* directional beam toward active speaker */
+  .beam {
+    position: absolute; left: 50%; top: 50%; width: 168px; height: 240px;
+    transform-origin: 50% 100%;
+    transform: translate(-50%,-100%) rotate(0deg);
+    transition: transform 0.7s cubic-bezier(.3,.7,.2,1), opacity 0.5s ease;
+    clip-path: polygon(50% 100%, 12% 0, 88% 0);
+    background: linear-gradient(to top,
+      color-mix(in srgb, var(--ac) 0%, transparent) 0%,
+      color-mix(in srgb, var(--ac) 26%, transparent) 72%,
+      color-mix(in srgb, var(--ac) 0%, transparent) 100%);
+    opacity: 0; pointer-events: none; z-index: 2; filter: blur(3px);
+  }
+  .circle-stage.talking .beam { opacity: 1; }
+
+  /* circle actor node — avatar centred on the ring point */
+  .ca {
+    position: absolute; width: 52px; height: 52px;
+    transform: translate(-50%,-50%); z-index: 4;
+    transition: opacity 0.5s ease;
+  }
+  .ca-ava {
+    width: 52px; height: 52px; border-radius: 50%; position: relative;
+    background: linear-gradient(140deg, var(--ac), var(--ac2));
+    display: grid; place-items: center;
+    font-family:'JetBrains Mono', monospace; font-size: 14px; font-weight: 700; color: #0b1119;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 15px -4px var(--ac);
+    transition: box-shadow 0.4s ease, transform 0.4s ease, filter 0.5s ease;
+    animation: breathe-soft 4.5s ease-in-out infinite;
+  }
+  .ca .nm {
+    position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
+    font-family:'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-400); white-space: nowrap; transition: color 0.4s ease;
+  }
+  .ca-badge {
+    position: absolute; right: -3px; bottom: -3px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #0c131e; border: 1px solid rgba(255,255,255,0.12);
+    display: grid; place-items: center; color: var(--ac);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  }
+
+  /* dialogue box beside the avatar */
+  .ca-bubble {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 186px; padding: 8px 12px 9px; border-radius: 13px;
+    background: rgba(13,20,31,0.6);
+    border: 1px solid rgba(255,255,255,0.07);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 26px rgba(0,0,0,0.4);
+    opacity: 0.55; transition: opacity 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease, background 0.4s ease;
+  }
+  .ca.side-r .ca-bubble { left: 66px; }
+  .ca.side-l .ca-bubble { right: 66px; text-align: right; }
+  .ca-bubble::before {
+    content:''; position: absolute; top: 50%; width: 9px; height: 9px;
+    transform: translateY(-50%) rotate(45deg);
+    background: rgba(13,20,31,0.6); border: 1px solid rgba(255,255,255,0.07);
+  }
+  .ca.side-r .ca-bubble::before { left: -5px; border-right: 0; border-top: 0; }
+  .ca.side-l .ca-bubble::before { right: -5px; border-left: 0; border-bottom: 0; }
+  .ca-bubble .who {
+    font-family:'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ac); margin-bottom: 4px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .ca.side-l .ca-bubble .who { flex-direction: row-reverse; }
+  /* While the diagnostics drawer is open it owns the left gutter, so flip the
+     left-arc bubbles to the inside (right of their avatar, pointing toward centre)
+     to clear it. Driven by body.drawer-open, synced to the drawer's collapsed state. */
+  body.drawer-open .ca.side-l .ca-bubble { left: 66px; right: auto; text-align: left; }
+  body.drawer-open .ca.side-l .ca-bubble .who { flex-direction: row; }
+  body.drawer-open .ca.side-l .ca-bubble::before {
+    left: -5px; right: auto; border-right: 0; border-top: 0;
+    border-left: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  body.drawer-open .ca.side-l .ca-bubble .spin { margin-right: 6px; margin-left: 0; }
+  .ca-bubble .say {
+    font-size: 12px; line-height: 1.42; color: var(--ink-300); min-height: 17px;
+    /* Fixed cap so a long line scrolls inside the bubble instead of growing the
+       bubble and overlapping the seat above/below it on the ring. */
+    max-height: 60px; overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent;
+  }
+  .ca-bubble .say::-webkit-scrollbar { width: 5px; }
+  .ca-bubble .say::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 3px; }
+  .ca-bubble .say::-webkit-scrollbar-track { background: transparent; }
+  .ca-bubble .spin {
+    display: inline-block; width: 9px; height: 9px; margin-right: 6px;
+    border-radius: 50%;
+    border: 1.5px solid color-mix(in srgb, var(--ac) 70%, transparent);
+    border-top-color: transparent; vertical-align: -1px;
+    animation: spin 0.8s linear infinite;
+  }
+  .ca.side-l .ca-bubble .spin { margin-right: 0; margin-left: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* — speaking — */
+  .ca.speaking .ca-ava {
+    transform: scale(1.1);
+    animation: ca-pulse 1.05s ease-in-out infinite;
+  }
+  .ca.speaking .nm { color: var(--ac); }
+  @keyframes ca-pulse {
+    0%,100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45), 0 0 18px 1px var(--ac); }
+    50%     { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.6), 0 0 34px 7px var(--ac); }
+  }
+  .ca.speaking .ca-bubble {
+    opacity: 1;
+    border-color: color-mix(in srgb, var(--ac) 45%, transparent);
+    background: rgba(16,26,40,0.85);
+    box-shadow: 0 10px 32px rgba(0,0,0,0.5), 0 0 26px -8px var(--ac);
+  }
+  .ca.speaking .ca-bubble::before { border-color: color-mix(in srgb, var(--ac) 45%, transparent); background: rgba(16,26,40,0.85); }
+  .ca.speaking .ca-bubble .say { color: #eaf3f6; }
+
+  /* — working on a task — */
+  .ca.working .ca-bubble { opacity: 0.96; background: rgba(15,23,35,0.78); }
+  .ca.working .ca-bubble .say { color: var(--ac); }
+
+  /* dim everyone else while one talks; keep workers legible */
+  .circle-stage.talking .ca:not(.speaking) { opacity: 0.5; }
+  .circle-stage.talking .ca:not(.speaking) .ca-bubble { opacity: 0.3; }
+  .circle-stage.talking .ca.working { opacity: 0.92; }
+  .circle-stage.talking .ca.working .ca-bubble { opacity: 0.92; }
+
+  /* — en route ghost — */
+  .ca.enroute .ca-ava { filter: grayscale(.7) brightness(.58); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07); animation: none; }
+  .ca.enroute { opacity: 0.5; }
+  .ca.enroute .nm { color: var(--ink-600); }
+  .ca.enroute .ca-bubble .say { font-style: italic; color: var(--ink-500); }
+  .ca.arriving .ca-ava { animation: ca-arrive 1.2s ease; }
+  @keyframes ca-arrive {
+    0%   { filter: grayscale(.7) brightness(.58); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07), 0 0 0 0 var(--ac); }
+    55%  { filter: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5), 0 0 32px 7px var(--ac); }
+    100% { filter: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 15px -4px var(--ac); }
+  }
 
   /* ===== Small live orb inside bottom panel ===== */
   .nurse { display:flex; align-items:center; gap:13px; padding: 0 18px 0 6px; }
@@ -858,6 +1036,20 @@
   <div class="wash" id="wash"></div>
   <div class="vignette" id="vignette"></div>
 
+  <!-- Round-table theater: AI hub at centre, real cast laid out on the ring,
+       beam aimed at whoever is speaking (nodes built from the case roster). -->
+  <div class="circle-stage" id="circleStage">
+    <div class="cs-ring"></div>
+    <div class="beam" id="beam"></div>
+    <div class="hub">
+      <canvas id="hubCanvas"></canvas>
+      <div class="hub-label">
+        <div class="hl-eyebrow">AI · in the room</div>
+        <div class="hl-state" id="hubState">Listening</div>
+      </div>
+    </div>
+  </div>
+
   <div class="stage-empty">
     <div class="se-label" id="stageLabel">Awaiting results</div>
     <div class="se-hint" id="stageHint">Order anything by voice — <b>“show me the blood gas,”</b> <b>“pull up the chest film”</b> — and it appears here.</div>
@@ -994,8 +1186,7 @@
   </div>
 </div>
 
-<!-- State switcher -->
-<div class="switcher" id="switcher"></div>
+<!-- Mic guidance (the manual state switcher was removed; the orb state is live) -->
 <div class="switcher-note">Tap the mic, then talk — address staff by name (“Nurse, …”, “Husband, …”, “RT, …”); anything else goes to the patient</div>
 
 <!-- Unified Room log (right edge): every voice in the room, tagged by speaker -->
@@ -1315,43 +1506,40 @@
     }
   }
 
-  // ---------- Hero (docked nurse orb) ----------
+  // ---------- Hero (docked nurse orb) + Hub (central theater orb) ----------
   const hero = new Orb(document.getElementById('orb'), 'listening');
+  const hub = new Orb(document.getElementById('hubCanvas'), 'listening');
   let resizeRAF;
   window.addEventListener('resize', () => {
     cancelAnimationFrame(resizeRAF);
-    resizeRAF = requestAnimationFrame(() => { hero.resize(); thumbs.forEach(t=>t.resize()); });
+    resizeRAF = requestAnimationFrame(() => {
+      hero.resize(); hub.resize(); thumbs.forEach(t=>t.resize());
+      if (typeof layoutCircle === 'function') layoutCircle();
+    });
   });
 
   // ---------- Thumbnails / switcher ----------
-  const switcher = document.getElementById('switcher');
+  // The orb state is driven by real turns (listening/thinking/responding), so the
+  // manual idle/listening/thinking/responding switcher was removed. `thumbs` stays
+  // an empty array so the render loop / resize / selectState keep working unchanged.
   const thumbs = [];
   const stateName = document.getElementById('stateName');
   const micText = document.getElementById('micText');
-
-  ORDER.forEach(key => {
-    const btn = document.createElement('button');
-    btn.className = 'sw' + (key==='listening' ? ' active' : '');
-    btn.dataset.key = key;
-    const ring = document.createElement('div'); ring.className = 'sw-ring';
-    const cv = document.createElement('canvas');
-    ring.appendChild(cv);
-    const nm = document.createElement('div'); nm.className = 'sw-name'; nm.textContent = STATES[key].name;
-    btn.appendChild(ring); btn.appendChild(nm);
-    switcher.appendChild(btn);
-    const orb = new Orb(cv, key, { thumb:true });
-    thumbs.push(orb);
-    btn.addEventListener('click', () => selectState(key));
-  });
 
   function applyGlow(key) {
     const g = STATES[key].glow;
     document.documentElement.style.setProperty('--glow', g.join(','));
   }
+  const hubStateEl = document.getElementById('hubState');
   function selectState(key) {
     hero.setState(key);
+    hub.setState(key);
     stateName.textContent = STATES[key].name;
     if (micText) micText.textContent = STATES[key].mic;
+    if (hubStateEl){
+      hubStateEl.textContent = STATES[key].name;
+      hubStateEl.style.color = 'rgb(' + STATES[key].glow.join(',') + ')';
+    }
     applyGlow(key);
     document.querySelectorAll('.sw').forEach(b => b.classList.toggle('active', b.dataset.key===key));
     document.querySelector('.room').setAttribute('data-screen-label', 'Voice Room — ' + STATES[key].name);
@@ -1361,6 +1549,7 @@
   // ---------- single animation loop ----------
   function loop(now) {
     hero.step(now);
+    hub.step(now);
     thumbs.forEach(t => t.step(now));
     requestAnimationFrame(loop);
   }
@@ -1402,6 +1591,7 @@
       }
     });
     buildRosterStrip();   // the top-centre presence avatars
+    buildCircle();        // the round-table theater nodes (same cast, on the ring)
     buildAddresseeChips(); // addressee chip row below the talk button
   }
 
@@ -1479,6 +1669,96 @@
     head.innerHTML = '<span class="cnt">' + n + '</span> present' + (enr ? ' · ' + enr + ' en route' : '');
   }
 
+  // ---------- Round-table theater (centre stage) ----------
+  // Same cast as the top strip, seated around the ring. The hub orb sits at the
+  // centre; the beam aims at whoever is speaking; each seat carries a dialogue
+  // bubble that fills with the real spoken line. Built from the case roster so
+  // every case's actual actors appear and lay out dynamically.
+  const circleStage = document.getElementById('circleStage');
+  const beamEl = document.getElementById('beam');
+  const circleTokens = {};   // actor id → { el, sayEl, speaker, arrive, present, last, ang }
+
+  function buildCircle(){
+    circleStage.querySelectorAll('.ca').forEach(n => n.remove());
+    for (const k in circleTokens) delete circleTokens[k];
+    if (!ROSTER.length) return;
+    ROSTER.forEach(r => {
+      const ac = SPEAKER_AC[r.speaker]; if (!ac) return;   // 'res' never seats
+      const arrive = (r.available_after_seconds == null) ? 0 : r.available_after_seconds;
+      const present = secs >= arrive;
+      const el = document.createElement('div');
+      el.className = 'ca' + (present ? '' : ' enroute');
+      el.style.setProperty('--ac', ac[0]);
+      el.style.setProperty('--ac2', ac[1]);
+      const badge = (r.speaker === 'consult') ? '<span class="ca-badge">' + PHONE_SVG + '</span>' : '';
+      const first = present ? '' : 'En route to bedside';
+      el.innerHTML =
+        '<div class="ca-ava">' + escapeHtml(monogram(r)) + badge + '</div>' +
+        '<div class="nm">' + escapeHtml(shortLabel(r)) + '</div>' +
+        '<div class="ca-bubble"><div class="who">' + escapeHtml(r.role || r.speaker) + '</div>' +
+        '<div class="say">' + escapeHtml(first) + '</div></div>';
+      circleStage.appendChild(el);
+      circleTokens[r.id] = {
+        el, sayEl: el.querySelector('.say'),
+        speaker: r.speaker, arrive, present, last: first, ang: null,
+      };
+    });
+    layoutCircle();
+  }
+
+  // Curated seat angles (deg): right column top→bottom, then lower-left→mid-left.
+  // Leaves gaps at the top (roster), bottom (vitals dock) and upper-left (patient
+  // HUD card). Falls back to even spacing if a case has more actors than seats.
+  function layoutCircle(){
+    const ids = Object.keys(circleTokens);
+    if (!ids.length) return;
+    const W = circleStage.clientWidth || 560;
+    const Ra = W * 0.42;
+    if (beamEl) beamEl.style.height = Ra + 'px';
+    const DEG = [-58, -20, 20, 58, 110, 150, 190];
+    ids.forEach((id, i) => {
+      const t = circleTokens[id];
+      const deg = (ids.length <= DEG.length && DEG[i] != null) ? DEG[i] : (-90 + i * (360 / ids.length));
+      const ang = deg * Math.PI / 180;
+      t.ang = ang;
+      t.el.style.left = (W/2 + Math.cos(ang)*Ra) + 'px';
+      t.el.style.top  = (W/2 + Math.sin(ang)*Ra) + 'px';
+      const right = Math.cos(ang) >= -0.02;
+      t.el.classList.toggle('side-r', right);
+      t.el.classList.toggle('side-l', !right);
+    });
+  }
+
+  // ---------- "working" state (orders in flight) ----------
+  // The server reports the set of ordered results not yet back (`pending`); we light
+  // the holding actor's seat with a spinner + the test name until it lands. Declarative:
+  // each turn re-syncs the whole set, so a result reporting back simply drops out.
+  const workingMap = {};   // speaker class → in-flight test label
+  function applyPending(list){
+    for (const k in workingMap) delete workingMap[k];
+    (list || []).forEach(p => { if (p && p.speaker) workingMap[p.speaker] = p.label || 'Working…'; });
+    renderWorking();
+  }
+  function clearWorking(speaker){
+    if (speaker && workingMap[speaker]){ delete workingMap[speaker]; renderWorking(); }
+  }
+  function renderWorking(){
+    Object.entries(circleTokens).forEach(([id, t]) => {
+      if (!t.present) return;
+      const isSpeaking = (speakingCa === id);
+      const working = !!workingMap[t.speaker];
+      // While a seat is speaking, its bubble shows the spoken line — don't overwrite;
+      // the spinner re-appears when speech ends (clearSpeaking calls renderWorking).
+      t.el.classList.toggle('working', working && !isSpeaking);
+      if (isSpeaking) return;
+      if (working){
+        t.sayEl.innerHTML = '<span class="spin"></span>' + escapeHtml(workingMap[t.speaker]);
+      } else {
+        t.sayEl.textContent = t.last || '';
+      }
+    });
+  }
+
   // ---------- Addressee chips ----------
   const addrChipsEl  = document.getElementById('addrChips');
   const addrPromptEl = document.getElementById('addrPrompt');
@@ -1532,40 +1812,89 @@
     addrPromptEl.textContent = 'Address to:';
   }
 
-  // Illuminate the avatar of whoever just spoke (driven by real turns, one at a
-  // time). Resident lines don't light anyone — the resident isn't in the roster.
-  // hold=true: no auto-timeout — caller must call clearSpeaking() when audio ends.
-  let speakTokenTimer = null, speakingId = null;
-  function speakRoster(speaker, hold){
+  // Illuminate whoever just spoke in BOTH the top strip and the round-table ring,
+  // aim the beam at their seat, and drop the real spoken line into their bubble
+  // (driven by real turns, one at a time). Resident lines don't light anyone — the
+  // resident isn't seated. hold=true: no auto-timeout — caller must call
+  // clearSpeaking() when audio ends.
+  let speakTokenTimer = null, speakingId = null, speakingCa = null;
+  function speakRoster(speaker, hold, text){
     if (speaker === 'res') return;
+    // top presence strip
     if (speakingId && actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
     // first present token of this speaker class (cases have one each; consults rare)
     const hit = Object.entries(actorTokens).find(([,a]) => a.speaker === speaker && a.present);
-    if (!hit){ speakingId = null; return; }
-    speakingId = hit[0];
-    hit[1].el.classList.add('speaking');
+    speakingId = hit ? hit[0] : null;
+    if (hit) hit[1].el.classList.add('speaking');
+    // round-table ring (beam + bubble)
+    speakCircle(speaker, text);
     clearTimeout(speakTokenTimer);
-    if (!hold){
-      speakTokenTimer = setTimeout(() => {
-        if (actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
-        speakingId = null;
-      }, 2600);
-    }
-  }
-  function clearSpeaking(){
-    clearTimeout(speakTokenTimer);
-    if (speakingId && actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
-    speakingId = null;
+    if (!hold) speakTokenTimer = setTimeout(clearSpeaking, 2600);
   }
 
-  // Promote any en-route actor whose arrival time the case clock has now reached.
+  // Light the speaker's seat on the ring, swing the beam to it, and show the line.
+  // Typewriter reveal into a bubble's say line; one shared timer (a new speaker
+  // cancels the previous reveal). Keeps the latest text scrolled into view.
+  let caTypeTimer = null;
+  function typeInto(el, text){
+    clearTimeout(caTypeTimer);
+    let n = 0;
+    el.textContent = '';
+    (function step(){
+      n++;
+      el.textContent = text.slice(0, n);
+      el.scrollTop = el.scrollHeight;
+      if (n < text.length) caTypeTimer = setTimeout(step, 16 + Math.random()*22);
+    })();
+  }
+
+  function speakCircle(speaker, text){
+    const hit = Object.entries(circleTokens).find(([,t]) => t.speaker === speaker && t.present);
+    if (!hit) return;
+    if (speakingCa && circleTokens[speakingCa] && speakingCa !== hit[0]){
+      circleTokens[speakingCa].el.classList.remove('speaking');
+    }
+    speakingCa = hit[0];
+    const t = hit[1];
+    if (text){ t.last = text; typeInto(t.sayEl, text); }   // typewriter reveal of the line
+    t.el.classList.remove('working');
+    t.el.classList.add('speaking');
+    const ac = SPEAKER_AC[speaker];
+    if (ac) circleStage.style.setProperty('--ac', ac[0]);   // tint the beam to the speaker
+    if (beamEl && t.ang != null){
+      beamEl.style.transform = 'translate(-50%,-100%) rotate(' + (t.ang * 180 / Math.PI + 90) + 'deg)';
+    }
+    circleStage.classList.add('talking');
+  }
+
+  function clearSpeaking(){
+    clearTimeout(speakTokenTimer);
+    clearTimeout(caTypeTimer);                 // stop any in-progress reveal; renderWorking sets the final text
+    if (speakingId && actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
+    speakingId = null;
+    if (speakingCa && circleTokens[speakingCa]) circleTokens[speakingCa].el.classList.remove('speaking');
+    speakingCa = null;
+    circleStage.classList.remove('talking');   // hides the beam
+    renderWorking();                           // a still-in-flight holder shows its spinner again
+  }
+
+  // Promote any en-route actor whose arrival time the case clock has now reached —
+  // in both the top strip and the ring.
   function checkArrivals(){
-    Object.values(actorTokens).forEach(a => {
+    Object.entries(actorTokens).forEach(([id, a]) => {
       if (!a.present && a.arrive && secs >= a.arrive){
         a.present = true;
         a.el.classList.remove('enroute');
         a.el.classList.add('arriving', 'idle');
         setTimeout(() => a.el.classList.remove('arriving'), 1300);
+        const ct = circleTokens[id];
+        if (ct){
+          ct.present = true;
+          ct.el.classList.remove('enroute');
+          ct.el.classList.add('arriving');
+          ct.last = ''; ct.sayEl.textContent = '';
+          setTimeout(() => ct.el.classList.remove('arriving'), 1200);
+        }
         arrivalName.textContent = a.role || 'Someone';
         arrivalToast.classList.add('show');
         setTimeout(() => arrivalToast.classList.remove('show'), 4200);
@@ -1586,7 +1915,7 @@
     ch.scroll.insertBefore(div, ch.now);
     ch.root.classList.remove('collapsed');
     ch.now.scrollIntoView({ block:'nearest' });
-    speakRoster(speaker);   // light the speaker's roster avatar
+    speakRoster(speaker, false, text);   // light the speaker (strip + ring) and show the line
   }
 
   // ---------- case clock ----------
@@ -1802,6 +2131,12 @@
   // ---------- diagnostics drawer (four functional panes) ----------
   const drawer = document.getElementById('drawer');
   document.getElementById('drTab').addEventListener('click', () => drawer.classList.toggle('collapsed'));
+  // Mirror the drawer's open/closed state onto <body> so the ring can flip its
+  // left-arc bubbles inward (out of the drawer's gutter). Observing the class
+  // attribute catches every toggle path — tab click, resume-collapse, auto-open.
+  function syncDrawerOpen(){ document.body.classList.toggle('drawer-open', !drawer.classList.contains('collapsed')); }
+  new MutationObserver(syncDrawerOpen).observe(drawer, { attributes: true, attributeFilter: ['class'] });
+  syncDrawerOpen();
   const KIND_LABEL = { ecg:'ECG', cxr:'X-ray', report:'Report', exam:'Exam', consult:'Consult', order:'Order' };
 
   // Route each result card to a pane by its category (set server-side).
@@ -2258,6 +2593,7 @@
       await deliverCues(data);              // room nudges after the reply
       if (native && listening){ recoSuspend = false; try { recognition.start(); } catch(e){} }
     }
+    await deliverDeferred(data);            // scheduled results reporting back (+ panel card)
     if (pendingEnd){ pendingEnd = false; concludeCase(); }
   }
 
@@ -2300,6 +2636,7 @@
   const stageHint  = document.getElementById('stageHint');
   function applyEngine(d){
     if (!d) return;
+    if ('pending' in d) applyPending(d.pending);   // in-flight orders → "working" seats
     applyVitals(d.vitals);
     if (d.working_dx) setWorkingDx(d.working_dx);
     if (d.diagnostic) addDiagnostic(d.diagnostic);
@@ -2325,6 +2662,18 @@
       const speaker = c.speaker || 'nurse';
       addTurn(ROOM, speaker, c.text);
       if (c.text && VOICE_BACKEND){ try { await playTTS(c.text, speaker); } catch(e){} }
+    }
+  }
+
+  // Scheduled results that came back this turn — the holder (RT / nurse) reports the
+  // number aloud and the card lands in the diagnostics panel ("room talks back").
+  async function deliverDeferred(d){
+    const items = (d && d.deferred) || [];
+    for (const it of items){
+      const speaker = it.speaker || 'nurse';
+      if (it.card) addDiagnostic(it.card);
+      if (it.text) addTurn(ROOM, speaker, it.text);
+      if (it.text && VOICE_BACKEND){ try { await playTTS(it.text, speaker); } catch(e){} }
     }
   }
 
@@ -2363,6 +2712,14 @@
     if (m.kind === 'cue'){
       const speaker = m.speaker || 'nurse';
       addTurn(ROOM, speaker, m.text);
+      if (m.text && VOICE_BACKEND && !processing){ try { await playTTS(m.text, speaker); } catch(e){} }
+      return;
+    }
+    if (m.kind === 'result'){               // a scheduled result reporting back (+ card)
+      const speaker = m.speaker || 'nurse';
+      clearWorking(speaker);                // its order just landed — stop the spinner
+      if (d.card) addDiagnostic(d.card);
+      if (m.text) addTurn(ROOM, speaker, m.text);
       if (m.text && VOICE_BACKEND && !processing){ try { await playTTS(m.text, speaker); } catch(e){} }
       return;
     }
@@ -2447,6 +2804,7 @@
     (data.history || []).forEach(t => addTurn(NURSE_CH, t.role === 'resident' ? 'res' : 'nurse', t.text));
     (data.patient_history || []).forEach(t => addTurn(PATIENT_CH, t.role === 'resident' ? 'res' : 'patient', t.text));
     (data.cards || []).forEach(c => addDiagnostic(c));
+    if ('pending' in data) applyPending(data.pending);   // restore in-flight "working" seats
     if (data.state && data.state.name) stageLabel.textContent = data.state.name;
     setNow(NURSE_CH, 'resumed — tap to continue');
     drawer.classList.add('collapsed');   // don't smother the room on load
@@ -2652,7 +3010,7 @@
     rememberSpoken(text);
     if (VOICE_BACKEND === 'native') return speakNative(text, speaker);
     gateVad(true);
-    speakRoster(speaker, true);
+    speakRoster(speaker, true, text);
     showCaption(text, speaker);
     const body = { text, speaker };
     if (stabilityOverride != null) body.stability = stabilityOverride;
@@ -2760,7 +3118,7 @@
   }
   // Native speech synthesis (zero-cost mode). Distinct voice + pitch per speaker.
   function speakNative(text, speaker){
-    speakRoster(speaker, true);
+    speakRoster(speaker, true, text);
     showCaption(text, speaker);
     return new Promise(resolve => {
       if (!window.speechSynthesis){ clearSpeaking(); hideCaption(); resolve(); return; }

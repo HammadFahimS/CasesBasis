@@ -29,12 +29,15 @@ def test_dispatch_order_investigation_returns_real_result():
 
 
 def test_dispatch_gated_investigation_reports_pending():
-    # The venous gas is gated 120s; ordering it at t=0 must not leak a result.
+    # The venous gas is gated 120s; ordering it at t=0 must not leak a result — it
+    # schedules a callback (the room talks back) instead of a dead pending.
     engine = _engine()
     result = dispatch(NurseIntent(op="order_investigation", target="vbg"), engine, "get a gas")
     assert result is not None
-    assert "pH" not in (result.revealed or "")
-    assert "pending" in result.message.lower()
+    assert result.revealed is None                       # nothing handed over yet
+    assert "pH" not in (result.message or "")            # and the message can't leak it
+    assert "come back" in result.message.lower()         # it's coming, not dropped
+    assert any(ev["inv_id"] == "vbg" for ev in engine.run.deferred_events)
 
 
 def test_dispatch_ask_history_reveals_real_beat():
