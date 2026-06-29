@@ -97,6 +97,13 @@ class RunState:
     # SimulationEngine.is_present (time-arrival + summon); only the summon events
     # need to persist. See docs/room-of-agents.md C1.
     summoned_actors: list[str] = field(default_factory=list)
+    # Actors whose arrival has already been announced to the room, so the "X has
+    # just arrived" line fires exactly once when presence flips true (RA-1).
+    announced_arrivals: list[str] = field(default_factory=list)
+    # Scheduled "room talks back" results: tests ordered before they're ready. Each
+    # is {"inv_id", "fire_at" (elapsed_seconds), "actor_id"}; drained by due_deferred
+    # once the clock passes fire_at, producing a spoken report + a panel card.
+    deferred_events: list[dict] = field(default_factory=list)
 
 
 class SimulationEngine:
@@ -187,8 +194,33 @@ class SimulationEngine:
         if actor is None or actor_id in self.run.summoned_actors:
             return False
         self.run.summoned_actors.append(actor_id)
+        # A summon is announced by the nurse at the moment it happens ("calling them
+        # in now"), so suppress the generic arrival announce for this actor.
+        if actor_id not in self.run.announced_arrivals:
+            self.run.announced_arrivals.append(actor_id)
         self._log("summon", actor_id)
         return True
+
+    def due_arrivals(self) -> list[dict[str, str]]:
+        """Timed-arrival actors who just entered the room and haven't been announced.
+
+        Fires once per actor the moment presence flips true (the clock reaches their
+        ``available_after_seconds``). This is what makes "her husband's just arrived"
+        land *when he actually arrives* — not on a state-linger timer that can fire
+        before he's here (RA-1/C1)."""
+        out: list[dict[str, str]] = []
+        for actor in self.case.actors:
+            after = getattr(actor, "available_after_seconds", None)
+            if after is None:                              # in the room from the start
+                continue
+            if actor.id in self.run.announced_arrivals:
+                continue
+            if not self.is_present(actor.id):
+                continue
+            self.run.announced_arrivals.append(actor.id)
+            self._log("arrival", actor.id)
+            out.append({"actor_id": actor.id, "role": actor.role or actor.id})
+        return out
 
     # --------------------------------------------------------------- actions #
     def ask(self, history_id: str) -> StepResult:
@@ -214,14 +246,51 @@ class SimulationEngine:
         step.revealed = beat.content
         return step
 
+    def _result_holder(self, inv: InvestigationDef) -> str:
+        """Which actor id delivers this investigation's result aloud."""
+        if inv.result_actor_id:
+            return inv.result_actor_id
+        if inv.category == "bedside":
+            from backend.actor_voice import actor_speaker
+            rt = next((a for a in self.case.actors if actor_speaker(a) == "rt"), None)
+            if rt is not None:
+                return rt.id
+        return "nurse"
+
+    def _result_ready_at(self, inv: InvestigationDef) -> int:
+        """Case-clock second at which this test's result is available.
+
+        ``available_after_seconds`` is an absolute-clock gate; ``result_latency_seconds``
+        is measured from *now* (order time). A test takes whichever is later."""
+        absolute = inv.available_after_seconds or 0
+        relative = self.run.elapsed_seconds + (inv.result_latency_seconds or 0)
+        return max(absolute, relative)
+
     def order_investigation(self, inv_id: str) -> StepResult:
-        """Order a test and get its result (respecting availability + state)."""
+        """Order a test and get its result (respecting availability + state).
+
+        If the result isn't ready yet, the order is *recorded* and a deferred event
+        is scheduled so the holding actor reports the number back when it lands —
+        instead of a dead "pending" that never returns (the open-loop bug)."""
         inv = self._investigation(inv_id)
         if inv is None:
             return self._result(message=f"No investigation '{inv_id}'.")
-        if inv.available_after_seconds and self.run.elapsed_seconds < inv.available_after_seconds:
-            wait = inv.available_after_seconds - self.run.elapsed_seconds
-            return self._result(message=f"Result pending ({wait}s) — {inv.name}.")
+        ready_at = self._result_ready_at(inv)
+        if ready_at > self.run.elapsed_seconds:
+            if inv_id not in self.run.ordered_investigations:
+                self.run.ordered_investigations.append(inv_id)
+            self._schedule_deferred(inv, ready_at)
+            wait = ready_at - self.run.elapsed_seconds
+            holder = self._result_holder(inv)
+            who = self._actor(holder)
+            who_label = (who.role if who else "the team") or "the team"
+            self._log("order", inv_id)
+            return self._result(
+                message=(
+                    f"{who_label} is on the {inv.name} now — the result will come "
+                    f"back in about {wait} seconds."
+                )
+            )
         if inv_id not in self.run.ordered_investigations:
             self.run.ordered_investigations.append(inv_id)
         result = inv.result_by_state.get(self.run.current_state_id, inv.result)
@@ -229,6 +298,37 @@ class SimulationEngine:
         step = self._after_action(inv.name)
         step.revealed = result
         return step
+
+    def _schedule_deferred(self, inv: InvestigationDef, fire_at: int) -> None:
+        """Queue a result to report back, unless one is already queued for this test."""
+        if any(ev.get("inv_id") == inv.id for ev in self.run.deferred_events):
+            return
+        self.run.deferred_events.append(
+            {"inv_id": inv.id, "fire_at": int(fire_at), "actor_id": self._result_holder(inv)}
+        )
+
+    def due_deferred(self) -> list[dict]:
+        """Drain scheduled results whose time has come (the room reporting back).
+
+        Each returns ``{actor_id, inv, revealed}`` so the caller can voice the report
+        in the holder's voice and drop a card in the diagnostics panel. Fires once —
+        the event is removed from the queue here."""
+        out: list[dict] = []
+        remaining: list[dict] = []
+        for ev in self.run.deferred_events:
+            if ev.get("fire_at", 0) > self.run.elapsed_seconds:
+                remaining.append(ev)
+                continue
+            inv = self._investigation(ev.get("inv_id", ""))
+            if inv is None:
+                continue
+            if inv.id not in self.run.ordered_investigations:
+                self.run.ordered_investigations.append(inv.id)
+            revealed = inv.result_by_state.get(self.run.current_state_id, inv.result)
+            self._log("result", inv.id)
+            out.append({"actor_id": ev.get("actor_id", "nurse"), "inv": inv, "revealed": revealed})
+        self.run.deferred_events = remaining
+        return out
 
     def examine(self, system: str) -> StepResult:
         """Reveal the authored exam findings for a body system.
@@ -307,6 +407,11 @@ class SimulationEngine:
         for i, cue in enumerate(self.state.cues):
             key = f"{self.run.current_state_id}:{i}"
             if key in self.run.fired_cues:
+                continue
+            # Presence gate (C1): a cue that references an absent actor (e.g. "ask the
+            # husband") must wait until they're in the room — don't mark it fired, so
+            # it becomes eligible once they arrive rather than firing a lie now.
+            if any(not self.is_present(aid) for aid in cue.requires_present):
                 continue
             self.run.fired_cues.append(key)
             self._log("cue", cue.text)

@@ -244,7 +244,8 @@
       "category": "bedside",
       "result": "VC less than 20 mL/kg, and falling.",
       "interpretation": "Below the threshold that mandates intubation in neuromuscular respiratory failure.",
-      "available_after_seconds": 60
+      "result_latency_seconds": 45,
+      "result_actor_id": "rt"
     },
     {
       "id": "nif",
@@ -252,7 +253,8 @@
       "category": "bedside",
       "result": "NIF approximately -25 cmH2O.",
       "interpretation": "Markedly weak inspiratory effort — impending respiratory failure.",
-      "available_after_seconds": 60
+      "result_latency_seconds": 45,
+      "result_actor_id": "rt"
     },
     {
       "id": "ct_head",
@@ -318,7 +320,8 @@
         {
           "text": "If no collateral history is taken, the nurse prompts the team to speak with the husband.",
           "actor_id": "nurse",
-          "when": "no collateral history obtained"
+          "when": "no collateral history obtained",
+          "requires_present": ["husband"]
         }
       ],
       "transitions": [
@@ -370,9 +373,10 @@
       ],
       "cues": [
         {
-          "text": "The team seems stuck on the diagnosis. Prompt the resident to speak with the husband — he arrived a few minutes ago and is waiting, but hasn't been asked anything yet.",
+          "text": "The team seems stuck on the diagnosis. Prompt the resident to speak with the husband — he's arrived and is waiting at the bedside, but hasn't been asked anything yet.",
           "actor_id": "nurse",
-          "when": "team unsure of diagnosis"
+          "when": "team unsure of diagnosis",
+          "requires_present": ["husband"]
         }
       ],
       "transitions": [

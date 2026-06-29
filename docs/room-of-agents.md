@@ -166,6 +166,39 @@ the rewrite is above it.
   diagnostics announce). One Router (`backend/routing.py`), one presence model
   (`simulation_engine`), one agent seam (`backend/agents.py`). Suite: 503 passed.
 
+- **RA-6 · Presence-gated cues + arrivals + the room talks back. ✅ DONE.**
+  Second playtest (session `3C8HDFREz_-8Hk6I`) surfaced three more defects, all now
+  fixed and guarded:
+  1. **Cues fired before the actor they reference was present.** The husband cues
+     ("ask him about her symptoms", "he's arrived and is waiting") fired on a
+     state-linger timer (`due_cues` at 75s in-state) with no presence awareness, so
+     the room announced his arrival while the honest-absent path was still saying "1
+     minute out" — a flat contradiction. Fix: `Cue.requires_present` (a presence gate
+     in the schema) + `due_cues` skips a cue until every referenced actor `is_present`
+     (and does *not* mark it fired, so it becomes eligible on arrival). The two
+     husband cues now carry `requires_present: ["husband"]`.
+  2. **Arrival was never announced at the right moment.** Added `RunState
+     .announced_arrivals` + `engine.due_arrivals()` — the nurse announces "her
+     husband's just arrived" the instant presence flips true (clock hits 300s),
+     exactly once; a `summon` suppresses the duplicate clock announce. Fired through
+     `director.fire_cues` so it reaches both the turn payload and the live WS.
+  3. **Tasks given to actors never reported back (the open loop).** "RT, get me a VC"
+     was even mis-classified as `request_consult(rt)` and never reached the engine
+     (VC/NIF — the numbers that decide intubation — never came back). Two fixes:
+     the RT is excluded from `consult_voice.consultants` (it's a bedside team member
+     holding orderable tests, not a phone consult); and a **deferred-result subsystem**
+     — `InvestigationDef.result_latency_seconds` + `result_actor_id`, a
+     `RunState.deferred_events` queue, `engine.order_investigation` schedules a
+     callback instead of a dead "pending", and `engine.due_deferred()` drains it.
+     `director.fire_deferred` voices the holder's terse, signal-only report (C4
+     discipline) and drops the card in the panel. Plumbed through both the turn POST
+     (`payload["deferred"]`) and the live WS (`kind="result"` carrying the card).
+     This is the generic "an actor does something after N seconds → reports back +
+     updates diagnostics" loop. Tests: `test_simulated_case.py` (arrivals, cue
+     gating, deferred scheduling/firing/roundtrip) + `test_live_sim_conversations.py`
+     (RT-not-a-consultant, bedside reports back with card, nurse announces arrival).
+     Suite: 517 passed.
+
 ---
 
 **All four contracts are in place.** C1 presence-gated routing, C2 the two-axis

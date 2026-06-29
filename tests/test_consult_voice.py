@@ -14,9 +14,12 @@ def _session():
 def test_consultants_excludes_patient_nurse_and_family():
     case = load_seed_case("myasthenic_crisis")
     ids = {a.id for a in consult_voice.consultants(case)}
-    # the specialists are pageable; the patient/nurse/EMS/family are not
-    assert {"neuro", "icu", "rt"} <= ids
-    assert {"patient", "nurse", "ems", "husband"}.isdisjoint(ids)
+    # the specialists are pageable; the patient/nurse/EMS/family are not — and neither
+    # is the RT, who is a bedside team member holding orderable tests (VC/NIF), not a
+    # phone consult. Treating "RT, get me a VC" as a consult meant it never reached
+    # the engine and the numbers never came back.
+    assert {"neuro", "icu"} <= ids
+    assert {"patient", "nurse", "ems", "husband", "rt"}.isdisjoint(ids)
 
 
 def test_find_consultant_by_id_and_role_text():

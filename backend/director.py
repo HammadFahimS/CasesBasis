@@ -63,26 +63,94 @@ def ask_back_prompt(engine) -> str:
 # ── Cue firing ────────────────────────────────────────────────────────────────
 
 def fire_cues(session) -> list[dict]:
-    """Voice any authored cues that came due this turn.
+    """Voice any authored cues that came due this turn, plus actor arrivals.
 
     Moved from :func:`nurse_brain._fire_cues`.  The Director owns proactive
-    room events so they can later be gated by actor availability and state."""
-    raw = session.engine.due_cues()
-    if not raw:
-        return []
-    from backend.actor_voice import actor_speaker, voice_cue
-    case = session.engine.case
+    room events so they can be gated by actor availability and state. Arrivals
+    fire deterministically the moment a timed actor enters the room (C1) — the
+    nurse announces "her husband's just arrived" *when he actually arrives*, not
+    on a state-linger timer that could fire before he's here."""
+    engine = session.engine
     out: list[dict] = []
-    for cue in raw:
-        actor = next((a for a in case.actors if a.id == cue.get("actor_id")), None)
-        speaker = actor_speaker(actor)
-        line = voice_cue(session, actor, speaker, cue["text"])
-        if not line:
+
+    # Arrivals first — the room should register who's here before nudging the team.
+    for arr in engine.due_arrivals():
+        role = (arr.get("role") or "").strip() or "Someone"
+        line = f"{role}'s just arrived and is at the bedside."
+        session.history.append({"role": "nurse", "text": line})
+        out.append({"speaker": "nurse", "text": line})
+
+    raw = engine.due_cues()
+    if raw:
+        from backend.actor_voice import actor_speaker, voice_cue
+        case = engine.case
+        for cue in raw:
+            actor = next((a for a in case.actors if a.id == cue.get("actor_id")), None)
+            speaker = actor_speaker(actor)
+            line = voice_cue(session, actor, speaker, cue["text"])
+            if not line:
+                continue
+            # Persist under the actor who actually spoke the cue, not a blanket "nurse"
+            # (S2) — the transcript must record real identities.
+            session.history.append({"role": speaker, "text": line})
+            out.append({"speaker": speaker, "text": line})
+    return out
+
+
+def pending_deferred(session) -> list[dict]:
+    """The set of ordered results still in flight (scheduled, not yet back).
+
+    Lets the room show the holding actor as *working* — a spinner on their seat in
+    the round-table view — from the moment they acknowledge the order until the
+    value lands and they report it (the counterpart to :func:`fire_deferred`, which
+    fires the due ones). Each row is ``{speaker, label, wait_seconds}`` keyed by the
+    holder's speaker class so the front-end can light the right seat. Call *after*
+    :func:`fire_deferred` so anything that came due this turn is already drained."""
+    engine = session.engine
+    events = getattr(engine.run, "deferred_events", None) or []
+    if not events:
+        return []
+    from backend.actor_voice import actor_speaker
+    out: list[dict] = []
+    for ev in events:
+        inv = next((i for i in engine.case.investigations if i.id == ev.get("inv_id")), None)
+        if inv is None:
             continue
-        # Persist under the actor who actually spoke the cue, not a blanket "nurse"
-        # (S2) — the transcript must record real identities.
+        actor = next((a for a in engine.case.actors if a.id == ev.get("actor_id")), None)
+        speaker = actor_speaker(actor) if actor else "nurse"
+        wait = max(0, int(ev.get("fire_at", 0)) - engine.run.elapsed_seconds)
+        out.append({"speaker": speaker, "label": inv.name, "wait_seconds": wait})
+    return out
+
+
+def fire_deferred(session) -> list[dict]:
+    """Surface any scheduled results that have come back (the room talking back).
+
+    For each due deferred result the holding actor (RT for bedside spirometry, the
+    nurse for sent labs) reports the number aloud and a card lands in the diagnostics
+    panel. Deterministic, terse, signal-only — the same C4 discipline as a live read:
+    the actor states the value, never the interpretation. Returns ``{speaker, text,
+    card}`` rows so both the turn payload and the live WS push can render them."""
+    engine = session.engine
+    due = engine.due_deferred()
+    if not due:
+        return []
+    from backend.actor_voice import actor_speaker
+    from backend.patient_voice import _clean_for_speech
+    from backend.sim_diagnostics import build_investigation_card
+    out: list[dict] = []
+    for item in due:
+        inv = item["inv"]
+        revealed = item["revealed"] or ""
+        actor = next((a for a in engine.case.actors if a.id == item.get("actor_id")), None)
+        speaker = actor_speaker(actor) if actor else "nurse"
+        line = _clean_for_speech(f"{inv.name} is back — {revealed}.")
+        card = build_investigation_card(
+            inv, engine.current_vitals(), engine.case.patient, revealed
+        )
         session.history.append({"role": speaker, "text": line})
-        out.append({"speaker": speaker, "text": line})
+        session.cards.append(card)
+        out.append({"speaker": speaker, "text": line, "card": card})
     return out
 
 
@@ -124,12 +192,17 @@ def voice_reply(
                         intent.op, intent.target, provider, speaker)
             return reply, speaker
 
-    if intent.op == "order_investigation" and result is not None and result.revealed:
+    if intent.op == "order_investigation" and result is not None:
         inv = next((i for i in engine.case.investigations if i.id == intent.target), None)
-        # Bedside measurements (VC/NIF) are reported as a number by the RT.
-        if inv is not None and inv.category == "bedside":
+        # Bedside measurements (VC/NIF) are owned by the RT, never the nurse — whether
+        # the value is in hand now (``revealed``) OR the order has a turn-around and the
+        # RT is acknowledging it (``message`` from the deferred-result path: "on it,
+        # back in about a minute"). The RT voicing the ack is what makes the later
+        # report-back land in the same voice.
+        bedside_content = result.revealed or result.message
+        if inv is not None and inv.category == "bedside" and bedside_content:
             from backend.actor_voice import voice_bedside
-            reply, rt_speaker = voice_bedside(session, result.revealed, transcript)
+            reply, rt_speaker = voice_bedside(session, bedside_content, transcript)
             if reply is not None:
                 logger.info("turn: op=%s target=%s speaker=%s",
                             intent.op, intent.target, rt_speaker)
@@ -138,7 +211,7 @@ def voice_reply(
         # The interpretation belongs on the card for the resident to read; it must
         # never be voiced (C4) — and never routed through the embellishing LLM, which
         # would otherwise inject a read ("…showing sinus tach"). Card is built upstream.
-        if inv is not None and inv.category in ("ecg", "imaging"):
+        if inv is not None and inv.category in ("ecg", "imaging") and result.revealed:
             reply = _announce_study(inv)
             logger.info("turn: op=%s target=%s speaker=nurse (announce-only)",
                         intent.op, intent.target)
