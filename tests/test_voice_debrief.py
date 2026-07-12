@@ -96,6 +96,27 @@ def test_concluded_run_clock_is_frozen(monkeypatch):
     assert debrief["summary"]["elapsed_seconds"] == 120
 
 
+def test_idle_run_gets_honest_coaching_not_praise(monkeypatch):
+    """A do-nothing run must use the honest coaching prompt, not the one that
+    congratulates the resident for 'avoiding errors'."""
+    seen = {}
+    monkeypatch.setattr(voice_debrief, "_complete", lambda sys, usr: seen.setdefault("sys", sys) or "note")
+    s = _session()  # no cards, no diagnosis, no actions
+
+    voice_debrief.build_debrief(s)
+    assert seen["sys"] == voice_debrief.COACH_SYSTEM_IDLE
+
+
+def test_engaged_run_gets_the_standard_coaching(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(voice_debrief, "_complete", lambda sys, usr: seen.setdefault("sys", sys) or "note")
+    s = _session()
+    s.cards = [_card("ecg", "ECG", "ecg")]
+
+    voice_debrief.build_debrief(s)
+    assert seen["sys"] == voice_debrief.COACH_SYSTEM
+
+
 def test_coaching_note_fails_soft(monkeypatch):
     def boom(sys, usr):
         raise RuntimeError("llm down")

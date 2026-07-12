@@ -120,6 +120,7 @@ _STEADY: dict[str, str] = {
     "ems": "You are a calm, matter-of-fact professional giving a clean handover.",
     "rt": "You are a calm, practical respiratory therapist.",
     "consult": "You are a measured, authoritative specialist.",
+    "head": "You are the head physician — calm, authoritative and brief.",
     "nurse": "",
 }
 

@@ -30,6 +30,23 @@ COACH_SYSTEM = (
     "actions they didn't take. No markdown, no lists — just plain spoken prose."
 )
 
+# Used when the resident took essentially no clinical action. The generic prompt
+# above will fabricate praise ("stayed calm", "avoided errors") for a do-nothing
+# run — pedagogically wrong, since inaction is a failure in an emergency. This one
+# forbids that and pushes an honest, corrective note instead.
+COACH_SYSTEM_IDLE = (
+    "You are a supportive attending physician debriefing a resident after a "
+    "simulated emergency case in which they didn't really get started — no history, "
+    "exam, investigations, treatment or diagnosis were recorded. Keep it warm, brief "
+    "and encouraging, like a mentor who wants them to dive in next time. Do not "
+    "invent praise for things they didn't do (don't credit 'staying calm' or "
+    "'avoiding errors'), but don't scold or use harsh words like 'failed' either. In "
+    "2-3 friendly sentences: gently note that the case is scored on what they "
+    "actively do, point them to a good first move or two for this patient (drawn "
+    "from the teaching points), and encourage them to jump in and work the case next "
+    "time. No markdown, no lists — plain spoken prose."
+)
+
 
 def _complete(system_prompt: str, user_prompt: str) -> str:
     """The coaching-note LLM seam (monkeypatched in tests)."""
@@ -95,7 +112,7 @@ def _teaching(case) -> dict:
     }
 
 
-def _coaching_note(summary: dict, teaching: dict) -> str:
+def _coaching_note(summary: dict, teaching: dict, engaged: bool = True) -> str:
     did = (
         f"Outcome: {summary['outcome']} after {summary['elapsed_label']}.\n"
         f"Examined: {', '.join(summary['exams']) or 'nothing'}.\n"
@@ -106,13 +123,24 @@ def _coaching_note(summary: dict, teaching: dict) -> str:
         f"Critical errors: {', '.join(summary['critical_errors']) or 'none'}."
     )
     points = "\n".join(f"- {p}" for p in teaching["teaching_points"]) or "(none provided)"
-    user = (
-        f"What the resident did:\n{did}\n\n"
-        f"Key teaching points for this case:\n{points}\n\n"
-        "Coaching note:"
-    )
+    if engaged:
+        system = COACH_SYSTEM
+        user = (
+            f"What the resident did:\n{did}\n\n"
+            f"Key teaching points for this case:\n{points}\n\n"
+            "Coaching note:"
+        )
+    else:
+        system = COACH_SYSTEM_IDLE
+        user = (
+            "The resident took essentially no action in this case — the record below "
+            "is empty.\n\n"
+            f"What the resident did:\n{did}\n\n"
+            f"Key teaching points for this case:\n{points}\n\n"
+            "Honest coaching note (do not praise inaction):"
+        )
     try:
-        return _complete(COACH_SYSTEM, user)
+        return _complete(system, user)
     except Exception as exc:  # the deterministic debrief must still render
         logger.warning("debrief coaching note failed: %s", exc)
         return ""
@@ -130,10 +158,27 @@ def build_debrief(session: VoiceSession) -> dict:
     teaching = _teaching(session.case)
     from backend.sim_scoring import score_run
     assessment = [c.to_dict() for c in score_run(session)]
+    engaged = _did_engage(session)
     return {
         "case_title": session.case.meta.title,
         "summary": summary,
         "teaching": teaching,
         "assessment": assessment,
-        "coaching_note": _coaching_note(summary, teaching),
+        "coaching_note": _coaching_note(summary, teaching, engaged),
     }
+
+
+def _did_engage(session: VoiceSession) -> bool:
+    """Did the resident actually work the case, or effectively do nothing?
+
+    True if they took any recorded action (an exam, order, investigation or
+    consult card), committed a working diagnosis, tripped a critical error, or
+    moved the case past its opening state. A run with none of these is idle, and
+    the coaching note must not congratulate it for 'avoiding errors'."""
+    run = session.engine.run
+    return bool(
+        session.cards
+        or run.working_diagnoses
+        or run.critical_errors
+        or len(run.visited_states) > 1
+    )

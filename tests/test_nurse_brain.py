@@ -139,6 +139,33 @@ def test_dispatch_read_vitals_does_not_mutate():
     assert engine.run.current_state_id == "baseline"
 
 
+def test_read_vitals_reports_only_the_vitals_asked_for():
+    """The nurse's spoken brief must name only the vitals the resident asked for —
+    it used to dump the whole monitor, so 'BP and HR' recited RR/SpO2/Temp too."""
+    from backend.nurse_brain import _outcome_brief, _requested_vital_keys
+    vitals = {"heart_rate": 108, "blood_pressure": "126/85", "respiratory_rate": 18,
+              "oxygen_saturation": 98, "temperature_c": 37.1, "rhythm": "sinus tachycardia"}
+    # a specific ask (rhythm rides with heart rate); generic ask → None (full set)
+    assert _requested_vital_keys("nurse, get me BP and HR", vitals) == \
+        ["blood_pressure", "heart_rate", "rhythm"]
+    assert _requested_vital_keys("what are her vitals?", vitals) is None
+    # even when a generic word co-occurs, named specifics win
+    assert _requested_vital_keys("get me her obs, BP and HR", vitals) == \
+        ["blood_pressure", "heart_rate", "rhythm"]
+
+    brief = _outcome_brief(NurseIntent(op="read_vitals"), None, vitals, transcript="get me BP and HR")
+    assert "126/85" in brief and "108" in brief
+    # unrelated vitals must not leak into the report the model speaks
+    assert "respiratory_rate" not in brief and "oxygen_saturation" not in brief and "98" not in brief
+
+
+def test_read_vitals_generic_ask_reports_the_full_set():
+    from backend.nurse_brain import _outcome_brief
+    vitals = {"heart_rate": 108, "respiratory_rate": 18, "oxygen_saturation": 98}
+    brief = _outcome_brief(NurseIntent(op="read_vitals"), None, vitals, transcript="what are her obs?")
+    assert "respiratory_rate" in brief and "oxygen_saturation" in brief
+
+
 def test_dispatch_perform_exam_reveals_and_can_transition():
     engine = _engine()
     result = dispatch(NurseIntent(op="perform_exam", target="Neurological"), engine, "neuro exam")

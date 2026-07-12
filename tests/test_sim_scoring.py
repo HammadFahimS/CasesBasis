@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from backend.sim_diagnostics import build_order_card
-from backend.sim_scoring import score_run
+from backend.sim_scoring import overall_score, score_run
 from backend.simulated_case_store import load_seed_case
 from backend.simulation_engine import SimulationEngine
 from backend.voice_session import VoiceSession
@@ -62,7 +62,43 @@ def test_score_run_is_stable_and_serialisable():
     # so only the 'avoid' and 'preferred' items appear — dose_adjust is skipped)
     assert ids[:2] == ["recognition", "safety"]
     assert "med-avoid_pyridostigmine" in ids
-    assert all(set(c.to_dict()) == {"id", "label", "met", "detail"} for c in criteria)
+    assert all(
+        set(c.to_dict()) == {"id", "label", "met", "detail", "weight", "guardrail"}
+        for c in criteria
+    )
+
+
+# ── overall_score: passive guardrails must not bank free marks ────────────────
+def test_doing_nothing_scores_zero_not_fifty():
+    """Regression: an idle run met no credit criteria and triggered no pitfalls,
+    so it must score 0 — not 50 for passively 'avoiding' errors."""
+    s = _session()
+    assert overall_score(score_run(s)) == 0
+
+
+def test_recognition_alone_earns_partial_credit():
+    s = _session()
+    s.engine.diagnose("this is a myasthenic crisis")
+    score = overall_score(score_run(s))
+    # named the diagnosis (credit) but gave no preferred drug → partial, well below 100
+    assert 0 < score < 100
+
+
+def test_a_critical_error_subtracts_from_the_score():
+    s = _session()
+    s.engine.diagnose("myasthenic crisis")
+    clean = overall_score(score_run(s))
+    s.engine.run.critical_errors.append("intubation_prep->pea_arrest: standard sux")
+    breached = overall_score(score_run(s))
+    assert breached < clean
+
+
+def test_guardrail_only_criteria_full_marks_when_clean():
+    from backend.sim_scoring import Criterion
+    crits = [Criterion("safety", "Avoided critical errors", True, weight=40, guardrail=True)]
+    assert overall_score(crits) == 100
+    crits[0].met = False
+    assert overall_score(crits) == 60
 
 
 # ── medication rubric (Phase B′) ─────────────────────────────────────────────

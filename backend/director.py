@@ -1,5 +1,10 @@
 """Director — proactive cue firing and speaker voice routing.
 
+Presented to the resident as the **Head Physician**: when the Director/Router can't
+tell who a request is for, it speaks to the resident in that identity (a distinct
+authoritative voice, speaker class ``head``) to ask them to clarify — rather than
+guessing and dropping the utterance on the patient.
+
 Extracted from :mod:`nurse_brain`.  Owns:
 
 - **Speaker voice routing** — once the Router (:mod:`backend.routing`) has decided
@@ -58,6 +63,28 @@ def ask_back_prompt(engine) -> str:
     if len(names) <= 1:
         return _ASK_BACK_PROMPT
     return f"Whom should I direct that to — {', '.join(names[:-1])}, or {names[-1]}?"
+
+
+def head_clarify_prompt(engine) -> str:
+    """The Head Physician's spoken line when a request's addressee is genuinely unclear.
+
+    Names a couple of people actually in the room so the resident has something concrete
+    to aim at, and asks them to be more specific or to name who they want."""
+    from backend.actor_voice import actor_speaker
+    people: list[str] = []
+    for a in engine.case.actors:
+        if actor_speaker(a) == "nurse" or not a.role:
+            continue
+        try:
+            present = engine.is_present(a.id)
+        except Exception:
+            present = True
+        if present:
+            people.append(a.role)
+    opts = ["the patient", "the nurse"] + people[:3]
+    listed = f"{', '.join(opts[:-1])}, or {opts[-1]}"
+    return ("Head physician here — I'm not sure who that was meant for. Could you say it "
+            f"again with a bit more detail, or tell me who you want: {listed}?")
 
 
 # ── Cue firing ────────────────────────────────────────────────────────────────

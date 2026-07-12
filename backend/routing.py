@@ -65,7 +65,7 @@ class Route:
     actor_id: str | None = None          # concrete case actor, when resolved
     present: bool = True                 # is the addressee in the room?
     summon: str | None = None            # actor id to bring in this turn
-    ask_back: bool = False               # Director is unsure — ask the resident
+    ask_back: bool = False               # Head Physician is unsure — ask the resident
     reason: str = ""                     # why this route fired (trace + tests)
 
 
@@ -121,17 +121,79 @@ def route(intent, engine, transcript: str = "", forced_addressee: str | None = N
     if _addresses_staff(transcript):
         return Route("nurse", op, reason="addressed staff, no grounding")
     if _should_ask_back(intent, engine):
-        return Route("nurse", op, ask_back=True, reason="ambiguous history ask")
+        return Route("head", op, ask_back=True, reason="ambiguous history ask")
+    # Reasoned addressee (interpreter) — resolves a bare/undirected utterance so a
+    # statement or thinking-aloud that names no one doesn't fall on the patient.
+    reasoned = _route_by_addressee(engine, intent, op)
+    if reasoned is not None:
+        return reasoned
+    # Genuinely unclear who a substantive request is for → the Head Physician asks the
+    # resident to clarify, instead of silently defaulting the utterance onto the patient.
+    if _is_unclear_request(intent, transcript):
+        return Route("head", op, ask_back=True, reason="unclear addressee")
     return Route("patient", op, actor_id=_first_actor_of_kind(engine, "patient") and
                  _first_actor_of_kind(engine, "patient").id, reason="bedside default")
 
 
+def _is_unclear_request(intent, transcript: str) -> bool:
+    """A substantive utterance the interpreter couldn't attribute to anyone.
+
+    Fires only when: the interpreter placed no addressee, the speech-act is bare
+    conversation (orders/history already routed above), AND the line is a real
+    request — a question or a full sentence — not a short ack/filler ("okay", "hmm").
+    Keeps the Head Physician's clarify from nagging on thinking-aloud."""
+    if getattr(intent, "addressee", None):
+        return False
+    if getattr(intent, "op", "chitchat") != "chitchat":
+        return False
+    text = (transcript or "").strip()
+    return text.endswith("?") or len(text.split()) >= 5
+
+
+def _route_by_addressee(engine, intent, op: str) -> Route | None:
+    """Build a Route from the interpreter's reasoned ``addressee`` for a bare/undirected
+    utterance. ``None`` when there's nothing usable, so the caller keeps the legacy
+    bedside default. Honours presence for a named bystander."""
+    addr = getattr(intent, "addressee", None)
+    if not addr:
+        return None
+    if addr == "patient":
+        actor = _first_actor_of_kind(engine, "patient")
+        return Route("patient", op, actor_id=actor.id if actor else None,
+                     reason="reasoned addressee: patient")
+    if addr == "nurse":
+        return Route("nurse", op, reason="reasoned addressee: nurse")
+    actor = _first_actor_of_kind(engine, addr)   # ems / family / rt / consult
+    if actor is None:
+        return None
+    if engine.is_present(actor.id):
+        return Route(addr, op, actor_id=actor.id, present=True, reason="reasoned addressee")
+    return Route(addr, op, actor_id=actor.id, present=False, reason="reasoned addressee (absent)")
+
+
 # ── vocative / kind resolution ────────────────────────────────────────────────
 
+# Interjections/fillers a resident may utter before naming who they're addressing
+# ("Ah, paramedic…", "So, nurse…", "Okay, husband…"). We skip these so the vocative
+# behind them still routes — dictation especially loves to prepend them.
+_VOCATIVE_FILLERS = frozenset({
+    "ah", "oh", "um", "uh", "er", "erm", "hmm", "so", "well", "okay", "ok", "alright",
+    "right", "now", "hey", "hi", "hello", "yeah", "yep", "and", "but", "please",
+})
+
+
 def _leading_vocative(transcript: str):
-    """The SpeakerKind named by the utterance's opening word, or None."""
-    m = re.match(r"[a-z']+", (transcript or "").strip().lower())
-    return kind_for_word(m.group(0)) if m else None
+    """The SpeakerKind named by the utterance's opening word, or None.
+
+    Skips a short run of leading filler/interjection words so "Ah, paramedic, …"
+    or "So, nurse, …" still resolve the person behind the filler. Stops at the
+    first content word: if it isn't a vocative, there is no leading address."""
+    words = re.findall(r"[a-z']+", (transcript or "").strip().lower())
+    for w in words[:4]:
+        if w in _VOCATIVE_FILLERS:
+            continue
+        return kind_for_word(w)   # first real word: a vocative, or None (no address)
+    return None
 
 
 def _route_to_kind(engine, kind, op: str, transcript: str, reason: str) -> Route | None:

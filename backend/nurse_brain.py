@@ -73,9 +73,16 @@ INTERPRET_SYSTEM = (
     '  {"op": <one of read_vitals|ask_history|order_investigation|perform_exam|order_medication|perform_action|request_consult|diagnose|chitchat>,\n'
     '   "target": <id/name from the lists below, or null>,\n'
     '   "action_text": <short paraphrase of the order, or "">,\n'
-    '   "clarify": <true if the utterance is ambiguous or your target match is uncertain; false otherwise>}\n'
-    "Rules: read_vitals for any request about current vital signs / how the "
-    "patient looks on the monitor. ask_history to elicit history from the patient/"
+    '   "clarify": <true if the utterance is ambiguous or your target match is uncertain; false otherwise>,\n'
+    '   "addressee": <who the resident is speaking to: patient|nurse|ems|family|rt|consult, or "none">}\n'
+    "Rules: read_vitals ONLY when the resident explicitly asks for vital signs or "
+    "a specific one — e.g. 'what are her vitals/obs?', 'what's her sat / blood "
+    "pressure / heart rate / temp?', 'put her on the monitor'. A vague or open "
+    "prompt such as 'what do we have here?', 'what's going on?', 'catch me up', "
+    "'tell me about the patient', 'give me a rundown' is NOT a vitals request and "
+    "is NOT an order — classify it chitchat so the nurse invites the resident to "
+    "lead rather than reciting the vitals or the story unprompted. "
+    "ask_history to elicit history from the patient/"
     "EMS/family (pick the closest history id). order_investigation for tests/labs/"
     "imaging (pick the closest investigation id). perform_exam to physically "
     "examine the patient (pick the closest body-system name as target). "
@@ -96,7 +103,20 @@ INTERPRET_SYSTEM = (
     "plausible mishearing of multiple catalogue entries (e.g. 'ACG' could be ABG "
     "or ECG); your target match feels like a stretch; or the utterance is genuinely "
     "ambiguous between two different ops. When clarify:true, still pick the most "
-    "likely op and target so the nurse can name them in the clarification question."
+    "likely op and target so the nurse can name them in the clarification question.\n"
+    "ADDRESSEE — reason about who the resident is talking to, choosing only from the "
+    "people listed as in the room:\n"
+    "- They name or clearly aim at a person ('nurse, …', 'husband, …', 'paramedic, "
+    "…'), or it's a natural follow-up to whoever just spoke → that person.\n"
+    "- A direct question to the PATIENT about how THEY feel or their own symptoms/story "
+    "('how are you feeling?', 'when did this start?', 'any chest pain?') → patient.\n"
+    "- An order, a request for data/results, general case-talk, or the resident merely "
+    "stating/narrating something or thinking aloud that is NOT aimed at anyone → nurse "
+    "(she is the room's point of contact). NEVER send an undirected statement to the "
+    "patient just because it mentions a body part or a value.\n"
+    "- Use 'none' only if you genuinely cannot tell; when unsure and it is not a bedside "
+    "symptom question, prefer nurse over patient. The addressee is independent of op — "
+    "an order is still addressed to the nurse; a symptom question to the patient."
 )
 
 SPEAK_SYSTEM = constitution("nurse")
@@ -110,6 +130,7 @@ class NurseIntent:
     target: str | None = None
     action_text: str = ""
     clarify: bool = False  # interpreter flagged uncertain/ambiguous match
+    addressee: str | None = None  # who the resident is speaking to (reasoned): a speaker kind or None
 
 
 @dataclass
@@ -131,6 +152,7 @@ class NurseTurn:
     working_dx: str | None = None   # the resident's latest committed working diagnosis
     cues: list[dict] = field(default_factory=list)  # proactive prompts that fired this turn
     needs_addressee: bool = False   # Director uncertain — resident must pick who to address
+    summon: str | None = None       # actor id brought into the room this turn (client marks present)
 
 
 def _complete(system_prompt: str, user_prompt: str) -> str:
@@ -157,6 +179,23 @@ def _catalogue(engine: SimulationEngine) -> str:
     lines.append(f"Current state: {state.name}. Patient: {state.patient_status or 'see vitals'}.")
     if state.expected_actions:
         lines.append("Reasonable next actions here: " + "; ".join(state.expected_actions))
+    return "\n".join(lines)
+
+
+def _room_roster(engine: SimulationEngine) -> str:
+    """Who the resident can be addressing right now — present vs not-yet-here — so the
+    interpreter can reason about the addressee rather than keyword-match a vocative."""
+    from backend.actor_voice import actor_speaker
+    present, absent = ["patient", "nurse"], []
+    for a in engine.case.actors:
+        kind = actor_speaker(a)
+        if kind in ("patient", "nurse"):
+            continue
+        label = f"{kind} ({a.role})" if getattr(a, "role", None) else kind
+        (present if engine.is_present(a.id) else absent).append(label)
+    lines = ["People in the room now (possible addressees): " + ", ".join(present)]
+    if absent:
+        lines.append("Not in the room yet (cannot be addressed): " + ", ".join(absent))
     return "\n".join(lines)
 
 
@@ -192,11 +231,15 @@ def _parse_intent(raw: str) -> NurseIntent:
     target = data.get("target")
     if target in ("", "null", None):
         target = None
+    addressee = (data.get("addressee") or "").strip().lower() or None
+    if addressee in ("none", "null", "unclear", "unknown", ""):
+        addressee = None
     return NurseIntent(
         op=op,
         target=str(target) if target else None,
         action_text=(data.get("action_text") or "").strip(),
         clarify=bool(data.get("clarify", False)),
+        addressee=addressee,
     )
 
 
@@ -236,13 +279,15 @@ def _apply_addressee(intent: NurseIntent, transcript: str, engine: SimulationEng
     beat_id = _beat_for_speaker(engine, addressed)
     if not beat_id:
         return intent
-    return NurseIntent(op="ask_history", target=beat_id, action_text=intent.action_text)
+    return NurseIntent(op="ask_history", target=beat_id, action_text=intent.action_text,
+                       addressee=intent.addressee or addressed)
 
 
 def interpret(transcript: str, engine: SimulationEngine, history: list[dict]) -> NurseIntent:
     """Map one utterance to a structured engine intent (one LLM call)."""
     user = (
         f"{_catalogue(engine)}\n\n"
+        f"{_room_roster(engine)}\n\n"
         f"Recent exchange:\n{_history_lines(history) or '(none)'}\n\n"
         f'Resident just said: "{transcript}"\n\nJSON:'
     )
@@ -371,8 +416,40 @@ def _med_dose(transcript: str, action_text: str) -> str | None:
     return _extract_dose(transcript, action_text)
 
 
+# Which vital(s) a read_vitals utterance actually named. Deliberately mirrors the
+# cockpit's client-side reveal vocabulary (voice_room_functional.html VITAL_WORDS)
+# so the nurse's *spoken* report and the on-screen panel reveal the same vitals —
+# asking for "BP and HR" should not make her recite the whole monitor.
+_VITAL_ASK_PATTERNS: list[tuple[re.Pattern, list[str]]] = [
+    (re.compile(r"\b(spo2|sp02|o2 ?sats?|oxygen|saturations?|sats?)\b", re.I), ["oxygen_saturation"]),
+    (re.compile(r"\b(blood pressure|bp)\b", re.I), ["blood_pressure"]),
+    (re.compile(r"\b(heart rate|hr|pulse)\b", re.I), ["heart_rate", "rhythm"]),
+    (re.compile(r"\b(respiratory rate|resp rate|breathing rate|rr)\b", re.I), ["respiratory_rate"]),
+    (re.compile(r"\b(temperature|temp|fever)\b", re.I), ["temperature_c"]),
+    (re.compile(r"\b(glucose|blood sugar|sugar|bsl|cbg)\b", re.I), ["glucose"]),
+    (re.compile(r"\bpain\b", re.I), ["pain"]),
+]
+
+
+def _requested_vital_keys(transcript: str, available: dict) -> list[str] | None:
+    """The specific vital keys the resident named, filtered to those we actually
+    have. Returns ``None`` for a generic ask ("what are her vitals/obs?", "put her
+    on the monitor") — the caller then reports the full set. Rhythm rides along
+    with heart rate, the way a monitor read-back naturally states it."""
+    named: list[str] = []
+    for pat, keys in _VITAL_ASK_PATTERNS:
+        if pat.search(transcript or ""):
+            for k in keys:
+                if k not in named:
+                    named.append(k)
+    if not named:
+        return None
+    return [k for k in named if k in available]
+
+
 def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict,
-                   already_asked: bool = False, engine: SimulationEngine | None = None) -> str:
+                   already_asked: bool = False, engine: SimulationEngine | None = None,
+                   transcript: str = "") -> str:
     """The factual nugget speak() must report — the engine's real output."""
     # Clarification guard: interpreter flagged ambiguous/uncertain match
     if intent.clarify and intent.op in ("order_investigation", "order_medication", "perform_action"):
@@ -405,6 +482,14 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict,
 
     if intent.op == "read_vitals":
         keep = {k: v for k, v in vitals.items() if v not in (None, {}, "")}
+        requested = _requested_vital_keys(transcript, keep)
+        if requested is not None:                    # named specific vitals → report only those
+            keep = {k: keep[k] for k in requested}
+            if not keep:
+                return ("The resident asked for a vital that isn't being tracked for this "
+                        "patient. Tell them briefly it's not available on the monitor.")
+            return ("The resident asked for specific vitals — report ONLY these and nothing "
+                    "else: " + json.dumps(keep))
         return "Current vitals: " + json.dumps(keep)
     if intent.op == "order_medication":
         med = parse_med(intent.target, intent.action_text)
@@ -440,8 +525,28 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict,
         if result and result.message:
             return f"The test isn't back yet — relay this plainly: {result.message}"
         return "Order acknowledged; nothing back yet — say so briefly."
+    if intent.op == "perform_exam":
+        # The exam findings are charted as a card for the resident to read — never
+        # read them aloud (like imaging). The nurse only says the exam is done and
+        # the findings are in the notes to review.
+        if result and result.revealed:
+            system = (intent.target or "").strip()
+            return (
+                f"You performed the {system + ' ' if system else ''}exam. Say ONLY that "
+                "it's done and the findings are charted in the notes for the resident to "
+                "review — ONE short line. Do NOT read out, describe, summarise, or "
+                "interpret any of the findings."
+            )
+        if result and result.message:
+            return f"The exam couldn't be completed — relay this plainly: {result.message}"
+        return "Exam acknowledged; nothing to note — say so briefly."
     if result is None:
-        return "No specific result; respond conversationally and stay in role."
+        return (
+            "The resident hasn't given a specific order or question yet. Respond in "
+            "one short line and stay in role — invite them to lead (e.g. ask what "
+            "they'd like to do first). Do NOT volunteer the vitals, the history, or "
+            "the patient's story unprompted; make them ask."
+        )
     parts = []
     if result.revealed:
         if already_asked:
@@ -469,7 +574,7 @@ def speak(
     user = (
         f"Recent exchange:\n{_history_lines(history) or '(none)'}\n\n"
         f'Resident said: "{transcript}"\n'
-        f"{_outcome_brief(intent, result, vitals, already_asked=already_asked, engine=engine)}\n\n"
+        f"{_outcome_brief(intent, result, vitals, already_asked=already_asked, engine=engine, transcript=transcript)}\n\n"
         "Nurse (spoken reply):"
     )
     try:
@@ -483,52 +588,30 @@ def speak(
 
 
 INTRO_SYSTEM = (
-    "You are the bedside nurse giving a one-breath spoken handoff to a resident "
-    "who just walked in. Two or three short sentences only.\n"
-    "INCLUDE: first name, age in plain words, why they're here, and the one thing "
-    "the resident must know right now. Close with a single short line that opens "
-    "the encounter (e.g. 'She's all yours.' / 'What do you want to start with?').\n"
-    "FORBIDDEN — never say any of these:\n"
-    "  • Chart shorthand: '29F', 'yo', 'M/F' age codes, 'SOB', 'c/o', 'hx', "
-    "'h/o', 'VS', 'SBP', 'HR', 'RR', 'SpO2', 'sating', 'O2 sat', 'GCS'\n"
-    "  • Numbers for vital signs (no percentages, no mmHg, no bpm in this handoff)\n"
-    "  • HPI prose, past medical history lists, medication lists\n"
-    "  • Markdown, headers, bullet points, stage directions\n"
-    "Speak plain English: 'She's twenty-nine', 'breathing hard', 'can't lie flat'. "
-    "Under 50 words total."
+    "You are the bedside nurse greeting a resident who has just walked in, at the "
+    "moment a new patient arrives. Give a short, warm, spoken GREETING ONLY — one "
+    "sentence, maybe two.\n"
+    "Do this and nothing more: greet the resident, tell them the patient (by first "
+    "name) has just arrived for them to assess, and invite them to begin.\n"
+    "FORBIDDEN — reveal NOTHING about the case. No chief complaint, no symptoms, no "
+    "reason for the visit, no history, no medications, no allergies, no vital signs "
+    "or numbers, no examination findings, no clinical detail of any kind. The "
+    "resident must discover all of it by asking you and examining the patient.\n"
+    "No markdown, no stage directions — your words are spoken aloud. Under 25 words.\n"
+    "Always speak in English, even if the patient's name looks non-English — never "
+    "switch languages.\n"
+    "Example shape: \"Hi doctor — Emma's just arrived and she's all yours. "
+    "Where would you like to start?\""
 )
 
 
-def _intro_facts(case) -> str:
-    """The raw handoff material the intro is phrased from."""
-    p = case.patient
-    pres = case.presentation
-    ident = p.name or "the patient"
-    if p.age:
-        ident += f", a {p.age}-year-old" + (f" {p.gender}" if p.gender else "")
-    lines = [f"Patient: {ident}.", f"Chief complaint: {pres.chief_complaint}."]
-    if pres.opening_vignette:
-        lines.append(f"Scenario: {pres.opening_vignette}")
-    if p.past_medical_history:
-        lines.append("Past medical history: " + ", ".join(p.past_medical_history) + ".")
-    if p.medications:
-        lines.append("Medications: " + ", ".join(p.medications) + ".")
-    if p.allergies:
-        lines.append("Allergies: " + ", ".join(p.allergies) + ".")
-    return "\n".join(lines)
-
-
 def _fallback_intro(case) -> str:
-    """A deterministic handoff used when the LLM is unavailable."""
-    p = case.patient
-    pres = case.presentation
-    desc = p.name or "the patient"
-    if p.age:
-        desc += f", a {p.age}-year-old" + (f" {p.gender}" if p.gender else "")
-    out = f"This is {desc}, here with {pres.chief_complaint}."
-    if pres.opening_vignette:
-        out += f" {pres.opening_vignette}"
-    return out + " Let me know how you'd like to start."
+    """A deterministic minimal greeting used when the LLM is unavailable.
+
+    Reveals nothing about the case beyond the patient's name — the resident
+    discovers the complaint, history and vitals by asking."""
+    name = case.patient.name or "your patient"
+    return f"Hi doctor — {name} has just arrived for you to assess. Where would you like to start?"
 
 
 def opening_narration(session: VoiceSession) -> str:
@@ -538,12 +621,10 @@ def opening_narration(session: VoiceSession) -> str:
     resident can begin. Phrased by the LLM with a deterministic fallback, and
     recorded on the nurse channel so it's part of the conversation context."""
     case = session.engine.case
-    status = session.engine.state.patient_status
-    user = (
-        f"{_intro_facts(case)}\n"
-        + (f"Right now: {status}\n" if status else "")
-        + "\nNurse (spoken handoff):"
-    )
+    # Feed ONLY the patient's first name — the greeting must reveal nothing else,
+    # so we never even hand the model the complaint, history or vitals to leak.
+    name = case.patient.name or "the patient"
+    user = f"Patient's first name: {name}.\n\nNurse (spoken greeting):"
     try:
         reply = _complete(INTRO_SYSTEM, user)
     except Exception as exc:  # never let the handoff break session creation
@@ -704,14 +785,19 @@ def run_turn(
                     decision.addressee, decision.present, decision.summon, decision.reason)
 
         if decision.ask_back:
-            from backend.director import ask_back_prompt
+            from backend.director import ask_back_prompt, head_clarify_prompt
             vitals = engine.current_vitals().model_dump(exclude_none=True)
             session.history.append({"role": "resident", "text": transcript})
+            # The Head Physician voices the clarify: a generic "who's that for?" when the
+            # addressee is unclear, or the provider-naming line for an ambiguous history ask.
+            line = (head_clarify_prompt(engine)
+                    if decision.reason == "unclear addressee"
+                    else ask_back_prompt(engine))
             return NurseTurn(
-                reply=ask_back_prompt(engine), intent=intent, vitals=vitals,
+                reply=line, intent=intent, vitals=vitals,
                 state_id=engine.run.current_state_id, state_name=engine.state.name,
                 clock_events=[c.message for c in clock if c.message],
-                speaker="nurse", needs_addressee=True,
+                speaker="head", needs_addressee=True,
             )
 
         # A pure "call the husband" — the nurse fetches them; she acknowledges and
@@ -729,6 +815,11 @@ def run_turn(
 
         if decision.addressee == "patient":
             return _patient_routed_turn(session, intent, transcript, clock)
+
+        # The resident is now engaging this specific person — record it so authored
+        # cues that only nudge "go and talk to them" retire once served (Issue-2).
+        if decision.actor_id and decision.addressee not in ("nurse", "patient"):
+            engine.mark_engaged(decision.actor_id)
 
         # A present bystander (EMS / family / RT) answers from their OWN knowledge —
         # positive routing (C3): a history/conversational turn reaches them, never the
@@ -835,7 +926,7 @@ def _summon_turn(
     engine.summon(decision.summon)
     actor = next((a for a in engine.case.actors if a.id == decision.summon), None)
     role = (actor.role if actor else decision.summon).strip()
-    reply = f"Calling {role} in now — they're on their way over."
+    reply = f"Bringing {role} in now — they're right here at the bedside for you."
 
     session.history.append({"role": "resident", "text": transcript})
     session.history.append({"role": "nurse", "text": reply})
@@ -849,6 +940,7 @@ def _summon_turn(
         speaker="nurse",
         working_dx=engine.run.working_diagnoses[-1] if engine.run.working_diagnoses else None,
         cues=cues,
+        summon=decision.summon,   # tell the client to mark them present now
     )
 
 
