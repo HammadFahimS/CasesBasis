@@ -29,7 +29,7 @@
   .resident-chip .meta { line-height: 1.2; }
   .resident-chip .name { font-size: 12.5px; font-weight: 600; color: white; }
   .resident-chip .role { font-size: 10px; color: var(--ink-400); font-family: 'JetBrains Mono', monospace; }
-  .burger { width: 40px; height: 40px; border-radius: 9px; background: var(--ink-800); border: 1px solid var(--ink-700); cursor: pointer; display: grid; place-items: center; color: var(--ink-200); position: relative; transition: background .14s, border-color .14s; }
+  .burger { width: 40px; height: 40px; border-radius: 9px; background: var(--ink-800); border: 1px solid var(--ink-700); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--ink-200); position: relative; transition: background .14s, border-color .14s; }
   .burger:hover { background: var(--ink-700); border-color: var(--ink-600); color: white; }
   .burger .lines { width: 17px; height: 12px; position: relative; }
   .burger .lines span { position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px; background: currentColor; transition: transform .22s ease, opacity .18s ease; }
@@ -39,7 +39,7 @@
   body.drawer-open .burger .lines span:nth-child(1) { transform: translateY(5px) rotate(45deg); }
   body.drawer-open .burger .lines span:nth-child(2) { opacity: 0; }
   body.drawer-open .burger .lines span:nth-child(3) { transform: translateY(-5px) rotate(-45deg); }
-  .burger .menu-word { position: absolute; bottom: -15px; left: 50%; transform: translateX(-50%); font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-500); font-weight: 700; }
+  .burger .menu-word { position: static; font-size: 7px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-500); font-weight: 700; line-height: 1; }
   .scrim { position: fixed; inset: 0; background: rgba(10,15,23,0.45); opacity: 0; pointer-events: none; transition: opacity .22s ease; z-index: 40; backdrop-filter: blur(1.5px); }
   body.drawer-open .scrim { opacity: 1; pointer-events: auto; }
   .drawer { position: fixed; top: 0; left: 0; bottom: 0; width: 360px; max-width: 90vw; background: var(--paper); box-shadow: var(--shadow-xl); z-index: 50; transform: translateX(-100%); transition: transform .26s cubic-bezier(.4,0,.2,1); display: flex; flex-direction: column; border-right: 1px solid var(--ink-100); }
@@ -133,6 +133,10 @@
       <a class="nav-item" href="/simulator">
         <span class="ni-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></svg></span>
         <span class="ni-txt">Simulator<span class="ni-sub">Live patient encounter</span></span>
+      </a>
+      <a class="nav-item" href="/qbank" data-view="qbank">
+        <span class="ni-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h8l2 2v10H3z"/><path d="M6 6h4M6 9h4"/><circle cx="11.5" cy="12" r="2.2" fill="white"/><path d="M11.5 10.8v1.4M11.5 13.1v.02"/></svg></span>
+        <span class="ni-txt">Question Bank<span class="ni-sub">UWorld-style practice sets</span></span>
       </a>
       <a class="nav-item" href="/ecg-algorithm">
         <span class="ni-ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1.5 8h2l1.5-4 2.5 9 2-5 1 2.5h3.5"/></svg></span>
@@ -239,6 +243,13 @@
     function openNewCaseModal() { ncmScrim.hidden = false; body.classList.add('ncm-open'); }
     function closeNewCaseModal() { ncmScrim.hidden = true; body.classList.remove('ncm-open'); }
     window.openNewCaseModal = openNewCaseModal;
+    // Deep-link: `?new=1` (e.g. "Switch case" / "New case" from inside the live room)
+    // lands here and opens the canonical chooser, then cleans the URL so a refresh
+    // doesn't re-trigger it.
+    if (new URLSearchParams(location.search).get('new') === '1') {
+      openNewCaseModal();
+      history.replaceState(null, '', location.pathname);
+    }
     document.addEventListener('click', e => {
       const trigger = e.target.closest('[data-new-case]');
       if (trigger) { e.preventDefault(); closeDrawer(); openNewCaseModal(); return; }
@@ -256,7 +267,8 @@
     const path = location.pathname.replace(/\/$/, '') || '/home';
     document.querySelectorAll('.nav-item[data-view]').forEach(el => {
       const v = el.getAttribute('data-view');
-      if ((v === 'home' && path === '/home') || (v === 'analytics' && path === '/analytics')) {
+      if ((v === 'home' && path === '/home') || (v === 'analytics' && path === '/analytics') ||
+          (v === 'qbank' && path.startsWith('/qbank'))) {
         el.classList.add('active');
       }
     });

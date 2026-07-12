@@ -1,0 +1,2127 @@
+[
+  {
+    "case_id": "dka_t1dm_01",
+    "stem": "A 24-year-old woman with type 1 diabetes mellitus is brought to the emergency department with 2 days of nausea, vomiting, and diffuse abdominal pain after running out of insulin. She appears lethargic with deep, rapid respirations and a fruity odor on her breath. Vitals: BP 98/62 mmHg, HR 122/min, RR 28/min, T 37.4°C. Labs: glucose 486 mg/dL, sodium 131 mEq/L, potassium 5.4 mEq/L, chloride 96 mEq/L, bicarbonate 8 mEq/L, BUN 32 mg/dL, creatinine 1.4 mg/dL, arterial pH 7.12. Urinalysis shows 4+ ketones and 4+ glucose.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "dka_t1dm_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate initial step in management?",
+        "choices": [
+          {
+            "text": "Begin aggressive IV fluid resuscitation with 0.9% normal saline",
+            "correct": true,
+            "explanation": "Patients in DKA are profoundly volume depleted (often 3-6 L deficit) from osmotic diuresis and vomiting. Isotonic saline restores intravascular volume, improves tissue perfusion, and lowers glucose by dilution and improved renal clearance. Fluids precede insulin because insulin shifts fluid and potassium intracellularly and can precipitate hypotension and hypokalemia in an under-resuscitated patient."
+          },
+          {
+            "text": "Administer an IV insulin bolus immediately before any other intervention",
+            "correct": false,
+            "explanation": "Tempting because hyperglycemia is the most visible abnormality, but starting insulin before fluid resuscitation and potassium assessment can worsen hypovolemia (as glucose and water shift intracellularly) and cause life-threatening hypokalemia, since insulin drives potassium into cells."
+          },
+          {
+            "text": "Administer IV sodium bicarbonate to correct the acidosis",
+            "correct": false,
+            "explanation": "Bicarbonate is generally not indicated in DKA unless pH is below approximately 6.9. The acidosis resolves as insulin halts ketogenesis and ketones are metabolized. Bicarbonate can paradoxically worsen intracellular acidosis, cause hypokalemia, and delay ketone clearance."
+          },
+          {
+            "text": "Give subcutaneous long-acting insulin and admit for observation",
+            "correct": false,
+            "explanation": "Subcutaneous absorption is unreliable in hypoperfused, volume-depleted patients, and long-acting insulin cannot be titrated to the rapidly changing glucose and electrolyte status in DKA. A continuous IV regular insulin infusion after fluids is the standard of care."
+          }
+        ],
+        "key_learning_point": "In DKA, IV isotonic fluids come first; insulin is started only after volume resuscitation has begun and potassium status is known.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "dka_t1dm_01_cp2",
+        "sequence": 2,
+        "question": "After 2 liters of normal saline, repeat potassium is 3.1 mEq/L. An insulin infusion has not yet been started. What is the most appropriate next step?",
+        "choices": [
+          {
+            "text": "Replete potassium IV and hold insulin until potassium is above 3.3 mEq/L",
+            "correct": true,
+            "explanation": "Total-body potassium in DKA is severely depleted despite initially normal or high serum values, because acidosis shifts potassium extracellularly. Insulin drives potassium back into cells; starting it at a serum potassium below 3.3 mEq/L risks fatal arrhythmia from acute hypokalemia. Potassium must be repleted first."
+          },
+          {
+            "text": "Start the insulin infusion now and replace potassium simultaneously",
+            "correct": false,
+            "explanation": "Simultaneous replacement is appropriate when potassium is between 3.3 and 5.2 mEq/L. Below 3.3 mEq/L, insulin must be withheld because intracellular shift will outpace repletion and precipitate dangerous hypokalemia."
+          },
+          {
+            "text": "Start insulin at double the standard rate to correct hyperglycemia faster",
+            "correct": false,
+            "explanation": "Higher insulin rates accelerate potassium shift and glucose drop, increasing risk of hypokalemia, hypoglycemia, and rapid osmotic shifts. Glucose correction speed is not the therapeutic priority; closing the anion gap safely is."
+          },
+          {
+            "text": "Give oral potassium and recheck in 6 hours",
+            "correct": false,
+            "explanation": "This patient is vomiting and acutely ill; oral repletion is unreliable and 6 hours is far too long an interval in active DKA management, where electrolytes are typically checked every 2 hours."
+          }
+        ],
+        "key_learning_point": "Hold insulin in DKA when serum potassium is below 3.3 mEq/L; replete potassium first because insulin-driven intracellular shift can cause fatal hypokalemia.",
+        "skill_tested": "interpretation",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Endocrinology",
+      "subtopic": "Diabetic Ketoacidosis",
+      "system": "Endocrine",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "pe_postop_01",
+    "stem": "A 45-year-old woman is postoperative day 3 after right total hip arthroplasty when she develops sudden-onset dyspnea and right-sided pleuritic chest pain. She has no hemoptysis. Vitals: BP 118/74 mmHg, HR 112/min, RR 24/min, SpO2 89% on room air, T 37.6°C. Exam shows clear lungs bilaterally, no jugular venous distention, and a tender, mildly swollen right calf. ECG shows sinus tachycardia. Chest radiograph is unremarkable. Creatinine is 0.9 mg/dL.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "pe_postop_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate next diagnostic test?",
+        "choices": [
+          {
+            "text": "CT pulmonary angiography",
+            "correct": true,
+            "explanation": "This patient has a high pretest probability of pulmonary embolism (recent major orthopedic surgery, tachycardia, hypoxia, unilateral calf swelling). In high-probability patients, CT pulmonary angiography is the diagnostic test of choice; it directly visualizes filling defects in the pulmonary arteries and her normal renal function permits contrast."
+          },
+          {
+            "text": "D-dimer assay",
+            "correct": false,
+            "explanation": "D-dimer is useful only to rule out PE in low or intermediate pretest probability patients because of its high sensitivity but poor specificity. In a postoperative patient, D-dimer is almost universally elevated from surgery itself, and a positive result would not change the need for definitive imaging."
+          },
+          {
+            "text": "Ventilation-perfusion (V/Q) scan",
+            "correct": false,
+            "explanation": "V/Q scanning is reserved for patients who cannot receive contrast (renal failure, contrast allergy) or when CT is unavailable. It is also less interpretable when the chest radiograph is abnormal. With normal renal function, CTPA is preferred for its speed and specificity."
+          },
+          {
+            "text": "Transthoracic echocardiography",
+            "correct": false,
+            "explanation": "Echocardiography can show right ventricular strain in massive PE and helps risk-stratify, but it is neither sensitive nor specific enough to diagnose PE. It is most useful in hemodynamically unstable patients too unstable to travel to CT; this patient is normotensive."
+          }
+        ],
+        "key_learning_point": "In patients with high pretest probability of PE, proceed directly to CT pulmonary angiography; D-dimer is only useful to rule out PE when pretest probability is low.",
+        "skill_tested": "diagnostic workup",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "pe_postop_01_cp2",
+        "sequence": 2,
+        "question": "CT pulmonary angiography confirms a segmental pulmonary embolism in the right lower lobe. The patient remains normotensive. What is the most appropriate management?",
+        "choices": [
+          {
+            "text": "Initiate therapeutic anticoagulation with low-molecular-weight heparin",
+            "correct": true,
+            "explanation": "Hemodynamically stable (submassive or low-risk) PE is treated with therapeutic anticoagulation, which prevents clot propagation while endogenous fibrinolysis resolves the embolus. LMWH or a direct oral anticoagulant is appropriate; in the early postoperative period, a parenteral agent allows tighter control if bleeding occurs."
+          },
+          {
+            "text": "Administer systemic thrombolytics (alteplase)",
+            "correct": false,
+            "explanation": "Systemic thrombolysis is reserved for massive PE with hemodynamic instability (sustained hypotension). This patient is normotensive, and she is postoperative day 3 from major surgery, a major contraindication due to bleeding risk. Thrombolytics here would expose her to serious hemorrhage without proven mortality benefit."
+          },
+          {
+            "text": "Place an inferior vena cava filter and withhold anticoagulation",
+            "correct": false,
+            "explanation": "IVC filters are indicated when anticoagulation is absolutely contraindicated or when PE recurs despite therapeutic anticoagulation. Three days after elective arthroplasty, anticoagulation is generally safe, so a filter would add procedural risk without addressing the existing clot."
+          },
+          {
+            "text": "Continue prophylactic-dose heparin and monitor",
+            "correct": false,
+            "explanation": "Prophylactic dosing prevents new clot formation but is insufficient to treat established PE. Undertreatment risks clot propagation, recurrent embolism, and hemodynamic deterioration. Confirmed PE requires escalation to therapeutic dosing."
+          }
+        ],
+        "key_learning_point": "Hemodynamically stable PE is treated with therapeutic anticoagulation; thrombolysis is reserved for massive PE with hypotension and is contraindicated in the early postoperative period.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Pulmonology",
+      "subtopic": "Pulmonary Embolism",
+      "system": "Respiratory",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "appendicitis_adult_01",
+    "stem": "A 22-year-old man presents with 18 hours of abdominal pain that began periumbilically and has migrated to the right lower quadrant. He reports anorexia and one episode of vomiting. Vitals: BP 124/78 mmHg, HR 96/min, T 38.1°C. Exam shows tenderness with guarding at McBurney point and pain in the right lower quadrant with palpation of the left lower quadrant. Labs: WBC 14,200/mm3 with neutrophil predominance. Urinalysis is normal.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "appendicitis_adult_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate next step to confirm the diagnosis?",
+        "choices": [
+          {
+            "text": "CT scan of the abdomen and pelvis with IV contrast",
+            "correct": true,
+            "explanation": "In adult men with suspected appendicitis, contrast-enhanced CT is the confirmatory test of choice, with sensitivity and specificity above 95%. It demonstrates an enlarged appendix (>6 mm), wall enhancement, and periappendiceal fat stranding, and identifies complications such as perforation or abscess that change operative planning."
+          },
+          {
+            "text": "Right lower quadrant ultrasound",
+            "correct": false,
+            "explanation": "Ultrasound is the first-line imaging choice in children and pregnant women to avoid ionizing radiation, and it is highly operator dependent. In a non-pregnant adult, CT is more sensitive and less likely to be nondiagnostic, particularly with overlying bowel gas or body habitus limitations."
+          },
+          {
+            "text": "Diagnostic laparoscopy without imaging",
+            "correct": false,
+            "explanation": "While classic presentations were historically taken to the operating room on clinical grounds, modern practice uses CT to reduce negative appendectomy rates and to detect complicated disease. Proceeding straight to surgery is reserved for unequivocal presentations where imaging would delay care."
+          },
+          {
+            "text": "Serial abdominal exams and repeat WBC in 12 hours",
+            "correct": false,
+            "explanation": "Observation risks progression to perforation in a patient who already has fever, focal peritoneal signs, and leukocytosis. Watchful waiting is only appropriate for equivocal presentations, not for a classic evolving appendicitis."
+          }
+        ],
+        "key_learning_point": "Contrast-enhanced CT is the confirmatory imaging of choice for suspected appendicitis in non-pregnant adults; ultrasound is preferred in children and pregnancy.",
+        "skill_tested": "diagnostic workup",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      },
+      {
+        "checkpoint_id": "appendicitis_adult_01_cp2",
+        "sequence": 2,
+        "question": "CT confirms acute uncomplicated appendicitis with a 9 mm appendix and no perforation or abscess. What is the most appropriate management?",
+        "choices": [
+          {
+            "text": "Laparoscopic appendectomy with preoperative antibiotics",
+            "correct": true,
+            "explanation": "Appendectomy remains the standard of care for uncomplicated appendicitis. Laparoscopy offers faster recovery and fewer wound complications than open surgery. A preoperative dose of antibiotics covering gram-negative and anaerobic flora (e.g., cefoxitin or ceftriaxone plus metronidazole) reduces surgical site infection."
+          },
+          {
+            "text": "IV antibiotics alone with planned interval reassessment",
+            "correct": false,
+            "explanation": "Antibiotics-first strategies are a studied alternative in selected uncomplicated cases, but they carry a substantial recurrence rate (roughly one in three within a year) and higher failure rates when an appendicolith is present. On licensing exams and in standard practice, surgery remains the answer for an otherwise healthy young adult."
+          },
+          {
+            "text": "Percutaneous drainage followed by interval appendectomy",
+            "correct": false,
+            "explanation": "Percutaneous drainage applies to a contained periappendiceal abscess, typically in late presentations. This patient has no abscess to drain; the treatment for uncomplicated appendicitis is prompt appendectomy."
+          },
+          {
+            "text": "Discharge with oral antibiotics and outpatient surgical follow-up",
+            "correct": false,
+            "explanation": "Outpatient oral therapy risks progression to perforation and peritonitis. Acute appendicitis with systemic signs warrants inpatient management and definitive treatment during the same admission."
+          }
+        ],
+        "key_learning_point": "Uncomplicated acute appendicitis is treated with prompt laparoscopic appendectomy and perioperative antibiotics; drainage is reserved for contained abscesses.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      }
+    ],
+    "tags": {
+      "subject": "General Surgery",
+      "subtopic": "Appendicitis",
+      "system": "Gastrointestinal",
+      "exam": "Step 2 CK",
+      "difficulty": 2,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "cap_severe_01",
+    "stem": "A 68-year-old man presents with 3 days of productive cough, fever, and worsening shortness of breath. He has hypertension and drinks alcohol socially. Vitals: BP 88/58 mmHg, HR 118/min, RR 32/min, SpO2 88% on room air, T 39.2°C. He is oriented to person only. Exam reveals bronchial breath sounds and crackles over the right lower lung field. Labs: WBC 17,800/mm3, BUN 28 mg/dL, creatinine 1.3 mg/dL. Chest radiograph shows a dense right lower lobe consolidation.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "cap_severe_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate disposition for this patient?",
+        "choices": [
+          {
+            "text": "Admission to the intensive care unit",
+            "correct": true,
+            "explanation": "He meets multiple severity criteria: confusion, BUN above 19 mg/dL, respiratory rate of 30 or more, and systolic blood pressure below 90 mmHg (CURB-65 score of at least 4), plus hypoxemia. High CURB-65 scores predict substantial mortality, and hypotension with confusion signals evolving septic shock requiring ICU-level monitoring and support."
+          },
+          {
+            "text": "Admission to a general medical floor",
+            "correct": false,
+            "explanation": "A floor bed is appropriate for moderate-risk pneumonia (CURB-65 of 2), but this patient has hypotension, confusion, tachypnea, and hypoxemia. Floor-level monitoring cannot safely manage impending septic shock or respiratory failure."
+          },
+          {
+            "text": "Discharge home with oral antibiotics and next-day follow-up",
+            "correct": false,
+            "explanation": "Outpatient management applies to low-risk patients (CURB-65 of 0-1) who are hemodynamically normal and oxygenating well. Discharging a hypotensive, confused, hypoxemic patient would be a critical triage error."
+          },
+          {
+            "text": "Observation in the emergency department for 6 hours before deciding",
+            "correct": false,
+            "explanation": "This patient already meets objective ICU criteria. Delaying definitive disposition postpones aggressive resuscitation, timely antibiotics, and close monitoring, all of which are time-sensitive in severe sepsis from pneumonia."
+          }
+        ],
+        "key_learning_point": "CURB-65 (Confusion, Urea >19 mg/dL, RR ≥30, BP <90/60, age ≥65) guides pneumonia disposition; scores of 3 or more with hemodynamic compromise warrant ICU admission.",
+        "skill_tested": "risk stratification",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "cap_severe_01_cp2",
+        "sequence": 2,
+        "question": "Which empiric antibiotic regimen is most appropriate?",
+        "choices": [
+          {
+            "text": "Ceftriaxone plus azithromycin",
+            "correct": true,
+            "explanation": "Severe community-acquired pneumonia requires coverage of typical organisms (Streptococcus pneumoniae, Haemophilus influenzae) with a beta-lactam plus atypical coverage (Legionella, Mycoplasma) with a macrolide. The combination also confers a mortality benefit in severe CAP thought to relate to macrolide immunomodulation. A respiratory fluoroquinolone with a beta-lactam is an alternative."
+          },
+          {
+            "text": "Azithromycin monotherapy",
+            "correct": false,
+            "explanation": "Macrolide monotherapy is limited to healthy outpatients in regions with low pneumococcal macrolide resistance. It is inadequate for severe CAP, where resistant pneumococcus is a real risk and mortality is high."
+          },
+          {
+            "text": "Vancomycin plus piperacillin-tazobactam",
+            "correct": false,
+            "explanation": "This regimen targets MRSA and Pseudomonas, which are concerns in hospital-acquired pneumonia or patients with specific risk factors (recent hospitalization with IV antibiotics, structural lung disease). It notably lacks atypical coverage and is unnecessarily broad for typical community-acquired disease."
+          },
+          {
+            "text": "Oral amoxicillin-clavulanate",
+            "correct": false,
+            "explanation": "Oral therapy is inappropriate in a hypotensive ICU patient with uncertain gut perfusion and absorption. Severe CAP requires IV antibiotics, and amoxicillin-clavulanate alone lacks atypical coverage."
+          }
+        ],
+        "key_learning_point": "Empiric therapy for severe CAP is an IV beta-lactam (ceftriaxone) plus a macrolide (azithromycin) or respiratory fluoroquinolone, covering both typical and atypical pathogens.",
+        "skill_tested": "pharmacology",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      }
+    ],
+    "tags": {
+      "subject": "Infectious Disease",
+      "subtopic": "Community-Acquired Pneumonia",
+      "system": "Respiratory",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "stroke_ischemic_tpa_01",
+    "stem": "A 67-year-old woman is brought to the emergency department by her husband 90 minutes after the sudden onset of right arm and face weakness with difficulty speaking. She has hypertension and takes amlodipine. She has no history of recent surgery, bleeding, or anticoagulant use. Vitals: BP 176/98 mmHg, HR 88/min irregular, glucose 108 mg/dL. Exam shows expressive aphasia, right facial droop sparing the forehead, and 3/5 strength in the right upper extremity.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "stroke_ischemic_tpa_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate first diagnostic step?",
+        "choices": [
+          {
+            "text": "Non-contrast CT of the head",
+            "correct": true,
+            "explanation": "The immediate priority in acute stroke is distinguishing ischemic from hemorrhagic stroke, because thrombolysis is lifesaving in one and lethal in the other. Non-contrast CT is fast, universally available, and highly sensitive for acute hemorrhage, making it the mandatory gateway study before any reperfusion therapy."
+          },
+          {
+            "text": "MRI of the brain with diffusion-weighted imaging",
+            "correct": false,
+            "explanation": "Diffusion-weighted MRI is more sensitive for early ischemia, but it is slower and less available than CT. In the thrombolysis window, every minute of delay costs neurons; MRI should not delay the decision to treat when CT can exclude hemorrhage in minutes."
+          },
+          {
+            "text": "Carotid duplex ultrasonography",
+            "correct": false,
+            "explanation": "Carotid imaging identifies stenosis for secondary prevention planning (e.g., endarterectomy candidacy) but plays no role in the hyperacute decision of whether to give thrombolytics."
+          },
+          {
+            "text": "Lumbar puncture",
+            "correct": false,
+            "explanation": "Lumbar puncture is used when subarachnoid hemorrhage is suspected despite a negative CT. It has no role in evaluating a focal deficit consistent with ischemic stroke and would delay time-critical treatment."
+          }
+        ],
+        "key_learning_point": "Non-contrast head CT is the first test in acute stroke; its purpose is to exclude hemorrhage before considering thrombolysis, not to visualize the infarct.",
+        "skill_tested": "diagnostic workup",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "stroke_ischemic_tpa_01_cp2",
+        "sequence": 2,
+        "question": "Non-contrast CT shows no hemorrhage and no early infarct changes. The patient is now 2 hours from symptom onset. What is the most appropriate next step?",
+        "choices": [
+          {
+            "text": "Administer IV thrombolysis (alteplase or tenecteplase)",
+            "correct": true,
+            "explanation": "She is within the 4.5-hour window, has a disabling deficit, no hemorrhage on CT, glucose in normal range, blood pressure below the 185/110 mmHg treatment threshold, and no contraindications such as recent surgery or anticoagulation. IV thrombolysis restores perfusion by converting plasminogen to plasmin and improves functional outcomes when given early."
+          },
+          {
+            "text": "Give aspirin 325 mg and admit for observation",
+            "correct": false,
+            "explanation": "Aspirin is standard therapy for ischemic stroke patients who are outside the window or ineligible for thrombolysis, and it is otherwise held for 24 hours after lytics. Choosing aspirin here forfeits the substantial functional benefit of reperfusion in an eligible patient."
+          },
+          {
+            "text": "Lower blood pressure to below 140/90 mmHg before any treatment",
+            "correct": false,
+            "explanation": "Blood pressure only needs to be below 185/110 mmHg for thrombolysis; hers is 176/98. Aggressive lowering in acute ischemic stroke reduces perfusion of the penumbra and can extend the infarct. Permissive hypertension is the rule unless lytics are given or pressure exceeds thresholds."
+          },
+          {
+            "text": "Start therapeutic heparin infusion",
+            "correct": false,
+            "explanation": "Full-dose anticoagulation has no proven benefit in acute ischemic stroke and increases hemorrhagic transformation risk. Even with her irregular pulse suggesting atrial fibrillation, anticoagulation is deferred days after the acute event."
+          }
+        ],
+        "key_learning_point": "IV thrombolysis is indicated for disabling ischemic stroke within 4.5 hours of onset once hemorrhage is excluded and BP is below 185/110 mmHg.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "stroke_ischemic_tpa_01_cp3",
+        "sequence": 3,
+        "question": "The patient improves after thrombolysis. Telemetry during admission reveals paroxysmal atrial fibrillation. Which long-term therapy most effectively reduces her risk of recurrent stroke?",
+        "choices": [
+          {
+            "text": "A direct oral anticoagulant such as apixaban",
+            "correct": true,
+            "explanation": "Atrial fibrillation causes stroke through stasis-driven thrombus formation in the left atrial appendage; these cardioembolic events are prevented by anticoagulation, not antiplatelet therapy. DOACs are first-line over warfarin in nonvalvular AF given equal or superior efficacy, lower intracranial hemorrhage rates, and no monitoring requirement."
+          },
+          {
+            "text": "Aspirin plus clopidogrel indefinitely",
+            "correct": false,
+            "explanation": "Dual antiplatelet therapy is used short-term after minor non-cardioembolic stroke or TIA. For cardioembolic stroke from AF, antiplatelets are markedly inferior to anticoagulation and prolonged dual therapy adds bleeding risk without adequate protection."
+          },
+          {
+            "text": "Rate control with metoprolol alone",
+            "correct": false,
+            "explanation": "Rate control improves symptoms and prevents tachycardia-mediated cardiomyopathy but does nothing to prevent thrombus formation in the atrial appendage. It is an adjunct, not a substitute for anticoagulation."
+          },
+          {
+            "text": "Carotid endarterectomy",
+            "correct": false,
+            "explanation": "Endarterectomy benefits patients with symptomatic high-grade carotid stenosis. Her stroke mechanism is cardioembolic from AF; surgery on the carotid does not address the embolic source."
+          }
+        ],
+        "key_learning_point": "Ischemic stroke in the setting of atrial fibrillation is cardioembolic and requires long-term anticoagulation (DOAC first-line), not antiplatelet therapy.",
+        "skill_tested": "secondary prevention",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      }
+    ],
+    "tags": {
+      "subject": "Neurology",
+      "subtopic": "Acute Ischemic Stroke",
+      "system": "Nervous",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "variceal_bleed_01",
+    "stem": "A 52-year-old man with alcohol-related cirrhosis presents with two episodes of large-volume hematemesis over the past hour. He appears pale and anxious. Vitals: BP 92/60 mmHg, HR 124/min, RR 20/min, SpO2 96% on room air. Exam shows spider angiomata, palmar erythema, splenomegaly, and shifting dullness. Labs: hemoglobin 8.4 g/dL, platelets 88,000/mm3, INR 1.7, total bilirubin 2.8 mg/dL. Two large-bore IV lines are placed and crystalloid resuscitation is begun.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "variceal_bleed_01_cp1",
+        "sequence": 1,
+        "question": "In addition to volume resuscitation and preparation for endoscopy, which medications should be started now?",
+        "choices": [
+          {
+            "text": "IV octreotide and IV ceftriaxone",
+            "correct": true,
+            "explanation": "Octreotide, a somatostatin analog, causes splanchnic vasoconstriction, lowering portal pressure and reducing variceal bleeding. Prophylactic antibiotics (ceftriaxone) are mandatory in cirrhotic patients with GI bleeding because they reduce bacterial infection, rebleeding, and mortality; bleeding disrupts the gut barrier in patients already predisposed to bacterial translocation and SBP."
+          },
+          {
+            "text": "IV octreotide alone",
+            "correct": false,
+            "explanation": "Octreotide is necessary but insufficient. Omitting prophylactic antibiotics misses one of the few interventions with proven mortality benefit in variceal hemorrhage; up to 50% of cirrhotics with GI bleeding develop bacterial infection without prophylaxis."
+          },
+          {
+            "text": "IV pantoprazole and observation until morning endoscopy",
+            "correct": false,
+            "explanation": "Proton pump inhibitors are the cornerstone for peptic ulcer bleeding, but the stigmata of chronic liver disease and portal hypertension make varices the likely source. Variceal bleeding requires portal-pressure-lowering therapy, antibiotics, and urgent (not delayed) endoscopy within 12 hours."
+          },
+          {
+            "text": "IV vasopressin without antibiotics",
+            "correct": false,
+            "explanation": "Vasopressin lowers portal pressure but causes systemic vasoconstriction with coronary and mesenteric ischemia risk, so it has been supplanted by octreotide. Withholding antibiotics also forfeits a proven survival benefit."
+          }
+        ],
+        "key_learning_point": "Acute variceal hemorrhage is managed with octreotide plus prophylactic antibiotics (ceftriaxone) before urgent endoscopy; antibiotics independently reduce mortality.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "variceal_bleed_01_cp2",
+        "sequence": 2,
+        "question": "Urgent upper endoscopy confirms actively bleeding esophageal varices. What is the most appropriate definitive intervention at this time?",
+        "choices": [
+          {
+            "text": "Endoscopic variceal band ligation",
+            "correct": true,
+            "explanation": "Band ligation mechanically strangulates the bleeding varix, achieving hemostasis in roughly 90% of cases with fewer complications than sclerotherapy (less ulceration, stricture, and perforation). It is the endoscopic treatment of choice for esophageal variceal bleeding and is repeated in sessions to obliterate remaining varices."
+          },
+          {
+            "text": "Endoscopic injection sclerotherapy",
+            "correct": false,
+            "explanation": "Sclerotherapy is effective but carries higher rates of esophageal ulceration, stricture, and perforation than banding. It is now second-line, used when banding is technically impossible."
+          },
+          {
+            "text": "Immediate transjugular intrahepatic portosystemic shunt (TIPS)",
+            "correct": false,
+            "explanation": "TIPS is rescue therapy for bleeding refractory to endoscopic and medical management, or early in selected high-risk patients after initial control. Jumping to TIPS before attempting endoscopic hemostasis exposes the patient to procedural risk and worsened hepatic encephalopathy unnecessarily."
+          },
+          {
+            "text": "Balloon tamponade with a Sengstaken-Blakemore tube",
+            "correct": false,
+            "explanation": "Balloon tamponade is a temporizing bridge for massive uncontrollable hemorrhage while arranging definitive therapy. It carries high rates of esophageal necrosis and rebleeding on deflation and is never definitive treatment."
+          }
+        ],
+        "key_learning_point": "Endoscopic band ligation is the definitive first-line treatment for bleeding esophageal varices; TIPS and balloon tamponade are reserved for refractory hemorrhage.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      }
+    ],
+    "tags": {
+      "subject": "Gastroenterology",
+      "subtopic": "Variceal Hemorrhage",
+      "system": "Gastrointestinal",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "graves_disease_01",
+    "stem": "A 32-year-old woman presents with 3 months of unintentional 6-kg weight loss despite increased appetite, palpitations, heat intolerance, and irritability. Vitals: BP 138/72 mmHg, HR 112/min, T 37.2°C. Exam shows a fine tremor of the outstretched hands, warm moist skin, a diffusely enlarged non-tender thyroid with an audible bruit, and bilateral proptosis with lid lag. Labs: TSH <0.01 mIU/L, free T4 3.8 ng/dL (normal 0.8-1.8).",
+    "checkpoints": [
+      {
+        "checkpoint_id": "graves_disease_01_cp1",
+        "sequence": 1,
+        "question": "Which finding in this patient is most specific for Graves disease as the cause of her hyperthyroidism?",
+        "choices": [
+          {
+            "text": "Proptosis (Graves ophthalmopathy)",
+            "correct": true,
+            "explanation": "Ophthalmopathy is caused by TSH-receptor antibodies cross-reacting with orbital fibroblasts, stimulating glycosaminoglycan deposition and adipogenesis behind the eye. Because it reflects the autoimmune mechanism itself, proptosis occurs only in Graves disease and not in other causes of thyrotoxicosis such as toxic nodular goiter or thyroiditis."
+          },
+          {
+            "text": "Fine tremor of the hands",
+            "correct": false,
+            "explanation": "Tremor reflects increased beta-adrenergic sensitivity from excess thyroid hormone and occurs in thyrotoxicosis of any etiology. It indicates the hyperthyroid state but not its cause."
+          },
+          {
+            "text": "Suppressed TSH with elevated free T4",
+            "correct": false,
+            "explanation": "This biochemical pattern defines primary hyperthyroidism but is common to Graves disease, toxic adenoma, toxic multinodular goiter, and the thyrotoxic phase of thyroiditis. It establishes the state, not the etiology."
+          },
+          {
+            "text": "Sinus tachycardia",
+            "correct": false,
+            "explanation": "Tachycardia is a nonspecific adrenergic manifestation of thyrotoxicosis from any cause and can also result from anemia, anxiety, or volume depletion."
+          }
+        ],
+        "key_learning_point": "Ophthalmopathy (and pretibial myxedema) are specific to Graves disease because they result from TSH-receptor antibody action on extrathyroidal tissues.",
+        "skill_tested": "diagnosis",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      },
+      {
+        "checkpoint_id": "graves_disease_01_cp2",
+        "sequence": 2,
+        "question": "What is the most appropriate initial pharmacologic management?",
+        "choices": [
+          {
+            "text": "Propranolol plus methimazole",
+            "correct": true,
+            "explanation": "Beta-blockade provides rapid relief of adrenergic symptoms (tremor, palpitations) and propranolol additionally inhibits peripheral T4-to-T3 conversion. Methimazole blocks thyroid peroxidase, halting new hormone synthesis, and is preferred over propylthiouracil for lower hepatotoxicity risk and once-daily dosing outside of first-trimester pregnancy and thyroid storm."
+          },
+          {
+            "text": "Propylthiouracil monotherapy",
+            "correct": false,
+            "explanation": "PTU is reserved for the first trimester of pregnancy (methimazole is teratogenic, causing aplasia cutis and choanal atresia) and thyroid storm (where its peripheral conversion blockade matters). Otherwise methimazole is preferred due to PTU's black-box hepatotoxicity warning."
+          },
+          {
+            "text": "Immediate radioactive iodine ablation without pretreatment",
+            "correct": false,
+            "explanation": "Radioiodine is a reasonable definitive therapy, but in this patient it is problematic upfront: it can transiently worsen thyrotoxicosis by releasing stored hormone and can exacerbate ophthalmopathy, which she has. Symptomatic control and antithyroid drugs come first, and steroid prophylaxis is considered if radioiodine is later chosen."
+          },
+          {
+            "text": "Levothyroxine to normalize the TSH",
+            "correct": false,
+            "explanation": "Levothyroxine is thyroid hormone replacement and would worsen thyrotoxicosis. This distractor tests basic recognition of the treatment direction; her TSH is suppressed by hormone excess, not deficiency."
+          }
+        ],
+        "key_learning_point": "Initial Graves therapy is a beta-blocker for symptoms plus methimazole to block hormone synthesis; PTU is reserved for first-trimester pregnancy and thyroid storm.",
+        "skill_tested": "pharmacology",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      }
+    ],
+    "tags": {
+      "subject": "Endocrinology",
+      "subtopic": "Hyperthyroidism and Graves Disease",
+      "system": "Endocrine",
+      "exam": "Step 2 CK",
+      "difficulty": 2,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "preeclampsia_severe_01",
+    "stem": "A 28-year-old primigravida at 34 weeks gestation presents with a severe headache unrelieved by acetaminophen and new visual disturbances described as flashing lights. Her pregnancy has been uncomplicated until now. Vitals: BP 168/114 mmHg confirmed on repeat measurement 15 minutes later, HR 92/min. Exam shows 2+ pitting edema of the lower extremities and brisk deep tendon reflexes. Labs: urine protein-to-creatinine ratio 0.5, platelets 142,000/mm3, AST 38 U/L, creatinine 0.8 mg/dL. Fetal heart tracing is category I.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "preeclampsia_severe_01_cp1",
+        "sequence": 1,
+        "question": "What is the most accurate diagnosis?",
+        "choices": [
+          {
+            "text": "Preeclampsia with severe features",
+            "correct": true,
+            "explanation": "She has new-onset hypertension after 20 weeks with proteinuria, satisfying preeclampsia criteria. Severe features are defined by systolic BP of 160 or higher or diastolic 110 or higher on two occasions, or end-organ symptoms; she has both severe-range pressures and neurologic symptoms (headache, visual changes), which reflect cerebral vasospasm and edema."
+          },
+          {
+            "text": "Gestational hypertension",
+            "correct": false,
+            "explanation": "Gestational hypertension is new hypertension after 20 weeks without proteinuria or end-organ involvement. Her proteinuria and neurologic symptoms exclude this milder diagnosis."
+          },
+          {
+            "text": "Preeclampsia without severe features",
+            "correct": false,
+            "explanation": "This is tempting because her labs (platelets, transaminases, creatinine) are near normal, but severe-range blood pressure alone (160/110 or greater) or neurologic symptoms are each sufficient to classify severe features, changing management urgency entirely."
+          },
+          {
+            "text": "HELLP syndrome",
+            "correct": false,
+            "explanation": "HELLP requires hemolysis, elevated liver enzymes, and low platelets. Her platelets of 142,000 and AST of 38 do not meet thresholds (typically platelets below 100,000 and AST more than twice normal), though she requires monitoring for progression."
+          }
+        ],
+        "key_learning_point": "Severe-range blood pressure (≥160/110) or any end-organ symptom (headache, visual changes, RUQ pain) upgrades preeclampsia to severe features regardless of lab values.",
+        "skill_tested": "diagnosis",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "preeclampsia_severe_01_cp2",
+        "sequence": 2,
+        "question": "Which combination of interventions is most appropriate now?",
+        "choices": [
+          {
+            "text": "IV magnesium sulfate, IV labetalol, betamethasone, and plan for delivery after stabilization",
+            "correct": true,
+            "explanation": "Magnesium sulfate is given for eclamptic seizure prophylaxis (it raises the seizure threshold, likely via NMDA antagonism and cerebral vasodilation). Severe-range pressures require rapid-acting antihypertensives (labetalol or hydralazine) to prevent stroke. At 34 weeks with severe features, delivery is indicated after maternal stabilization, and betamethasone accelerates fetal lung maturity."
+          },
+          {
+            "text": "Strict bed rest, oral nifedipine, and expectant management until 37 weeks",
+            "correct": false,
+            "explanation": "Expectant management to term is only for preeclampsia without severe features. With severe features at 34 weeks, prolonging pregnancy risks eclampsia, placental abruption, and maternal stroke; delivery is the definitive treatment."
+          },
+          {
+            "text": "IV phenytoin for seizure prophylaxis and delivery",
+            "correct": false,
+            "explanation": "Magnesium sulfate is superior to phenytoin for preventing eclamptic seizures in randomized trials. Phenytoin is a distractor drawing on general seizure management rather than obstetric evidence."
+          },
+          {
+            "text": "Emergency cesarean delivery within the next 30 minutes",
+            "correct": false,
+            "explanation": "Preeclampsia with severe features requires delivery, but not crash cesarean when the fetal tracing is reassuring. Maternal stabilization (BP control, magnesium) comes first, and vaginal delivery via induction is often appropriate; an unstabilized operative delivery increases maternal risk."
+          }
+        ],
+        "key_learning_point": "Severe preeclampsia at ≥34 weeks is managed with magnesium sulfate, acute BP control, corticosteroids if lungs immature, and delivery after maternal stabilization.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Obstetrics",
+      "subtopic": "Hypertensive Disorders of Pregnancy",
+      "system": "Reproductive",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "bacterial_meningitis_01",
+    "stem": "A 19-year-old college student living in a dormitory presents with 12 hours of fever, severe headache, photophobia, and neck stiffness. He vomited twice this morning. Vitals: BP 108/68 mmHg, HR 118/min, T 39.6°C. He is alert and oriented with no focal neurologic deficits and no papilledema on fundoscopy. Exam shows nuchal rigidity and scattered petechiae on the lower extremities. He has no history of immunocompromise or recent head trauma.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "bacterial_meningitis_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate immediate sequence of actions?",
+        "choices": [
+          {
+            "text": "Obtain blood cultures, perform lumbar puncture, then immediately start empiric antibiotics and dexamethasone",
+            "correct": true,
+            "explanation": "He has no indications for CT before LP (no focal deficits, papilledema, seizures, immunocompromise, or altered consciousness), so LP can proceed directly. Cultures are drawn before antibiotics to preserve yield, but antibiotics must follow within minutes; every hour of delay in bacterial meningitis increases mortality. Dexamethasone given with or before the first antibiotic dose reduces neurologic sequelae in pneumococcal meningitis."
+          },
+          {
+            "text": "Obtain a head CT before lumbar puncture",
+            "correct": false,
+            "explanation": "CT before LP is indicated only with features suggesting elevated intracranial pressure or mass lesion: focal deficit, papilledema, new seizure, immunocompromise, or depressed consciousness. Routine CT in patients without these features delays diagnosis and antibiotic administration."
+          },
+          {
+            "text": "Start antibiotics only after CSF Gram stain results return",
+            "correct": false,
+            "explanation": "Waiting for CSF results before treating is a fatal error in suspected bacterial meningitis. Empiric therapy is begun immediately after cultures; the CSF profile and Gram stain then refine, not initiate, therapy."
+          },
+          {
+            "text": "Perform lumbar puncture and await cell counts before deciding on antibiotics",
+            "correct": false,
+            "explanation": "The petechial rash, fever, and meningismus in a dormitory resident make meningococcal disease a real possibility, which can progress to purpura fulminans and death within hours. Antibiotics cannot wait for laboratory confirmation."
+          }
+        ],
+        "key_learning_point": "In suspected bacterial meningitis without red flags for elevated ICP, proceed directly to LP after blood cultures and give empiric antibiotics plus dexamethasone without delay.",
+        "skill_tested": "diagnostic workup",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "bacterial_meningitis_01_cp2",
+        "sequence": 2,
+        "question": "CSF analysis shows WBC 2,400/mm3 with 92% neutrophils, glucose 28 mg/dL (serum 110 mg/dL), and protein 220 mg/dL. Which empiric antibiotic regimen is most appropriate for this patient?",
+        "choices": [
+          {
+            "text": "IV vancomycin plus ceftriaxone",
+            "correct": true,
+            "explanation": "The neutrophilic pleocytosis, low CSF-to-serum glucose ratio (below 0.4), and high protein confirm bacterial meningitis. In immunocompetent patients aged 2 to 50, the dominant pathogens are Streptococcus pneumoniae and Neisseria meningitidis. Ceftriaxone covers both, and vancomycin is added for possible ceftriaxone-resistant pneumococcus until sensitivities return."
+          },
+          {
+            "text": "IV vancomycin, ceftriaxone, and ampicillin",
+            "correct": false,
+            "explanation": "Ampicillin is added to cover Listeria monocytogenes in neonates, adults over 50, pregnant patients, and the immunocompromised. A healthy 19-year-old does not need Listeria coverage; this is the classic age-based distractor."
+          },
+          {
+            "text": "IV acyclovir alone",
+            "correct": false,
+            "explanation": "Acyclovir treats HSV encephalitis, which typically presents with altered mental status, temporal lobe findings, and a lymphocytic CSF pleocytosis with normal glucose. The neutrophilic profile with low glucose here is bacterial, not viral."
+          },
+          {
+            "text": "Oral levofloxacin",
+            "correct": false,
+            "explanation": "Oral therapy is never adequate for bacterial meningitis; high-dose IV bactericidal agents are required to achieve adequate CSF concentrations across the blood-brain barrier."
+          }
+        ],
+        "key_learning_point": "Empiric therapy for bacterial meningitis in patients aged 2-50 is vancomycin plus ceftriaxone; add ampicillin for Listeria only in neonates, adults >50, pregnancy, or immunocompromise.",
+        "skill_tested": "pharmacology",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Infectious Disease",
+      "subtopic": "Bacterial Meningitis",
+      "system": "Nervous",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "sickle_acute_chest_01",
+    "stem": "A 19-year-old man with sickle cell disease (HbSS) is hospitalized for a vaso-occlusive pain crisis. On hospital day 2, he develops fever, pleuritic chest pain, and worsening dyspnea. Vitals: BP 116/72 mmHg, HR 118/min, RR 28/min, SpO2 87% on room air, T 38.9°C. Exam reveals crackles over the left lower lung field. Chest radiograph shows a new left lower lobe infiltrate. Labs: hemoglobin 6.9 g/dL (baseline 8.5), WBC 16,400/mm3.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "sickle_acute_chest_01_cp1",
+        "sequence": 1,
+        "question": "What is the most likely diagnosis?",
+        "choices": [
+          {
+            "text": "Acute chest syndrome",
+            "correct": true,
+            "explanation": "Acute chest syndrome is defined by a new pulmonary infiltrate plus fever or respiratory symptoms in a patient with sickle cell disease. It commonly develops 2 to 3 days into a vaso-occlusive crisis, triggered by pulmonary infarction, fat embolism from infarcted marrow, or infection, and it is the leading cause of death in adults with sickle cell disease."
+          },
+          {
+            "text": "Community-acquired pneumonia",
+            "correct": false,
+            "explanation": "Infection can trigger acute chest syndrome and the two overlap radiographically, but in a sickle cell patient mid-crisis with a falling hemoglobin, the unifying diagnosis is acute chest syndrome. Labeling it simple pneumonia understates severity and leads to undertreatment (missing transfusion therapy)."
+          },
+          {
+            "text": "Pulmonary embolism from deep vein thrombosis",
+            "correct": false,
+            "explanation": "PE causes hypoxia and pleuritic pain but typically produces a clear chest radiograph, not a new lobar infiltrate with fever. In situ sickling and microvascular occlusion, not venous thromboembolism, drive this presentation."
+          },
+          {
+            "text": "Splenic sequestration crisis",
+            "correct": false,
+            "explanation": "Splenic sequestration causes rapid anemia with an enlarging spleen and hypovolemia, primarily in young children before autosplenectomy. An adult with HbSS typically has a fibrotic, nonfunctional spleen, and this presentation is pulmonary."
+          }
+        ],
+        "key_learning_point": "New pulmonary infiltrate plus fever or respiratory symptoms in sickle cell disease defines acute chest syndrome, the leading cause of death in adult sickle cell patients.",
+        "skill_tested": "diagnosis",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "sickle_acute_chest_01_cp2",
+        "sequence": 2,
+        "question": "Despite supplemental oxygen, empiric ceftriaxone and azithromycin, and analgesia, his SpO2 falls to 84% on high-flow oxygen and his respiratory rate rises. What is the most appropriate next step?",
+        "choices": [
+          {
+            "text": "Exchange transfusion",
+            "correct": true,
+            "explanation": "Exchange transfusion rapidly lowers the HbS fraction (goal below 30%) while removing sickled cells and avoiding hyperviscosity, interrupting the cycle of sickling, vaso-occlusion, and hypoxia. It is indicated in severe or rapidly progressive acute chest syndrome with refractory hypoxemia, whereas simple transfusion suffices for milder disease."
+          },
+          {
+            "text": "Simple packed red blood cell transfusion",
+            "correct": false,
+            "explanation": "Simple transfusion is appropriate for moderate acute chest syndrome with hemoglobin well below baseline, but in severe hypoxemic disease it cannot lower the HbS percentage adequately, and raising hemoglobin much above 10 g/dL risks hyperviscosity that worsens vaso-occlusion."
+          },
+          {
+            "text": "Increase IV opioids and continue current management",
+            "correct": false,
+            "explanation": "Adequate analgesia matters because splinting from pain worsens hypoventilation, but escalating opioids in a patient with progressive hypoxemia risks respiratory depression and does not address the underlying sickling burden."
+          },
+          {
+            "text": "IV hydroxyurea",
+            "correct": false,
+            "explanation": "Hydroxyurea raises fetal hemoglobin over weeks to months and reduces the frequency of future crises and acute chest episodes. It has no role in the acute treatment of an evolving episode."
+          }
+        ],
+        "key_learning_point": "Severe or progressive acute chest syndrome with refractory hypoxemia is treated with exchange transfusion to rapidly reduce the HbS fraction below 30%.",
+        "skill_tested": "complication-recognition",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Hematology",
+      "subtopic": "Sickle Cell Disease",
+      "system": "Hematologic",
+      "exam": "Step 2 CK",
+      "difficulty": 4,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "minimal_change_peds_01",
+    "stem": "A 4-year-old boy is brought in by his parents for puffiness around his eyes for the past week, initially attributed to allergies, now accompanied by swelling of his legs and a tighter fit of his shoes. He had an upper respiratory infection 2 weeks ago. Vitals are age-appropriate with BP 98/60 mmHg. Exam shows periorbital edema and 2+ pitting edema of the lower extremities. Urinalysis: 4+ protein, no blood. Labs: serum albumin 1.9 g/dL, cholesterol 320 mg/dL, creatinine 0.4 mg/dL, C3 and C4 normal.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "minimal_change_peds_01_cp1",
+        "sequence": 1,
+        "question": "What is the most likely diagnosis?",
+        "choices": [
+          {
+            "text": "Minimal change disease",
+            "correct": true,
+            "explanation": "This child has classic nephrotic syndrome: heavy proteinuria, hypoalbuminemia, edema, and hyperlipidemia. In children aged 1 to 10, minimal change disease causes roughly 90% of nephrotic syndrome. T-cell-derived cytokines injure podocyte foot processes (effaced on electron microscopy), causing selective albumin loss. Normal complement and absent hematuria support this over nephritic processes."
+          },
+          {
+            "text": "Post-streptococcal glomerulonephritis",
+            "correct": false,
+            "explanation": "PSGN is a nephritic syndrome: hematuria, hypertension, and edema with low C3 about 2 to 4 weeks after streptococcal infection. This child has heavy proteinuria without blood, normal complement, and normal blood pressure, which is nephrotic, not nephritic."
+          },
+          {
+            "text": "Focal segmental glomerulosclerosis",
+            "correct": false,
+            "explanation": "FSGS causes nephrotic syndrome but predominates in adolescents and adults, particularly with obesity, HIV, or heroin use, and is more often steroid-resistant. It is the tempting alternative but is far less likely than minimal change disease at age 4."
+          },
+          {
+            "text": "Membranous nephropathy",
+            "correct": false,
+            "explanation": "Membranous nephropathy is the classic nephrotic lesion of adults, associated with PLA2R antibodies, hepatitis B, malignancy, and lupus. It is rare in young children."
+          }
+        ],
+        "key_learning_point": "Nephrotic syndrome in a child aged 1-10 is minimal change disease until proven otherwise; it features selective proteinuria, normal complement, and podocyte effacement.",
+        "skill_tested": "diagnosis",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      },
+      {
+        "checkpoint_id": "minimal_change_peds_01_cp2",
+        "sequence": 2,
+        "question": "What is the most appropriate next step in management?",
+        "choices": [
+          {
+            "text": "Begin empiric oral corticosteroids without renal biopsy",
+            "correct": true,
+            "explanation": "Because minimal change disease is overwhelmingly likely at this age and is highly steroid-responsive (over 90% remit), children aged 1 to 10 with typical nephrotic syndrome receive empiric prednisone without biopsy. Biopsy is reserved for atypical features (gross hematuria, hypertension, low complement, renal failure) or steroid resistance after 4 to 8 weeks."
+          },
+          {
+            "text": "Renal biopsy before initiating any therapy",
+            "correct": false,
+            "explanation": "Biopsy-first is the adult approach, where the differential is broad. In a typical pediatric presentation, biopsy adds procedural risk without changing initial management; steroid responsiveness itself is effectively diagnostic."
+          },
+          {
+            "text": "Cyclophosphamide as initial therapy",
+            "correct": false,
+            "explanation": "Alkylating agents are second-line for frequently relapsing or steroid-dependent disease due to gonadal toxicity, cytopenias, and malignancy risk. They are never first-line."
+          },
+          {
+            "text": "Furosemide and albumin infusions alone without immunosuppression",
+            "correct": false,
+            "explanation": "Diuretics and albumin manage symptomatic edema but do not treat the underlying podocyte injury. Without steroids, proteinuria persists, with ongoing risks of infection (urinary immunoglobulin loss) and thrombosis (antithrombin III loss)."
+          }
+        ],
+        "key_learning_point": "Typical childhood nephrotic syndrome is treated with empiric corticosteroids without biopsy; biopsy is reserved for atypical features or steroid resistance.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      }
+    ],
+    "tags": {
+      "subject": "Pediatrics",
+      "subtopic": "Nephrotic Syndrome",
+      "system": "Renal",
+      "exam": "Step 2 CK",
+      "difficulty": 2,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "copd_exacerbation_niv_01",
+    "stem": "A 66-year-old man with COPD (55 pack-year smoking history, on tiotropium and albuterol) presents with 3 days of worsening dyspnea, increased sputum volume, and a change in sputum color to green. Vitals: BP 142/86 mmHg, HR 104/min, RR 26/min, SpO2 86% on room air, T 37.8°C. He is using accessory muscles and speaking in short phrases. Exam shows diffuse expiratory wheezes and a prolonged expiratory phase. Chest radiograph shows hyperinflation without consolidation. ABG on 2 L nasal cannula: pH 7.28, PaCO2 61 mmHg, PaO2 60 mmHg.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "copd_exacerbation_niv_01_cp1",
+        "sequence": 1,
+        "question": "Which initial pharmacologic regimen is most appropriate?",
+        "choices": [
+          {
+            "text": "Inhaled short-acting bronchodilators, systemic corticosteroids, and antibiotics",
+            "correct": true,
+            "explanation": "Moderate-to-severe COPD exacerbations are treated with short-acting beta-agonists plus ipratropium for bronchodilation, systemic corticosteroids (e.g., prednisone 40 mg for 5 days) to reduce airway inflammation and shorten recovery, and antibiotics when at least two cardinal symptoms are present including increased sputum purulence, as here. Purulence correlates with bacterial burden (H. influenzae, M. catarrhalis, S. pneumoniae)."
+          },
+          {
+            "text": "Inhaled bronchodilators alone",
+            "correct": false,
+            "explanation": "Bronchodilators are necessary but insufficient in a moderate-severe exacerbation. Omitting systemic steroids prolongs recovery and increases treatment failure, and withholding antibiotics despite purulent sputum and increased volume ignores criteria that predict benefit."
+          },
+          {
+            "text": "High-dose inhaled corticosteroids in place of systemic steroids",
+            "correct": false,
+            "explanation": "Inhaled corticosteroids are maintenance therapy for stable COPD with frequent exacerbations. In an acute exacerbation, systemic corticosteroids are required; inhaled delivery cannot achieve adequate anti-inflammatory effect in acutely narrowed airways."
+          },
+          {
+            "text": "Empiric vancomycin and piperacillin-tazobactam",
+            "correct": false,
+            "explanation": "Broad-spectrum coverage for MRSA and Pseudomonas is unnecessary in a typical outpatient exacerbation without risk factors (recent hospitalization, prior resistant organisms, bronchiectasis). Standard choices are amoxicillin-clavulanate, a macrolide, or doxycycline."
+          }
+        ],
+        "key_learning_point": "COPD exacerbation treatment is short-acting bronchodilators, systemic corticosteroids, and antibiotics when sputum purulence accompanies increased dyspnea or volume.",
+        "skill_tested": "pharmacology",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      },
+      {
+        "checkpoint_id": "copd_exacerbation_niv_01_cp2",
+        "sequence": 2,
+        "question": "Given the ABG findings, what is the most appropriate next step in respiratory support?",
+        "choices": [
+          {
+            "text": "Noninvasive positive pressure ventilation (BiPAP)",
+            "correct": true,
+            "explanation": "He has acute hypercapnic respiratory failure with respiratory acidosis (pH 7.28, PaCO2 61). BiPAP unloads fatigued respiratory muscles, augments alveolar ventilation to clear CO2, and reduces intubation rates and mortality in COPD exacerbations. It is the intervention with the strongest evidence base in this exact scenario, provided the patient is alert and protecting his airway."
+          },
+          {
+            "text": "Endotracheal intubation and mechanical ventilation",
+            "correct": false,
+            "explanation": "Intubation is reserved for NIV failure, hemodynamic instability, inability to protect the airway, or depressed consciousness. This patient is awake and cooperative; jumping to invasive ventilation exposes him to ventilator-associated pneumonia and difficult weaning without first trying NIV."
+          },
+          {
+            "text": "Increase oxygen to a nonrebreather targeting SpO2 of 100%",
+            "correct": false,
+            "explanation": "Excessive oxygen in CO2-retaining COPD worsens hypercapnia through V/Q mismatch (release of hypoxic vasoconstriction), the Haldane effect, and reduced hypoxic drive. The target is SpO2 88-92%; uncontrolled high-flow oxygen can precipitate CO2 narcosis."
+          },
+          {
+            "text": "IV aminophylline infusion",
+            "correct": false,
+            "explanation": "Methylxanthines add marginal bronchodilation at the cost of a narrow therapeutic index (arrhythmias, seizures) and are no longer recommended in routine exacerbation management. They do not address the ventilatory failure driving his acidosis."
+          }
+        ],
+        "key_learning_point": "Acute hypercapnic respiratory failure in a COPD exacerbation (pH <7.35 with elevated PaCO2) is the prime indication for BiPAP, which reduces intubation and mortality; target SpO2 is 88-92%.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Pulmonology",
+      "subtopic": "COPD Exacerbation",
+      "system": "Respiratory",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "afib_new_onset_01",
+    "stem": "A 72-year-old woman with hypertension presents with 2 days of palpitations and mild exertional dyspnea. She denies chest pain, syncope, or prior similar episodes. Vitals: BP 132/84 mmHg, HR 138/min and irregularly irregular, RR 18/min, SpO2 97% on room air. Exam shows an irregularly irregular rhythm without murmurs; lungs are clear. ECG confirms atrial fibrillation with rapid ventricular response without ischemic changes. TSH, electrolytes, and troponin are normal. Echocardiogram shows normal ejection fraction and no valvular disease.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "afib_new_onset_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate initial management of her heart rate?",
+        "choices": [
+          {
+            "text": "IV or oral rate control with a beta-blocker or nondihydropyridine calcium channel blocker",
+            "correct": true,
+            "explanation": "In a hemodynamically stable patient with AF and rapid ventricular response, first-line management is rate control with metoprolol or diltiazem, which slow AV nodal conduction. This relieves symptoms and prevents tachycardia-mediated cardiomyopathy while decisions about rhythm control and anticoagulation are made."
+          },
+          {
+            "text": "Immediate synchronized electrical cardioversion",
+            "correct": false,
+            "explanation": "Urgent cardioversion is reserved for hemodynamic instability (hypotension, ischemia, pulmonary edema). In a stable patient with symptoms for 2 days (more than 48 hours or unknown duration), cardioversion without 3 weeks of anticoagulation or a TEE to exclude atrial thrombus risks embolic stroke."
+          },
+          {
+            "text": "IV adenosine",
+            "correct": false,
+            "explanation": "Adenosine transiently blocks the AV node and terminates AV-node-dependent reentrant tachycardias (AVNRT, AVRT). Atrial fibrillation originates in the atria and does not depend on the AV node, so adenosine will only cause a brief pause before the rapid irregular rhythm resumes."
+          },
+          {
+            "text": "IV digoxin as first-line monotherapy",
+            "correct": false,
+            "explanation": "Digoxin slows the ventricular rate at rest but poorly during exertion, has a narrow therapeutic index, and is slower in onset than beta-blockers or diltiazem. It is an adjunct, mainly in heart failure or hypotension, not first-line in an otherwise stable patient."
+          }
+        ],
+        "key_learning_point": "Stable AF with rapid ventricular response is managed first with AV-nodal rate control (beta-blocker or diltiazem); cardioversion of AF >48 hours requires prior anticoagulation or TEE.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      },
+      {
+        "checkpoint_id": "afib_new_onset_01_cp2",
+        "sequence": 2,
+        "question": "What is the most appropriate long-term thromboembolism prophylaxis for this patient?",
+        "choices": [
+          {
+            "text": "A direct oral anticoagulant such as apixaban",
+            "correct": true,
+            "explanation": "Her CHA2DS2-VASc score is 3 (hypertension 1, age 65-74 1, female sex 1), well above the threshold of 2 at which anticoagulation is recommended for women. In nonvalvular AF, DOACs are preferred over warfarin for equivalent or better stroke prevention with roughly half the intracranial hemorrhage risk and no INR monitoring."
+          },
+          {
+            "text": "Aspirin 81 mg daily",
+            "correct": false,
+            "explanation": "Aspirin provides minimal protection against the fibrin-rich, stasis-driven thrombi of AF while still carrying bleeding risk. Guidelines no longer recommend aspirin as stroke prophylaxis for AF at any risk level."
+          },
+          {
+            "text": "No antithrombotic therapy given her normal echocardiogram",
+            "correct": false,
+            "explanation": "A structurally normal heart does not eliminate embolic risk; CHA2DS2-VASc scoring is based on clinical factors, not echo findings. Her score of 3 corresponds to a meaningful annual stroke risk that anticoagulation reduces by about two-thirds."
+          },
+          {
+            "text": "Warfarin with INR goal 2.5-3.5",
+            "correct": false,
+            "explanation": "Warfarin is reasonable when DOACs are contraindicated (mechanical valves, moderate-severe mitral stenosis, severe renal failure), but the target INR for AF is 2.0-3.0. The 2.5-3.5 range applies to mechanical mitral valves, making this doubly incorrect."
+          }
+        ],
+        "key_learning_point": "Anticoagulation in AF is guided by CHA2DS2-VASc (recommended at ≥2 in men, ≥3 in women, and considered at lower scores); DOACs are first-line in nonvalvular AF.",
+        "skill_tested": "risk stratification",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Cardiology",
+      "subtopic": "Atrial Fibrillation",
+      "system": "Cardiovascular",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "diverticulitis_uncomp_01",
+    "stem": "A 58-year-old woman presents with 2 days of left lower quadrant abdominal pain, low-grade fever, and constipation. She has never had similar symptoms and has never undergone colonoscopy. Vitals: BP 128/80 mmHg, HR 98/min, T 38.3°C. Exam shows focal left lower quadrant tenderness without rebound or rigidity. Labs: WBC 13,600/mm3. CT of the abdomen and pelvis with contrast shows sigmoid colonic wall thickening with pericolic fat stranding and no abscess, free air, or fistula.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "diverticulitis_uncomp_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate management?",
+        "choices": [
+          {
+            "text": "Bowel rest, IV antibiotics covering gram-negative rods and anaerobes, and observation",
+            "correct": true,
+            "explanation": "CT confirms acute uncomplicated diverticulitis (wall thickening and fat stranding without abscess or perforation). Given fever, leukocytosis, and inability to tolerate intake, inpatient management with bowel rest and antibiotics covering enteric gram-negatives and anaerobes (e.g., ceftriaxone plus metronidazole) is appropriate. Selected mild cases can be managed as outpatients, some even without antibiotics."
+          },
+          {
+            "text": "Emergency sigmoid colectomy",
+            "correct": false,
+            "explanation": "Urgent surgery is reserved for complicated diverticulitis: perforation with generalized peritonitis, obstruction, or sepsis refractory to medical therapy. Operating on uncomplicated disease exposes the patient to major surgical risk that medical therapy avoids in the large majority of cases."
+          },
+          {
+            "text": "Immediate colonoscopy to evaluate the sigmoid colon",
+            "correct": false,
+            "explanation": "Colonoscopy during acute diverticulitis is contraindicated: insufflation and instrumentation of an inflamed, microperforated colon risks converting it to free perforation. Endoscopic evaluation is deferred until inflammation resolves."
+          },
+          {
+            "text": "CT-guided percutaneous drainage",
+            "correct": false,
+            "explanation": "Percutaneous drainage treats diverticular abscesses larger than about 4 cm. Her CT explicitly shows no abscess, so there is nothing to drain."
+          }
+        ],
+        "key_learning_point": "Uncomplicated diverticulitis is treated medically with bowel rest and antibiotics; surgery and drainage are reserved for complicated disease (perforation, abscess, obstruction, fistula).",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      },
+      {
+        "checkpoint_id": "diverticulitis_uncomp_01_cp2",
+        "sequence": 2,
+        "question": "She recovers fully with medical management. What follow-up is indicated?",
+        "choices": [
+          {
+            "text": "Colonoscopy 6 to 8 weeks after resolution of symptoms",
+            "correct": true,
+            "explanation": "Because colon cancer can mimic diverticulitis both clinically and on CT (a perforated tumor produces similar wall thickening and stranding), guidelines recommend colonoscopy about 6 to 8 weeks after recovery in patients without a recent high-quality colonoscopy, to exclude underlying malignancy once the perforation risk of acute inflammation has passed."
+          },
+          {
+            "text": "No follow-up imaging or endoscopy is needed",
+            "correct": false,
+            "explanation": "Skipping evaluation risks missing a sigmoid cancer masquerading as diverticulitis, particularly in a 58-year-old who has never had screening colonoscopy. First episodes confirmed only by CT warrant interval endoscopic evaluation."
+          },
+          {
+            "text": "Repeat CT scan in 1 week",
+            "correct": false,
+            "explanation": "Repeat imaging is indicated only for clinical deterioration or failure to improve, to look for evolving abscess or perforation. In a patient who has fully recovered, it adds radiation without diagnostic value and cannot exclude mucosal malignancy."
+          },
+          {
+            "text": "Elective prophylactic sigmoid colectomy",
+            "correct": false,
+            "explanation": "Elective resection is no longer routinely recommended after uncomplicated episodes; it is individualized for recurrent attacks, complicated disease, or immunocompromised patients. A single uncomplicated episode does not justify colectomy."
+          }
+        ],
+        "key_learning_point": "After a first episode of CT-diagnosed diverticulitis resolves, colonoscopy in 6-8 weeks is indicated to exclude colorectal cancer mimicking diverticulitis.",
+        "skill_tested": "follow-up planning",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      }
+    ],
+    "tags": {
+      "subject": "Gastroenterology",
+      "subtopic": "Diverticular Disease",
+      "system": "Gastrointestinal",
+      "exam": "Step 2 CK",
+      "difficulty": 2,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "pyelonephritis_inpatient_01",
+    "stem": "A 30-year-old woman presents with 2 days of fever, chills, right flank pain, and burning with urination. Over the past 12 hours she has vomited four times and cannot keep down liquids. She is not pregnant (negative hCG). Vitals: BP 104/66 mmHg, HR 112/min, T 39.1°C. Exam shows right costovertebral angle tenderness. Urinalysis: positive leukocyte esterase and nitrites, WBC too numerous to count, WBC casts present. Labs: WBC 15,800/mm3, creatinine 1.0 mg/dL. Urine and blood cultures are obtained.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "pyelonephritis_inpatient_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate management?",
+        "choices": [
+          {
+            "text": "Hospital admission with IV ceftriaxone and IV fluids",
+            "correct": true,
+            "explanation": "She has acute pyelonephritis (fever, flank pain, CVA tenderness, pyuria with WBC casts). While uncomplicated pyelonephritis can be treated as an outpatient, intractable vomiting makes oral therapy unreliable, mandating admission for IV antibiotics and rehydration. Ceftriaxone provides excellent empiric coverage of E. coli, the causative organism in over 80% of cases, pending culture results."
+          },
+          {
+            "text": "Outpatient oral ciprofloxacin with follow-up in 48 hours",
+            "correct": false,
+            "explanation": "Oral fluoroquinolones are appropriate for stable outpatients who can tolerate oral intake in regions with low fluoroquinolone resistance. Her repeated vomiting makes absorption unreliable, and discharging a tachycardic, febrile patient who cannot hydrate risks progression to sepsis."
+          },
+          {
+            "text": "Oral nitrofurantoin for 5 days",
+            "correct": false,
+            "explanation": "Nitrofurantoin achieves therapeutic concentrations only in bladder urine, not in renal parenchyma or blood, making it strictly a cystitis drug. Using it for pyelonephritis constitutes undertreatment of a tissue-invasive infection, independent of her vomiting."
+          },
+          {
+            "text": "Admission with IV vancomycin",
+            "correct": false,
+            "explanation": "Vancomycin covers gram-positive organisms like MRSA and has no activity against E. coli and other gram-negative uropathogens that cause nearly all pyelonephritis. Empiric therapy must target gram-negative rods."
+          }
+        ],
+        "key_learning_point": "Pyelonephritis with inability to tolerate oral intake requires admission and IV antibiotics (ceftriaxone); nitrofurantoin never treats pyelonephritis because it does not achieve tissue levels.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      }
+    ],
+    "tags": {
+      "subject": "Infectious Disease",
+      "subtopic": "Urinary Tract Infections",
+      "system": "Renal",
+      "exam": "Step 2 CK",
+      "difficulty": 2,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "mdd_initial_tx_01",
+    "stem": "A 45-year-old man presents at his wife's urging with 6 weeks of persistently low mood, loss of interest in woodworking and coaching his son's soccer team, early-morning awakening, a 5-kg unintentional weight loss, difficulty concentrating at work, and pervasive guilt about being a burden. He admits to occasional thoughts that his family would be better off without him but denies any plan or intent to harm himself. He drinks two beers on weekends and takes no medications. Physical exam and TSH are normal.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "mdd_initial_tx_01_cp1",
+        "sequence": 1,
+        "question": "What is the most likely diagnosis?",
+        "choices": [
+          {
+            "text": "Major depressive disorder",
+            "correct": true,
+            "explanation": "He meets DSM-5 criteria: at least 5 symptoms for at least 2 weeks including depressed mood or anhedonia. He has both cardinal symptoms plus insomnia, weight loss, impaired concentration, guilt, and passive suicidal ideation, with functional impairment and no medical or substance cause (normal TSH, minimal alcohol)."
+          },
+          {
+            "text": "Adjustment disorder with depressed mood",
+            "correct": false,
+            "explanation": "Adjustment disorder requires an identifiable stressor with symptoms that do not meet full criteria for another disorder. He has no clear precipitant and meets full MDD criteria, which supersedes the adjustment disorder diagnosis by definition."
+          },
+          {
+            "text": "Persistent depressive disorder (dysthymia)",
+            "correct": false,
+            "explanation": "Dysthymia requires depressed mood for at least 2 years in adults. His symptoms span 6 weeks; the chronicity criterion is not met."
+          },
+          {
+            "text": "Hypothyroidism-related depression",
+            "correct": false,
+            "explanation": "Hypothyroidism can mimic depression with fatigue, weight changes, and low mood, which is why TSH screening is standard in new depression workups. His normal TSH excludes this."
+          }
+        ],
+        "key_learning_point": "MDD requires ≥5 symptoms for ≥2 weeks including depressed mood or anhedonia; always exclude medical mimics (hypothyroidism) and substance causes.",
+        "skill_tested": "diagnosis",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      },
+      {
+        "checkpoint_id": "mdd_initial_tx_01_cp2",
+        "sequence": 2,
+        "question": "After assessing that he is safe for outpatient management, what is the most appropriate initial treatment?",
+        "choices": [
+          {
+            "text": "An SSRI plus referral for psychotherapy, with counseling that medication effect takes 4 to 6 weeks",
+            "correct": true,
+            "explanation": "First-line treatment for moderate MDD is an SSRI (sertraline, escitalopram) combined with evidence-based psychotherapy such as CBT; the combination outperforms either alone. Patients must be counseled that antidepressant response takes 4 to 6 weeks, because early discontinuation from perceived inefficacy is the most common cause of treatment failure. Safety planning and close follow-up are essential given passive suicidal ideation."
+          },
+          {
+            "text": "A benzodiazepine for symptom relief while deciding on long-term therapy",
+            "correct": false,
+            "explanation": "Benzodiazepines do not treat depression, carry dependence and disinhibition risks, and can worsen suicidality. They have no role as monotherapy for MDD."
+          },
+          {
+            "text": "A tricyclic antidepressant as first-line therapy",
+            "correct": false,
+            "explanation": "TCAs are effective but are second-line or later because of anticholinergic burden, orthostasis, and, critically, lethality in overdose, a serious concern in any patient with suicidal ideation. SSRIs are far safer in overdose."
+          },
+          {
+            "text": "Electroconvulsive therapy",
+            "correct": false,
+            "explanation": "ECT is highly effective but reserved for treatment-refractory depression, psychotic depression, catatonia, or situations demanding rapid response (active suicidality with intent, refusal to eat). It is not initial therapy for a first moderate episode manageable as an outpatient."
+          }
+        ],
+        "key_learning_point": "Initial MDD treatment is an SSRI plus psychotherapy with explicit counseling about the 4-6 week onset of antidepressant effect; avoid TCAs in patients with suicidal ideation due to overdose lethality.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      }
+    ],
+    "tags": {
+      "subject": "Psychiatry",
+      "subtopic": "Major Depressive Disorder",
+      "system": "Behavioral Health",
+      "exam": "Step 2 CK",
+      "difficulty": 2,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "alcohol_withdrawal_01",
+    "stem": "A 48-year-old man is admitted for cellulitis. He reports drinking a pint of vodka daily for 15 years; his last drink was 36 hours ago. He now has tremulousness, anxiety, diaphoresis, and nausea, and states he sees insects crawling on the walls, though he knows they are not real. Vitals: BP 162/98 mmHg, HR 118/min, T 37.6°C. Exam shows a coarse tremor, diaphoresis, and mild hepatomegaly. Labs: AST 118 U/L, ALT 54 U/L, GGT elevated; glucose 88 mg/dL. He is oriented to person, place, and time.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "alcohol_withdrawal_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate pharmacologic treatment for his current condition?",
+        "choices": [
+          {
+            "text": "Symptom-triggered benzodiazepines (e.g., lorazepam or chlordiazepoxide per CIWA protocol)",
+            "correct": true,
+            "explanation": "Chronic alcohol downregulates GABA-A receptors and upregulates NMDA receptors; abrupt cessation leaves unopposed excitation. Benzodiazepines restore GABAergic tone and are the only agents proven to prevent withdrawal seizures and delirium tremens. Symptom-triggered dosing via CIWA scoring reduces total dose and duration versus fixed schedules. With his AST elevation, lorazepam (no active metabolites, non-oxidative metabolism) is a sensible agent."
+          },
+          {
+            "text": "Haloperidol as primary therapy for his hallucinations",
+            "correct": false,
+            "explanation": "His visual hallucinations with intact orientation represent alcoholic hallucinosis, part of the withdrawal spectrum. Antipsychotics lower the seizure threshold and do not treat the underlying GABA-NMDA imbalance; treating with haloperidol alone leaves him unprotected against seizures and DTs."
+          },
+          {
+            "text": "Clonidine and propranolol to normalize vital signs",
+            "correct": false,
+            "explanation": "Sympatholytics mask the autonomic signs used to gauge withdrawal severity while providing no protection against seizures or delirium tremens. Cosmetic vital-sign control without benzodiazepines is a classic and dangerous error."
+          },
+          {
+            "text": "Phenytoin loading for seizure prophylaxis",
+            "correct": false,
+            "explanation": "Phenytoin is ineffective for preventing alcohol withdrawal seizures, which arise from GABA-NMDA imbalance rather than a focal epileptogenic process. Benzodiazepines are both treatment and prophylaxis."
+          }
+        ],
+        "key_learning_point": "Benzodiazepines are the only proven treatment and prophylaxis for alcohol withdrawal, its seizures, and delirium tremens; prefer lorazepam or oxazepam in liver disease.",
+        "skill_tested": "pharmacology",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "alcohol_withdrawal_01_cp2",
+        "sequence": 2,
+        "question": "The nurse notes he has eaten poorly for weeks and asks about starting IV dextrose fluids. What must be administered first?",
+        "choices": [
+          {
+            "text": "IV thiamine before or with any glucose-containing fluids",
+            "correct": true,
+            "explanation": "Thiamine is a cofactor for pyruvate dehydrogenase and transketolase; glucose loading in a thiamine-deficient patient acutely consumes remaining thiamine and can precipitate Wernicke encephalopathy (confusion, ophthalmoplegia, ataxia). Chronic alcohol users are presumed deficient from poor intake and impaired absorption, so thiamine precedes dextrose."
+          },
+          {
+            "text": "Folic acid",
+            "correct": false,
+            "explanation": "Folate deficiency is common in alcohol use disorder and should be repleted, but it carries no acute precipitable syndrome analogous to Wernicke encephalopathy. It is routine supplementation, not the critical pre-glucose step."
+          },
+          {
+            "text": "Normal saline alone is sufficient; no vitamins are needed first",
+            "correct": false,
+            "explanation": "Saline itself is safe, but the plan is dextrose-containing fluids in a malnourished alcohol user. Omitting thiamine before glucose risks iatrogenic Wernicke encephalopathy, which is preventable and often underrecognized."
+          },
+          {
+            "text": "Vitamin B12 injection",
+            "correct": false,
+            "explanation": "B12 deficiency causes megaloblastic anemia and subacute combined degeneration over months; there is no acute interaction with glucose administration. This distractor swaps one B vitamin for the clinically urgent one."
+          }
+        ],
+        "key_learning_point": "Give thiamine before glucose in any patient with chronic alcohol use or malnutrition to prevent precipitating Wernicke encephalopathy.",
+        "skill_tested": "complication-recognition",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Psychiatry",
+      "subtopic": "Alcohol Withdrawal",
+      "system": "Behavioral Health",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "anaphylaxis_epi_01",
+    "stem": "A 25-year-old woman is stung by a bee at a picnic. Within 10 minutes she develops diffuse urticaria, swelling of her lips, a sensation of throat tightness, and wheezing. On EMS arrival: BP 82/50 mmHg, HR 128/min, RR 26/min, SpO2 91% on room air. She has audible wheeze and diffuse hives. She has no known allergies and takes no medications.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "anaphylaxis_epi_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate immediate treatment?",
+        "choices": [
+          {
+            "text": "Intramuscular epinephrine into the anterolateral thigh",
+            "correct": true,
+            "explanation": "She has anaphylaxis: acute onset with skin involvement plus respiratory compromise and hypotension after an allergen exposure. Epinephrine is the only first-line therapy; its alpha-1 effect reverses vasodilation and mucosal edema, beta-1 supports cardiac output, and beta-2 bronchodilates and stabilizes mast cells. IM injection into the vastus lateralis achieves faster, more reliable levels than subcutaneous dosing, and delay in epinephrine is the strongest modifiable predictor of fatal anaphylaxis."
+          },
+          {
+            "text": "IV diphenhydramine and observation",
+            "correct": false,
+            "explanation": "Antihistamines relieve urticaria and itching but act too slowly and do nothing for airway edema, bronchospasm, or shock. Relying on antihistamines first is the most common fatal error in anaphylaxis management; they are adjuncts after epinephrine."
+          },
+          {
+            "text": "IV methylprednisolone as initial therapy",
+            "correct": false,
+            "explanation": "Corticosteroids take hours to act and their traditional rationale (preventing biphasic reactions) has weak evidence. They never substitute for epinephrine in the acute phase."
+          },
+          {
+            "text": "Nebulized albuterol alone",
+            "correct": false,
+            "explanation": "Albuterol addresses only the bronchospasm component and does nothing for hypotension or upper airway edema. It is a useful adjunct for wheezing that persists after epinephrine, not standalone treatment."
+          }
+        ],
+        "key_learning_point": "Anaphylaxis is treated immediately with IM epinephrine in the anterolateral thigh; antihistamines, steroids, and bronchodilators are adjuncts that never replace or precede epinephrine.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Emergency Medicine",
+      "subtopic": "Anaphylaxis",
+      "system": "Immunologic",
+      "exam": "Step 2 CK",
+      "difficulty": 1,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "testicular_torsion_01",
+    "stem": "A 15-year-old boy presents with sudden onset of severe left testicular pain that began 2 hours ago while playing basketball, accompanied by nausea and one episode of vomiting. He denies dysuria, fever, or urethral discharge. Vitals are normal except HR 104/min. Exam shows a swollen, exquisitely tender left testis lying high in the scrotum with a transverse orientation; the cremasteric reflex is absent on the left. Urinalysis is normal.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "testicular_torsion_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate next step?",
+        "choices": [
+          {
+            "text": "Immediate urology consultation for surgical exploration",
+            "correct": true,
+            "explanation": "Sudden severe pain, nausea, a high-riding transversely oriented testis, and an absent cremasteric reflex make testicular torsion the working diagnosis. Torsion twists the spermatic cord, cutting off arterial inflow; testicular salvage approaches 100% within 6 hours but falls below 10% after 24 hours. With a classic presentation, surgery (detorsion and bilateral orchiopexy) should not be delayed for imaging."
+          },
+          {
+            "text": "Scrotal Doppler ultrasound before any consultation",
+            "correct": false,
+            "explanation": "Doppler ultrasound showing absent flow confirms torsion and is appropriate for equivocal presentations. When the clinical picture is classic, imaging only consumes ischemia time. This distractor tests whether the student prioritizes confirmation over salvage."
+          },
+          {
+            "text": "Empiric ceftriaxone and doxycycline for epididymitis",
+            "correct": false,
+            "explanation": "Epididymitis presents more gradually with dysuria, pyuria, and a tender epididymis, often with a preserved cremasteric reflex and pain relief on testicular elevation (Prehn sign). A normal urinalysis and abrupt onset in an adolescent argue strongly against infection; treating for epididymitis loses the testis."
+          },
+          {
+            "text": "Analgesia and outpatient urology follow-up tomorrow",
+            "correct": false,
+            "explanation": "Torsion is a surgical emergency measured in hours. Overnight delay guarantees infarction, orchiectomy, and potential impaired fertility."
+          }
+        ],
+        "key_learning_point": "Classic testicular torsion (sudden pain, high-riding transverse testis, absent cremasteric reflex) goes directly to surgical exploration; ultrasound is reserved for equivocal cases because salvage is time-dependent.",
+        "skill_tested": "diagnosis",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Urology",
+      "subtopic": "Acute Scrotum",
+      "system": "Reproductive",
+      "exam": "Step 2 CK",
+      "difficulty": 2,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "ectopic_mtx_01",
+    "stem": "A 27-year-old woman presents with 3 days of right lower quadrant pain and light vaginal spotting. Her last menstrual period was 7 weeks ago. She has a history of chlamydia treated 3 years ago. Vitals: BP 118/74 mmHg, HR 84/min. Exam shows mild right adnexal tenderness without peritoneal signs. Labs: beta-hCG 3,400 mIU/mL, hemoglobin 12.8 g/dL, normal liver and renal function. Transvaginal ultrasound shows no intrauterine pregnancy, a 2.5-cm right adnexal mass without cardiac activity, and no free fluid.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "ectopic_mtx_01_cp1",
+        "sequence": 1,
+        "question": "What is the most likely diagnosis?",
+        "choices": [
+          {
+            "text": "Ectopic pregnancy",
+            "correct": true,
+            "explanation": "A beta-hCG of 3,400 mIU/mL is above the discriminatory zone (about 1,500-2,000 for transvaginal ultrasound), at which an intrauterine pregnancy should be visible. An empty uterus at this hCG level with an adnexal mass is an ectopic pregnancy until proven otherwise. Her prior chlamydia is a key risk factor via tubal scarring that impairs embryo transport."
+          },
+          {
+            "text": "Early viable intrauterine pregnancy not yet visible",
+            "correct": false,
+            "explanation": "Below the discriminatory zone, an empty uterus can represent an early normal pregnancy. Above it, absence of an intrauterine sac makes a viable intrauterine pregnancy very unlikely, and the adnexal mass localizes the pregnancy to the tube."
+          },
+          {
+            "text": "Threatened abortion",
+            "correct": false,
+            "explanation": "Threatened abortion requires a confirmed intrauterine pregnancy with bleeding through a closed os. No intrauterine pregnancy is seen, so this diagnosis cannot be made and dangerously ignores the adnexal mass."
+          },
+          {
+            "text": "Ruptured hemorrhagic ovarian cyst",
+            "correct": false,
+            "explanation": "A hemorrhagic cyst can cause unilateral pain and an adnexal mass, but it does not produce a positive pregnancy test with an empty uterus above the discriminatory zone, and rupture typically shows free pelvic fluid."
+          }
+        ],
+        "key_learning_point": "An empty uterus with beta-hCG above the discriminatory zone (~1,500-2,000 mIU/mL on TVUS) indicates ectopic pregnancy until proven otherwise; PID history is a major risk factor.",
+        "skill_tested": "diagnosis",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "ectopic_mtx_01_cp2",
+        "sequence": 2,
+        "question": "What is the most appropriate management for this patient?",
+        "choices": [
+          {
+            "text": "Single-dose intramuscular methotrexate with serial beta-hCG monitoring",
+            "correct": true,
+            "explanation": "She meets criteria for medical management: hemodynamically stable, unruptured ectopic, mass under 3.5 cm, no fetal cardiac activity, beta-hCG under 5,000 mIU/mL, normal hepatic and renal function, and ability to follow up. Methotrexate, a folate antagonist, halts proliferation of trophoblastic tissue. Beta-hCG is tracked on days 4 and 7, expecting at least a 15% decline between those days."
+          },
+          {
+            "text": "Emergency laparotomy with salpingectomy",
+            "correct": false,
+            "explanation": "Open emergency surgery is reserved for ruptured ectopics with hemodynamic instability. She is stable with no free fluid; subjecting her to laparotomy forfeits the fertility-sparing and morbidity advantages of medical or laparoscopic management."
+          },
+          {
+            "text": "Expectant management with repeat ultrasound in 1 week",
+            "correct": false,
+            "explanation": "Expectant management is only considered for asymptomatic patients with low and clearly falling beta-hCG (typically under 1,000-1,500). At 3,400 with an identifiable mass and symptoms, observation risks tubal rupture and hemorrhage."
+          },
+          {
+            "text": "Uterine dilation and curettage",
+            "correct": false,
+            "explanation": "D&C evacuates the uterine cavity, but the pregnancy is in the tube, not the uterus. It is occasionally used diagnostically to distinguish failed intrauterine pregnancy from ectopic when ultrasound is indeterminate, but it is never treatment for a visualized adnexal ectopic."
+          }
+        ],
+        "key_learning_point": "Stable, unruptured ectopic pregnancy with hCG <5,000, mass <3.5 cm, and no cardiac activity is treated with methotrexate and mandatory serial beta-hCG follow-up.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Gynecology",
+      "subtopic": "Ectopic Pregnancy",
+      "system": "Reproductive",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "kawasaki_ivig_01",
+    "stem": "A 3-year-old boy is brought in with 6 days of fever to 39.5°C unresponsive to antipyretics. His parents report red eyes, a rash, and irritability. Exam shows bilateral nonexudative conjunctival injection, cracked erythematous lips with a strawberry tongue, a polymorphous truncal rash, edema of the hands and feet, and a single enlarged right cervical lymph node measuring 2 cm. Labs: WBC 15,900/mm3, platelets 480,000/mm3, ESR 68 mm/h, CRP 12 mg/dL. Rapid strep and blood cultures are negative.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "kawasaki_ivig_01_cp1",
+        "sequence": 1,
+        "question": "What is the most likely diagnosis?",
+        "choices": [
+          {
+            "text": "Kawasaki disease",
+            "correct": true,
+            "explanation": "He meets classic criteria: fever for at least 5 days plus at least 4 of 5 features — bilateral nonexudative conjunctivitis, oral mucosal changes (strawberry tongue, cracked lips), polymorphous rash, extremity changes (edema), and unilateral cervical lymphadenopathy of at least 1.5 cm. Kawasaki is a medium-vessel vasculitis of young children, most common under age 5, and thrombocytosis with elevated inflammatory markers is typical."
+          },
+          {
+            "text": "Scarlet fever",
+            "correct": false,
+            "explanation": "Scarlet fever shares the strawberry tongue and rash, making it the classic mimic, but it features a sandpaper rash with pharyngitis and a positive streptococcal test, and lacks conjunctivitis and extremity edema. His negative rapid strep and conjunctival injection point away from it."
+          },
+          {
+            "text": "Measles",
+            "correct": false,
+            "explanation": "Measles causes fever, conjunctivitis, and rash, but the conjunctivitis is typically exudative or accompanied by coryza and cough, with Koplik spots and a cephalocaudal rash progression. Vaccination status and the full Kawasaki criteria constellation distinguish the two."
+          },
+          {
+            "text": "Stevens-Johnson syndrome",
+            "correct": false,
+            "explanation": "SJS produces mucosal involvement but with painful erosions, targetoid lesions, and epidermal sloughing, nearly always after a culprit drug. There is no drug exposure and no blistering here."
+          }
+        ],
+        "key_learning_point": "Kawasaki disease is diagnosed clinically: fever ≥5 days plus ≥4 of conjunctivitis, oral changes, rash, extremity changes, and cervical lymphadenopathy ≥1.5 cm.",
+        "skill_tested": "diagnosis",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "kawasaki_ivig_01_cp2",
+        "sequence": 2,
+        "question": "What is the most appropriate treatment, and what complication does it primarily prevent?",
+        "choices": [
+          {
+            "text": "IVIG plus high-dose aspirin, to prevent coronary artery aneurysms",
+            "correct": true,
+            "explanation": "IVIG given within 10 days of fever onset reduces coronary artery aneurysm incidence from roughly 25% to under 5%, likely via broad immunomodulation of the vasculitic process. High-dose aspirin provides anti-inflammatory effect acutely, transitioned to low-dose antiplatelet therapy. Baseline and follow-up echocardiography monitors the coronary arteries. Kawasaki is a canonical exception to avoiding aspirin in febrile children."
+          },
+          {
+            "text": "Oral corticosteroids as first-line monotherapy",
+            "correct": false,
+            "explanation": "Steroids are not first-line monotherapy; they are considered as adjuncts in high-risk patients or IVIG-refractory disease. Initial therapy in trials establishing standard of care was IVIG plus aspirin."
+          },
+          {
+            "text": "Empiric ceftriaxone for presumed bacterial adenitis",
+            "correct": false,
+            "explanation": "Anchoring on the cervical node misses the systemic criteria. Kawasaki is not infectious in a treatable bacterial sense; antibiotics do not alter its course and delay to IVIG beyond day 10 markedly increases coronary aneurysm risk."
+          },
+          {
+            "text": "Supportive care only, as the illness is self-limited",
+            "correct": false,
+            "explanation": "The fever does self-resolve, which is exactly the trap: untreated children remain at high risk of coronary aneurysms, myocardial infarction, and sudden death. Treatment exists to prevent the cardiac sequelae, not to shorten the fever."
+          }
+        ],
+        "key_learning_point": "Kawasaki disease is treated with IVIG plus high-dose aspirin within 10 days of onset to prevent coronary artery aneurysms, with echocardiographic surveillance.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Pediatrics",
+      "subtopic": "Kawasaki Disease",
+      "system": "Cardiovascular",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "croup_moderate_01",
+    "stem": "A 2-year-old girl is brought to the emergency department at night with a harsh, barking cough and noisy breathing that began after 2 days of runny nose and low-grade fever. Vitals: HR 132/min, RR 32/min, SpO2 95% on room air, T 38.2°C. Exam shows a hoarse cry, audible inspiratory stridor at rest, and mild subcostal retractions. She is alert and drooling is absent. Lungs are clear apart from transmitted upper airway sounds.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "croup_moderate_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate management?",
+        "choices": [
+          {
+            "text": "Dexamethasone plus nebulized racemic epinephrine with observation",
+            "correct": true,
+            "explanation": "This is croup (laryngotracheobronchitis, usually parainfluenza virus): barking cough, hoarseness, and inspiratory stridor from subglottic edema. Stridor at rest with retractions defines moderate disease, warranting corticosteroids (dexamethasone reduces mucosal edema and prevents return visits) plus nebulized epinephrine, whose alpha-mediated vasoconstriction shrinks subglottic swelling within minutes. Observation for 3 to 4 hours after epinephrine watches for rebound stridor."
+          },
+          {
+            "text": "Dexamethasone alone and immediate discharge",
+            "correct": false,
+            "explanation": "Steroids alone suffice for mild croup (barky cough without stridor at rest). Once stridor is present at rest, nebulized epinephrine is indicated for rapid relief, and immediate discharge skips the observation window for rebound symptoms as epinephrine wears off."
+          },
+          {
+            "text": "Empiric antibiotics and lateral neck radiograph to exclude epiglottitis",
+            "correct": false,
+            "explanation": "Epiglottitis presents with rapid-onset toxicity, drooling, dysphagia, and tripod positioning without a barking cough, and is rare in vaccinated children. She is alert without drooling after a viral prodrome; croup is viral, so antibiotics have no role, and imaging is unnecessary for a clinical diagnosis."
+          },
+          {
+            "text": "Immediate endotracheal intubation",
+            "correct": false,
+            "explanation": "Intubation in croup is a last resort for impending respiratory failure (severe retractions, hypoxia, altered consciousness, fatigue). A well-appearing, alert child with moderate symptoms responds to medical therapy in the vast majority of cases."
+          }
+        ],
+        "key_learning_point": "Croup with stridor at rest is treated with dexamethasone plus nebulized racemic epinephrine, followed by 3-4 hours of observation for rebound stridor.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      }
+    ],
+    "tags": {
+      "subject": "Pediatrics",
+      "subtopic": "Croup",
+      "system": "Respiratory",
+      "exam": "Step 2 CK",
+      "difficulty": 2,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "gca_steroids_first_01",
+    "stem": "A 72-year-old woman presents with 3 weeks of a new right-sided temporal headache, pain in her jaw when chewing that improves with rest, and 2 episodes of transient painless vision loss in the right eye lasting about 1 minute each. She also reports 2 months of bilateral shoulder and hip stiffness that is worst in the morning. Vitals are normal. Exam shows a tender, thickened right temporal artery with diminished pulsation. Visual acuity and fundoscopy are currently normal. Labs: ESR 96 mm/h, CRP 8.4 mg/dL, hemoglobin 10.8 g/dL, platelets 510,000/mm3.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "gca_steroids_first_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate immediate next step?",
+        "choices": [
+          {
+            "text": "Start high-dose corticosteroids immediately, before biopsy",
+            "correct": true,
+            "explanation": "She has giant cell arteritis with visual symptoms: new headache over 50, jaw claudication (the most specific symptom), amaurosis fugax, temporal artery abnormalities, and markedly elevated inflammatory markers. Transient vision loss signals ischemia of the ophthalmic artery circulation; without steroids, permanent blindness from anterior ischemic optic neuropathy can occur within days and is irreversible. With visual symptoms, IV methylprednisolone is favored; treatment must never wait for biopsy."
+          },
+          {
+            "text": "Schedule temporal artery biopsy and start steroids only if it is positive",
+            "correct": false,
+            "explanation": "Withholding treatment pending biopsy risks permanent blindness. Biopsy findings (granulomatous inflammation, giant cells) remain interpretable for at least 2 weeks after starting steroids, so therapy first, biopsy promptly after, is the rule."
+          },
+          {
+            "text": "Start low-dose aspirin alone and refer to rheumatology in 2 weeks",
+            "correct": false,
+            "explanation": "Aspirin may be an adjunct to reduce ischemic events, but it does not treat the underlying granulomatous arteritis. A 2-week delay in a patient with amaurosis fugax is an invitation to irreversible visual loss."
+          },
+          {
+            "text": "Obtain MRI of the brain to evaluate the transient vision loss",
+            "correct": false,
+            "explanation": "Amaurosis fugax here is explained by ophthalmic artery involvement of GCA, not an intracranial lesion. MRI neither confirms GCA nor changes the immediate need for steroids, and waiting for imaging wastes the treatment window."
+          }
+        ],
+        "key_learning_point": "Suspected GCA with visual symptoms requires immediate high-dose corticosteroids; never delay treatment for biopsy, which remains diagnostic for weeks after steroids begin.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "gca_steroids_first_01_cp2",
+        "sequence": 2,
+        "question": "Her shoulder and hip girdle stiffness is best explained by which associated condition?",
+        "choices": [
+          {
+            "text": "Polymyalgia rheumatica",
+            "correct": true,
+            "explanation": "PMR causes symmetric aching and morning stiffness of the shoulder and pelvic girdles with elevated inflammatory markers and normal muscle enzymes. It coexists in roughly half of GCA patients, and both conditions share pathogenesis along the IL-6 axis. Recognizing the association strengthens the GCA diagnosis and informs steroid tapering."
+          },
+          {
+            "text": "Polymyositis",
+            "correct": false,
+            "explanation": "Polymyositis causes true proximal muscle weakness with elevated creatine kinase, not stiffness with preserved strength. PMR patients hurt but are not weak, and muscle enzymes are normal."
+          },
+          {
+            "text": "Fibromyalgia",
+            "correct": false,
+            "explanation": "Fibromyalgia produces widespread pain with tender points but normal inflammatory markers. Her ESR of 96 and CRP elevation are incompatible with fibromyalgia as the explanation."
+          },
+          {
+            "text": "Rheumatoid arthritis",
+            "correct": false,
+            "explanation": "RA is a small-joint symmetric synovitis of hands and feet with joint swelling. Proximal girdle stiffness without peripheral synovitis in a woman over 70 with GCA overwhelmingly favors PMR."
+          }
+        ],
+        "key_learning_point": "Polymyalgia rheumatica accompanies about 50% of GCA cases, presenting as proximal girdle stiffness with high inflammatory markers, normal strength, and normal muscle enzymes.",
+        "skill_tested": "diagnosis",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      }
+    ],
+    "tags": {
+      "subject": "Rheumatology",
+      "subtopic": "Giant Cell Arteritis",
+      "system": "Musculoskeletal",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "adrenal_crisis_01",
+    "stem": "A 34-year-old woman with primary adrenal insufficiency on chronic hydrocortisone and fludrocortisone presents with 2 days of vomiting and diarrhea from a gastrointestinal illness, during which she could not keep down her medications. She is now lethargic. Vitals: BP 78/46 mmHg, HR 128/min, T 38.1°C. She remains hypotensive after 2 liters of normal saline. Exam shows hyperpigmentation of the palmar creases and buccal mucosa. Labs: sodium 126 mEq/L, potassium 5.9 mEq/L, glucose 58 mg/dL, creatinine 1.5 mg/dL.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "adrenal_crisis_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate immediate treatment?",
+        "choices": [
+          {
+            "text": "IV hydrocortisone 100 mg plus continued isotonic saline with dextrose",
+            "correct": true,
+            "explanation": "This is adrenal crisis: a known Addison patient with interrupted steroid replacement during physiologic stress presenting with refractory hypotension, hyponatremia, hyperkalemia, and hypoglycemia. Cortisol is required for vascular responsiveness to catecholamines, which is why fluids alone fail. High-dose IV hydrocortisone restores vascular tone and, at stress doses, provides sufficient mineralocorticoid activity; dextrose-containing saline corrects hypoglycemia and volume deficit."
+          },
+          {
+            "text": "Norepinephrine infusion without glucocorticoids",
+            "correct": false,
+            "explanation": "Vasopressors underperform in cortisol deficiency because catecholamine action on vascular smooth muscle requires permissive glucocorticoid effect. Pressors may be needed adjunctively, but without hydrocortisone the shock remains refractory."
+          },
+          {
+            "text": "Wait for a confirmatory cosyntropin stimulation test before giving steroids",
+            "correct": false,
+            "explanation": "In a patient with established adrenal insufficiency, no confirmation is needed. Even in suspected new cases, treatment should not be delayed; dexamethasone can be given if testing is planned since it does not interfere with the cortisol assay. Delaying steroids in adrenal crisis is potentially fatal."
+          },
+          {
+            "text": "Oral hydrocortisone at triple her home dose",
+            "correct": false,
+            "explanation": "Sick-day tripling of oral doses is correct advice for minor illness when the patient can tolerate intake. She is vomiting and in shock; the oral route is precisely what failed. IV administration is mandatory."
+          }
+        ],
+        "key_learning_point": "Adrenal crisis presents as vasopressor- and fluid-refractory hypotension with hyponatremia, hyperkalemia, and hypoglycemia; treat immediately with IV hydrocortisone and dextrose-containing saline.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "adrenal_crisis_01_cp2",
+        "sequence": 2,
+        "question": "Which mechanism best explains her hyperkalemia?",
+        "choices": [
+          {
+            "text": "Aldosterone deficiency impairing renal potassium excretion",
+            "correct": true,
+            "explanation": "In primary adrenal insufficiency, destruction of the adrenal cortex eliminates aldosterone along with cortisol. Aldosterone normally drives sodium reabsorption and potassium secretion in the principal cells of the collecting duct; its absence causes sodium wasting (hyponatremia, volume depletion) and potassium retention (hyperkalemia). This mineralocorticoid loss is why primary, but not secondary, adrenal insufficiency features hyperkalemia."
+          },
+          {
+            "text": "Excess ACTH directly raising serum potassium",
+            "correct": false,
+            "explanation": "ACTH is elevated in primary adrenal insufficiency (driving her hyperpigmentation via melanocortin receptor cross-stimulation), but ACTH itself has no direct potassium-raising effect. This distractor confuses the hormone that is high with the hormone whose absence matters."
+          },
+          {
+            "text": "Cortisol deficiency reducing renal blood flow",
+            "correct": false,
+            "explanation": "Cortisol deficiency contributes to hypotension and hypoglycemia, and prerenal azotemia may modestly limit potassium clearance, but the primary and defining driver of hyperkalemia in Addison disease is mineralocorticoid deficiency at the collecting duct."
+          },
+          {
+            "text": "Insulin resistance shifting potassium extracellularly",
+            "correct": false,
+            "explanation": "Cortisol excess, not deficiency, causes insulin resistance. Hypocortisolism produces hypoglycemia and, if anything, preserved insulin sensitivity; transcellular shift is not the mechanism here."
+          }
+        ],
+        "key_learning_point": "Hyperkalemia in primary adrenal insufficiency results from aldosterone deficiency at the collecting duct; secondary (pituitary) adrenal insufficiency spares aldosterone and does not cause hyperkalemia.",
+        "skill_tested": "pathophysiology",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      }
+    ],
+    "tags": {
+      "subject": "Endocrinology",
+      "subtopic": "Adrenal Insufficiency",
+      "system": "Endocrine",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "hyperkalemia_ecg_01",
+    "stem": "A 60-year-old man with end-stage renal disease on hemodialysis presents after missing his last two dialysis sessions. He reports generalized weakness and nausea. Vitals: BP 152/88 mmHg, HR 58/min, RR 18/min. Exam shows diminished deep tendon reflexes and mild lower extremity edema. Labs: potassium 7.2 mEq/L, sodium 136 mEq/L, bicarbonate 16 mEq/L, creatinine 9.8 mg/dL, glucose 104 mg/dL. ECG shows peaked T waves and a widened QRS complex of 130 msec.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "hyperkalemia_ecg_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate first intervention?",
+        "choices": [
+          {
+            "text": "IV calcium gluconate",
+            "correct": true,
+            "explanation": "Peaked T waves and QRS widening indicate cardiac membrane instability from hyperkalemia, which can degenerate into a sine-wave pattern and ventricular fibrillation. Calcium does not lower potassium; it restores the electrical gradient across cardiomyocyte membranes by raising the threshold potential, stabilizing the myocardium within minutes while potassium-lowering therapies take effect. With ECG changes, calcium always comes first."
+          },
+          {
+            "text": "IV insulin with dextrose as the first step",
+            "correct": false,
+            "explanation": "Insulin-glucose is essential therapy that shifts potassium intracellularly via Na-K-ATPase stimulation, but its onset is 15 to 30 minutes. With QRS widening, the myocardium must be stabilized immediately with calcium first; insulin follows right after."
+          },
+          {
+            "text": "Sodium polystyrene sulfonate orally",
+            "correct": false,
+            "explanation": "Cation-exchange resins remove potassium through the gut over hours and have questionable efficacy acutely, plus a risk of intestinal necrosis. They have no role as the initial response to hyperkalemia with ECG changes."
+          },
+          {
+            "text": "Immediate hemodialysis before any medications",
+            "correct": false,
+            "explanation": "Dialysis is the definitive treatment and he will need it urgently, but arranging it takes time. A patient with a widened QRS can arrest while awaiting the machine; membrane stabilization and shifting therapies bridge to dialysis."
+          }
+        ],
+        "key_learning_point": "Hyperkalemia with ECG changes is treated first with IV calcium to stabilize the cardiac membrane; calcium does not lower potassium but prevents arrhythmic death while other therapies act.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "hyperkalemia_ecg_01_cp2",
+        "sequence": 2,
+        "question": "After calcium administration, which combination most effectively lowers his serum potassium while definitive treatment is arranged?",
+        "choices": [
+          {
+            "text": "IV regular insulin with dextrose, plus nebulized albuterol, followed by urgent hemodialysis",
+            "correct": true,
+            "explanation": "Insulin drives potassium into cells by stimulating Na-K-ATPase; dextrose prevents hypoglycemia. High-dose nebulized albuterol acts additively through beta-2-mediated potassium uptake. These shift potassium within 30 minutes but do not remove it from the body; in an anuric dialysis patient, hemodialysis is the only definitive removal method and must be arranged urgently."
+          },
+          {
+            "text": "IV furosemide as the primary potassium-lowering therapy",
+            "correct": false,
+            "explanation": "Loop diuretics enhance renal potassium excretion, which requires functioning kidneys and urine output. In end-stage renal disease with anuria, furosemide is essentially useless for potassium removal."
+          },
+          {
+            "text": "IV sodium bicarbonate alone",
+            "correct": false,
+            "explanation": "Bicarbonate shifts potassium intracellularly mainly in the setting of significant metabolic acidosis, and its effect as monotherapy is slow and unreliable. It may be an adjunct given his bicarbonate of 16 but never carries the treatment alone."
+          },
+          {
+            "text": "Repeat doses of calcium gluconate until potassium normalizes",
+            "correct": false,
+            "explanation": "Calcium antagonizes the cardiac effects of potassium but has zero effect on the serum potassium concentration. Repeating calcium while omitting shifting and removal therapies leaves the underlying lethal chemistry untouched."
+          }
+        ],
+        "key_learning_point": "After membrane stabilization, insulin-dextrose and albuterol shift potassium intracellularly within minutes, but dialysis is the only definitive removal in ESRD; shifting buys time, it does not remove potassium.",
+        "skill_tested": "pharmacology",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Nephrology",
+      "subtopic": "Hyperkalemia",
+      "system": "Renal",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "sbo_adhesive_01",
+    "stem": "A 62-year-old woman presents with 1 day of colicky abdominal pain, bilious vomiting, abdominal distension, and inability to pass flatus or stool. She underwent an open hysterectomy 8 years ago. Vitals: BP 126/78 mmHg, HR 102/min, T 37.4°C. Exam shows a distended abdomen with high-pitched hyperactive bowel sounds and diffuse tenderness without rebound or guarding. Labs: WBC 11,200/mm3, lactate 1.6 mmol/L. Upright abdominal radiograph shows multiple dilated loops of small bowel with air-fluid levels and no free air.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "sbo_adhesive_01_cp1",
+        "sequence": 1,
+        "question": "What is the most likely underlying cause of her presentation?",
+        "choices": [
+          {
+            "text": "Postoperative adhesions",
+            "correct": true,
+            "explanation": "Adhesions from prior abdominal or pelvic surgery are the most common cause of small bowel obstruction in adults, accounting for roughly 60-70%. Fibrous bands from her prior hysterectomy kink or compress the bowel. The clinical picture (colicky pain, bilious vomiting, distension, obstipation) with dilated small bowel loops and air-fluid levels on radiograph is classic."
+          },
+          {
+            "text": "Incarcerated inguinal hernia",
+            "correct": false,
+            "explanation": "Hernias are the second most common cause of SBO and must be excluded on exam, but there is no groin mass or hernia described here. Given her surgical history, adhesions are statistically and clinically more likely."
+          },
+          {
+            "text": "Colorectal malignancy",
+            "correct": false,
+            "explanation": "Tumors more commonly cause large bowel obstruction and would show a dilated colon; her radiograph shows small bowel dilation. Malignancy is a leading cause of large, not small, bowel obstruction."
+          },
+          {
+            "text": "Gallstone ileus",
+            "correct": false,
+            "explanation": "Gallstone ileus is a rare cause in elderly women, produced by a stone eroding into the bowel, and classically shows pneumobilia and a radiopaque stone (Rigler triad). None of these features are present."
+          }
+        ],
+        "key_learning_point": "Adhesions from prior surgery are the most common cause of small bowel obstruction; hernias are second, and prior abdominal operation is the key historical clue.",
+        "skill_tested": "diagnosis",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      },
+      {
+        "checkpoint_id": "sbo_adhesive_01_cp2",
+        "sequence": 2,
+        "question": "There are no signs of ischemia, perforation, or peritonitis. What is the most appropriate initial management?",
+        "choices": [
+          {
+            "text": "Nasogastric decompression, IV fluids, bowel rest, and serial examinations",
+            "correct": true,
+            "explanation": "Uncomplicated adhesive SBO without strangulation is initially managed nonoperatively. Nasogastric suction decompresses the proximal bowel and relieves vomiting, IV fluids correct losses, and serial exams and imaging monitor for resolution or deterioration. The majority of adhesive obstructions resolve with this conservative approach within 48 to 72 hours."
+          },
+          {
+            "text": "Immediate exploratory laparotomy",
+            "correct": false,
+            "explanation": "Urgent surgery is indicated for signs of strangulation, ischemia (rising lactate, fever, peritonitis), or perforation (free air), none of which are present. Operating on every adhesive obstruction upfront subjects patients to unnecessary surgery and creates new adhesions."
+          },
+          {
+            "text": "Oral laxatives and outpatient follow-up",
+            "correct": false,
+            "explanation": "Stimulating an obstructed bowel with laxatives risks perforation and does not relieve a mechanical blockage. A vomiting, obstructed patient requires admission and bowel rest, not oral cathartics."
+          },
+          {
+            "text": "Colonoscopic decompression",
+            "correct": false,
+            "explanation": "Endoscopic decompression applies to certain large bowel processes such as sigmoid volvulus or acute colonic pseudo-obstruction. It cannot reach or relieve a small bowel mechanical obstruction."
+          }
+        ],
+        "key_learning_point": "Uncomplicated adhesive SBO is managed nonoperatively with NG decompression, IV fluids, and serial exams; surgery is reserved for strangulation, ischemia, or perforation.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "General Surgery",
+      "subtopic": "Bowel Obstruction",
+      "system": "Gastrointestinal",
+      "exam": "Step 2 CK",
+      "difficulty": 2,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "guillain_barre_01",
+    "stem": "A 40-year-old man presents with 4 days of progressive, symmetric weakness that began in his feet and has ascended to involve his thighs and now his hands. He describes tingling in his toes and fingers. Three weeks ago he had a self-limited diarrheal illness. Vitals: BP 138/84 mmHg, HR 96/min, RR 16/min, SpO2 97%. Exam shows symmetric lower-extremity weakness (3/5) with milder upper-extremity weakness, and absent deep tendon reflexes throughout. Sensation is largely intact. Bladder and bowel function are preserved.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "guillain_barre_01_cp1",
+        "sequence": 1,
+        "question": "Which finding on lumbar puncture would most support the suspected diagnosis?",
+        "choices": [
+          {
+            "text": "Elevated CSF protein with a normal white cell count (albuminocytologic dissociation)",
+            "correct": true,
+            "explanation": "The presentation is Guillain-Barre syndrome: ascending symmetric weakness with areflexia following an infection (often Campylobacter jejuni after diarrhea). Autoimmune attack on peripheral myelin raises CSF protein from nerve root inflammation, while cell count stays normal because the process is not infectious. This albuminocytologic dissociation is the classic CSF hallmark, though it may lag in the first week."
+          },
+          {
+            "text": "Elevated CSF protein with a lymphocytic pleocytosis",
+            "correct": false,
+            "explanation": "A raised white cell count suggests infection or an alternative inflammatory process (e.g., HIV-associated GBS mimics, meningitis, or CNS involvement). Prominent pleocytosis argues against typical GBS and should prompt reconsideration of the diagnosis."
+          },
+          {
+            "text": "Low CSF glucose with neutrophilic pleocytosis",
+            "correct": false,
+            "explanation": "This is the profile of bacterial meningitis, a central nervous system infection, not the peripheral demyelination of GBS. It does not fit an afebrile patient with flaccid areflexic weakness."
+          },
+          {
+            "text": "Oligoclonal bands with normal protein",
+            "correct": false,
+            "explanation": "Oligoclonal bands typify multiple sclerosis, a central demyelinating disease presenting with upper motor neuron signs and hyperreflexia, the opposite of the areflexia seen here."
+          }
+        ],
+        "key_learning_point": "Guillain-Barre syndrome shows albuminocytologic dissociation on LP: elevated CSF protein with a normal cell count, reflecting peripheral nerve root inflammation without infection.",
+        "skill_tested": "interpretation",
+        "voice_suitable": true,
+        "triggers_remediation": false
+      },
+      {
+        "checkpoint_id": "guillain_barre_01_cp2",
+        "sequence": 2,
+        "question": "Which monitoring is most critical during his hospitalization?",
+        "choices": [
+          {
+            "text": "Serial spirometry (forced vital capacity and negative inspiratory force)",
+            "correct": true,
+            "explanation": "The most life-threatening complication of GBS is neuromuscular respiratory failure from ascending weakness reaching the diaphragm and intercostals. Because oxygen saturation and respiratory rate drop late, bedside spirometry detects deterioration early; a falling forced vital capacity (below about 20 mL/kg) or negative inspiratory force signals the need for elective intubation before crisis. Autonomic instability also requires cardiac monitoring."
+          },
+          {
+            "text": "Continuous EEG monitoring",
+            "correct": false,
+            "explanation": "EEG monitors cortical seizure activity. GBS is a disease of peripheral nerves with no seizure risk; the brain is not involved, so EEG has no role."
+          },
+          {
+            "text": "Serial head CT scans",
+            "correct": false,
+            "explanation": "GBS spares the central nervous system, so intracranial imaging is uninformative. The threat is respiratory and autonomic, not structural brain injury."
+          },
+          {
+            "text": "Daily creatine kinase measurements",
+            "correct": false,
+            "explanation": "CK tracks muscle breakdown in myopathies. GBS weakness is neuropathic, not myopathic, so CK is not the relevant parameter; ventilatory mechanics are."
+          }
+        ],
+        "key_learning_point": "In GBS, monitor forced vital capacity and inspiratory force closely; respiratory failure develops from diaphragmatic weakness and requires intubation before hypoxia appears.",
+        "skill_tested": "complication-recognition",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Neurology",
+      "subtopic": "Guillain-Barre Syndrome",
+      "system": "Nervous",
+      "exam": "Step 2 CK",
+      "difficulty": 3,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "tension_pneumo_01",
+    "stem": "A 24-year-old man is brought to the emergency department after a motor vehicle collision with blunt chest trauma. He is in severe respiratory distress. Vitals: BP 84/52 mmHg, HR 134/min, RR 34/min, SpO2 84% on a non-rebreather. Exam shows tracheal deviation to the left, absent breath sounds and hyperresonance to percussion over the right hemithorax, and distended neck veins.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "tension_pneumo_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate immediate action?",
+        "choices": [
+          {
+            "text": "Immediate needle decompression followed by tube thoracostomy",
+            "correct": true,
+            "explanation": "This is tension pneumothorax: absent breath sounds and hyperresonance on the right, contralateral tracheal deviation, distended neck veins, and obstructive shock. Air trapped under pressure collapses the lung and shifts the mediastinum, compressing the vena cava and impairing venous return. It is a clinical diagnosis requiring immediate decompression, not imaging; a needle in the second intercostal space at the midclavicular line (or fourth/fifth space at the anterior axillary line) converts it to a simple pneumothorax, followed by definitive chest tube placement."
+          },
+          {
+            "text": "Obtain a portable chest radiograph to confirm the diagnosis",
+            "correct": false,
+            "explanation": "Tension pneumothorax is diagnosed clinically and treated immediately; waiting for a radiograph in a patient with obstructive shock risks cardiac arrest. Imaging delays the one intervention that is lifesaving within seconds to minutes."
+          },
+          {
+            "text": "Emergent endotracheal intubation with positive pressure ventilation",
+            "correct": false,
+            "explanation": "Intubating and delivering positive pressure before decompression can worsen a tension pneumothorax by forcing more air into the pleural space, precipitating arrest. The chest must be decompressed first."
+          },
+          {
+            "text": "Rapid IV fluid bolus and vasopressors",
+            "correct": false,
+            "explanation": "The shock is obstructive, caused by mechanical impedance of venous return, not hypovolemia or vasodilation. Fluids and pressors do not address the trapped air; only decompression relieves the obstruction."
+          }
+        ],
+        "key_learning_point": "Tension pneumothorax is a clinical diagnosis treated with immediate needle decompression then chest tube; never delay for imaging or intubate before decompressing.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Emergency Medicine",
+      "subtopic": "Thoracic Trauma",
+      "system": "Respiratory",
+      "exam": "Step 2 CK",
+      "difficulty": 2,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "thyroid_storm_01",
+    "stem": "A 44-year-old woman with poorly controlled Graves disease presents 1 day after an emergency appendectomy with agitation, confusion, and high fever. Vitals: BP 158/68 mmHg, HR 168/min and irregular, T 40.1°C. Exam shows a diffuse goiter, warm moist skin, a fine tremor, and lid retraction. She is disoriented. ECG shows atrial fibrillation with rapid ventricular response. Labs: TSH undetectable, free T4 markedly elevated. She has no chest pain and no signs of heart failure.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "thyroid_storm_01_cp1",
+        "sequence": 1,
+        "question": "What is the most likely diagnosis?",
+        "choices": [
+          {
+            "text": "Thyroid storm",
+            "correct": true,
+            "explanation": "Thyroid storm is decompensated, life-threatening thyrotoxicosis, typically precipitated by a stressor such as surgery, infection, or trauma in a patient with underlying hyperthyroidism. The combination of fever, marked tachycardia and atrial fibrillation, and CNS dysfunction (agitation, confusion) distinguishes storm from uncomplicated thyrotoxicosis and reflects multiorgan involvement. Recent surgery is a classic trigger."
+          },
+          {
+            "text": "Uncomplicated thyrotoxicosis",
+            "correct": false,
+            "explanation": "Ordinary thyrotoxicosis causes tachycardia, tremor, and heat intolerance but not the hyperpyrexia, severe tachyarrhythmia, and altered mental status that define storm. The systemic decompensation here elevates this beyond simple thyrotoxicosis and demands emergent treatment."
+          },
+          {
+            "text": "Postoperative sepsis",
+            "correct": false,
+            "explanation": "Sepsis is on the differential for postoperative fever and tachycardia and can itself precipitate storm, but the goiter, lid retraction, tremor, and undetectable TSH with high T4 point to thyroid decompensation. Both may need treating, but the unifying diagnosis is storm."
+          },
+          {
+            "text": "Neuroleptic malignant syndrome",
+            "correct": false,
+            "explanation": "NMS causes fever, altered mental status, and autonomic instability but requires exposure to dopamine antagonists and features lead-pipe rigidity and elevated CK. There is no such exposure, and the thyroid findings explain the picture."
+          }
+        ],
+        "key_learning_point": "Thyroid storm is thyrotoxicosis plus fever, severe tachyarrhythmia, and CNS dysfunction, usually triggered by surgery, infection, or trauma; it is a clinical, not purely biochemical, diagnosis.",
+        "skill_tested": "diagnosis",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      },
+      {
+        "checkpoint_id": "thyroid_storm_01_cp2",
+        "sequence": 2,
+        "question": "In what order should the pharmacologic agents be administered?",
+        "choices": [
+          {
+            "text": "Beta-blocker and propylthiouracil first, then iodine at least 1 hour after PTU, plus corticosteroids",
+            "correct": true,
+            "explanation": "Beta-blockade (propranolol) controls adrenergic symptoms and blocks peripheral T4-to-T3 conversion. PTU is preferred over methimazole in storm because it also blocks peripheral conversion; it inhibits new hormone synthesis. Iodine blocks release of preformed hormone but must be given at least an hour after PTU, because giving iodine first would supply substrate for new hormone synthesis (escaping the Wolff-Chaikoff effect). Glucocorticoids reduce conversion and treat relative adrenal insufficiency."
+          },
+          {
+            "text": "Iodine first, immediately followed by methimazole",
+            "correct": false,
+            "explanation": "Giving iodine before a thionamide provides iodine substrate that can transiently increase hormone synthesis, worsening the storm. The sequence matters: synthesis must be blocked with PTU first, then release blocked with iodine after a delay."
+          },
+          {
+            "text": "Radioactive iodine ablation now",
+            "correct": false,
+            "explanation": "Radioiodine is definitive outpatient therapy for hyperthyroidism over weeks; it releases stored hormone acutely and has no role in the emergency management of storm, which requires immediate hormone blockade."
+          },
+          {
+            "text": "Aspirin for the fever plus supportive cooling",
+            "correct": false,
+            "explanation": "Cooling is appropriate, but aspirin is contraindicated in thyroid storm because salicylates displace thyroid hormone from binding proteins, raising free hormone levels. Acetaminophen is the antipyretic of choice."
+          }
+        ],
+        "key_learning_point": "In thyroid storm, give a beta-blocker and PTU first, then iodine at least 1 hour later, plus glucocorticoids; iodine before a thionamide worsens the storm, and aspirin is contraindicated.",
+        "skill_tested": "pharmacology",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Endocrinology",
+      "subtopic": "Thyroid Storm",
+      "system": "Endocrine",
+      "exam": "Step 2 CK",
+      "difficulty": 4,
+      "high_yield": true
+    }
+  },
+  {
+    "case_id": "pid_outpatient_01",
+    "stem": "A 23-year-old woman presents with 4 days of lower abdominal pain, deep dyspareunia, and abnormal vaginal discharge. She has had two new sexual partners in the past 3 months and uses condoms inconsistently. Vitals: BP 118/74 mmHg, HR 92/min, T 38.0°C. Pelvic exam reveals mucopurulent cervical discharge and marked cervical motion tenderness with bilateral adnexal tenderness. She tolerates oral intake and appears nontoxic. Urine pregnancy test is negative. Transvaginal ultrasound shows no tubo-ovarian abscess.",
+    "checkpoints": [
+      {
+        "checkpoint_id": "pid_outpatient_01_cp1",
+        "sequence": 1,
+        "question": "What is the most appropriate management?",
+        "choices": [
+          {
+            "text": "Outpatient IM ceftriaxone plus oral doxycycline and metronidazole",
+            "correct": true,
+            "explanation": "She has pelvic inflammatory disease (cervical motion and adnexal tenderness with mucopurulent discharge and risk factors). She is nontoxic, tolerating oral intake, not pregnant, and has no tubo-ovarian abscess, so outpatient therapy is appropriate. The regimen covers Neisseria gonorrhoeae (ceftriaxone), Chlamydia trachomatis (doxycycline), and anaerobes (metronidazole). Empiric treatment is started on clinical grounds because delayed therapy risks infertility and ectopic pregnancy from tubal scarring."
+          },
+          {
+            "text": "Withhold antibiotics until cervical culture results return",
+            "correct": false,
+            "explanation": "PID is treated empirically and immediately; the diagnosis is clinical. Waiting days for cultures while inflammation damages the fallopian tubes increases the risk of infertility, chronic pelvic pain, and ectopic pregnancy. Cultures guide adjustment, not initiation."
+          },
+          {
+            "text": "Inpatient admission for IV cefotetan and doxycycline",
+            "correct": false,
+            "explanation": "Admission is warranted for pregnancy, failed outpatient therapy, inability to tolerate oral intake, tubo-ovarian abscess, or a toxic appearance. This patient meets none of these criteria, so outpatient management is preferred and equally effective for uncomplicated PID."
+          },
+          {
+            "text": "Single-dose oral azithromycin alone",
+            "correct": false,
+            "explanation": "Azithromycin monotherapy treats uncomplicated chlamydial cervicitis but not the polymicrobial spectrum of PID; it fails to cover gonorrhea adequately and anaerobes at all, risking undertreatment and progression."
+          }
+        ],
+        "key_learning_point": "PID is treated empirically on clinical grounds; outpatient therapy (ceftriaxone, doxycycline, metronidazole) suits nontoxic patients, and delay risks infertility and ectopic pregnancy.",
+        "skill_tested": "next-step management",
+        "voice_suitable": true,
+        "triggers_remediation": true
+      }
+    ],
+    "tags": {
+      "subject": "Gynecology",
+      "subtopic": "Pelvic Inflammatory Disease",
+      "system": "Reproductive",
+      "exam": "Step 2 CK",
+      "difficulty": 2,
+      "high_yield": true
+    }
+  }
+]
