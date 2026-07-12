@@ -35,9 +35,11 @@ class InvestigationService:
     def __init__(
         self,
         *,
+        model: str | None = None,
         generic_generator: GenericInvestigationAgent | None = None,
         cxr_service: CXRService | None = None,
     ) -> None:
+        self.model = model
         self.generic_generator = generic_generator
         self.cxr_service = cxr_service
 
@@ -74,7 +76,7 @@ class InvestigationService:
 
     def _generic_generator(self) -> GenericInvestigationAgent:
         if self.generic_generator is None:
-            self.generic_generator = GenericInvestigationAgent()
+            self.generic_generator = GenericInvestigationAgent(model=self.model)
         return self.generic_generator
 
     def _cxr_service(self) -> CXRService:

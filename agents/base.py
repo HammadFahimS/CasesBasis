@@ -20,11 +20,20 @@ DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_TOGETHER_MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
 DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
-DEFAULT_CEREBRAS_MODEL = "gpt-oss-120b"
+# zai-glm-4.7 is the general-purpose reasoning model for the live voice sim
+# (nurse brain, routing, actors, director — everything that flows through
+# agent_runtime.complete) and the default for anything that doesn't pin a model.
+# gpt-oss-120b is reserved for two things where a stronger model is required:
+#   - ECG parameter generation (see CEREBRAS_ECG_MODEL + agents/ecg.py)
+#   - the manual case simulator, all of it (see CEREBRAS_MANUAL_MODEL +
+#     manual_sim_model() + backend/sim_core.py), because zai-glm-4.7 can't
+#     reliably satisfy the strict ClinicalCase/MedicalFacts schemas.
+DEFAULT_CEREBRAS_MODEL = "zai-glm-4.7"
+CEREBRAS_ECG_MODEL = "gpt-oss-120b"
+CEREBRAS_MANUAL_MODEL = "gpt-oss-120b"
 CEREBRAS_FALLBACK_MODELS = [
-    "gpt-oss-120b",
     "zai-glm-4.7",
-    "llama3.1-8b",
+    "gpt-oss-120b",
 ]
 TOGETHER_BASE_URL = "https://api.together.xyz/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -118,6 +127,18 @@ def resolve_model(provider: str, model: str | None) -> str:
     if provider == "cerebras":
         return os.getenv("CEREBRAS_MODEL", DEFAULT_CEREBRAS_MODEL)
     return os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+
+
+def manual_sim_model(provider: str | None = None) -> str | None:
+    """The model the manual case simulator must use, or ``None`` to accept the
+    provider default.
+
+    On Cerebras the default (``zai-glm-4.7``) can't reliably satisfy the manual
+    sim's strict ClinicalCase/MedicalFacts/investigation schemas, so we pin
+    ``gpt-oss-120b`` for every manual-sim agent regardless of the ``CEREBRAS_MODEL``
+    env default. Other providers keep their own default (return ``None``)."""
+    provider = provider or get_llm_provider()
+    return CEREBRAS_MANUAL_MODEL if provider == "cerebras" else None
 
 
 def build_llm_client(provider: str | None = None) -> Any:
