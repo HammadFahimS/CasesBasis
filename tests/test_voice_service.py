@@ -22,7 +22,7 @@ def test_synthesize_uses_elevenlabs_when_key_set(monkeypatch):
     monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
     calls = []
 
-    def fake_el(text, voice_id, stability, similarity, model_id, fmt):
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, style=0.0):
         calls.append((voice_id, model_id))
         return b"EL_AUDIO"
 
@@ -37,7 +37,7 @@ def test_synthesize_uses_nurse_default_when_voice_none(monkeypatch):
     monkeypatch.delenv("ELEVENLABS_NURSE_VOICE_ID", raising=False)
     received = {}
 
-    def fake_el(text, voice_id, stability, similarity, model_id, fmt):
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, style=0.0):
         received["voice_id"] = voice_id
         received["stability"] = stability
         return b"NURSE_AUDIO"
@@ -56,7 +56,7 @@ def test_synthesize_raises_on_elevenlabs_failure_no_fallback(monkeypatch):
     degrades to another vendor."""
     monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
 
-    def failing_el(text, voice_id, stability, similarity, model_id, fmt):
+    def failing_el(text, voice_id, stability, similarity, model_id, fmt, style=0.0):
         raise httpx.HTTPStatusError("503", request=None, response=_resp(503))
 
     monkeypatch.setattr(voice_service, "_el_tts_request", failing_el)
@@ -70,7 +70,7 @@ def test_synthesize_el_per_actor_stability(monkeypatch):
     monkeypatch.delenv("ELEVENLABS_PATIENT_VOICE_ID", raising=False)
     received = {}
 
-    def fake_el(text, voice_id, stability, similarity, model_id, fmt):
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, style=0.0):
         received["stability"] = stability
         received["similarity"] = similarity
         return b"PATIENT_AUDIO"
@@ -95,3 +95,144 @@ def test_transcribe_requires_elevenlabs_key(monkeypatch):
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
     with pytest.raises(RuntimeError):
         voice_service.transcribe(b"\x00\x01", "audio/webm")
+
+
+# ── Extreme tier selects the ElevenLabs frontier model ───────────────────────
+
+def test_synthesize_extreme_tier_uses_frontier_model(monkeypatch):
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    calls = []
+
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, style=0.0):
+        calls.append(model_id)
+        return b"EL_AUDIO"
+
+    monkeypatch.setattr(voice_service, "_el_tts_request", fake_el)
+    voice_service.synthesize("hello", "21m00Tcm4TlvDq8ikWAM", tier="extreme")
+    voice_service.synthesize("hello", "21m00Tcm4TlvDq8ikWAM", tier="models")
+    voice_service.synthesize("hello", "21m00Tcm4TlvDq8ikWAM")
+    assert calls == [voice_service.EL_TTS_MODEL_V3,
+                     voice_service.EL_TTS_MODEL,
+                     voice_service.EL_TTS_MODEL]
+
+
+def test_synthesize_stream_extreme_tier_passes_frontier_model(monkeypatch):
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    seen = {}
+
+    def fake_stream(text, voice_id, stability, similarity, model_id=voice_service.EL_TTS_MODEL, style=0.0):
+        seen["model_id"] = model_id
+        yield b"PCM"
+
+    monkeypatch.setattr(voice_service, "_el_tts_stream", fake_stream)
+    _mt, gen = voice_service.synthesize_stream("hi", None, tier="extreme")
+    list(gen)
+    assert seen["model_id"] == voice_service.EL_TTS_MODEL_V3
+
+
+# ── Speak-time clinical-abbreviation normalisation ───────────────────────────
+
+def test_normalize_for_speech_units_and_acronyms():
+    from backend.speech_normalize import normalize_for_speech as N
+    assert N("SpO2 94% on 15 L O2") == "oxygen saturation 94 percent on 15 liters oxygen"
+    assert N("BP 120/80, HR 110 bpm") == "blood pressure 120 over 80, heart rate 110 beats per minute"
+    assert N("Give 5 mg IV morphine.") == "Give 5 milligrams I V morphine."
+    assert N("Na 138 mmol/L, glucose 180 mg/dL") == \
+        "Na 138 millimoles per liter, glucose 180 milligrams per deciliter"
+    assert N("Temp 38.5°C, MAP 65 mmHg") == "Temp 38.5 degrees Celsius, MAP 65 millimeters of mercury"
+    assert N("SpO₂ 88%") == "oxygen saturation 88 percent"
+
+
+def test_normalize_for_speech_leaves_prose_untouched():
+    from backend.speech_normalize import normalize_for_speech as N
+    prose = "The patient is comfortable and talking in full sentences."
+    assert N(prose) == prose
+    assert N("") == ""
+
+
+# ── Pronunciation dictionary (phonetic pass) is optional + graceful ──────────
+
+def test_pronunciation_rules_well_formed():
+    from backend import pronunciation
+    assert pronunciation.RULES, "lexicon should not be empty"
+    for r in pronunciation.RULES:
+        assert r.get("string_to_replace"), r
+        assert r.get("type") == "alias", r
+        assert r.get("alias"), r
+
+
+def test_pronunciation_locators_empty_without_key(monkeypatch):
+    from backend import pronunciation
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_PRONUNCIATION_DICTIONARY_ID", raising=False)
+    monkeypatch.setattr(pronunciation, "_locator", pronunciation._UNSET)
+    assert pronunciation.tts_locators() == []
+
+
+def test_pronunciation_env_pin_skips_network(monkeypatch):
+    from backend import pronunciation
+    monkeypatch.setenv("ELEVENLABS_PRONUNCIATION_DICTIONARY_ID", "pd_123")
+    monkeypatch.setenv("ELEVENLABS_PRONUNCIATION_VERSION_ID", "v7")
+    monkeypatch.setattr(pronunciation, "_locator", pronunciation._UNSET)
+    boom = lambda *a, **k: (_ for _ in ()).throw(AssertionError("network hit on env pin"))
+    monkeypatch.setattr(pronunciation, "_find_existing", boom)
+    monkeypatch.setattr(pronunciation, "_create", boom)
+    assert pronunciation.tts_locators() == [
+        {"pronunciation_dictionary_id": "pd_123", "version_id": "v7"}
+    ]
+
+
+def test_pronunciation_resolution_failure_degrades(monkeypatch):
+    from backend import pronunciation
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    monkeypatch.delenv("ELEVENLABS_PRONUNCIATION_DICTIONARY_ID", raising=False)
+    monkeypatch.setattr(pronunciation, "_locator", pronunciation._UNSET)
+    def boom(*a, **k):
+        raise RuntimeError("elevenlabs down")
+    monkeypatch.setattr(pronunciation, "_find_existing", boom)
+    assert pronunciation.tts_locators() == []
+
+
+# ── Expressiveness (Extreme-only) raises the TTS style ───────────────────────
+
+def test_synthesize_expressive_sets_style(monkeypatch):
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    seen = {}
+
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, style=0.0):
+        seen["style"] = style
+        return b"A"
+
+    monkeypatch.setattr(voice_service, "_el_tts_request", fake_el)
+    voice_service.synthesize("hi", "v", tier="extreme", expressive=True)
+    assert seen["style"] == voice_service.EL_EXPRESSIVE_STYLE
+    voice_service.synthesize("hi", "v", tier="extreme", expressive=False)
+    assert seen["style"] == 0.0
+
+
+def test_head_speaker_has_distinct_voice(monkeypatch):
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    monkeypatch.delenv("ELEVENLABS_HEAD_VOICE_ID", raising=False)
+    from backend.actors import speaker_voice
+    assert speaker_voice("head") == "onwK4e9ZLuTAKqWW03F9"
+
+
+# ── Head Physician clarify only for substantive, unattributed requests ───────
+
+def test_is_unclear_request_gating():
+    from backend import routing
+
+    class I:
+        def __init__(self, op="chitchat", addressee=None):
+            self.op = op
+            self.addressee = addressee
+
+    assert routing._is_unclear_request(I(), "can we please sort this out now") is True
+    assert routing._is_unclear_request(I(), "what do you think about that?") is True
+    # short acks / filler must NOT nag
+    assert routing._is_unclear_request(I(), "okay") is False
+    assert routing._is_unclear_request(I(), "hmm right") is False
+    # interpreter already attributed it → not unclear
+    assert routing._is_unclear_request(I(addressee="patient"), "how are you feeling today friend") is False
+    # non-chitchat speech-acts are routed above, never treated as unclear here
+    assert routing._is_unclear_request(I(op="order_medication"), "give five of morphine now please") is False

@@ -19,12 +19,26 @@ from dataclasses import asdict, dataclass
 
 @dataclass
 class Criterion:
-    """One graded expectation for the run."""
+    """One graded expectation for the run.
+
+    Two flavours, distinguished by ``guardrail``:
+
+    * **credit** (``guardrail=False``) — something the resident must *actively do*
+      to earn marks (name the diagnosis, give the right drug). ``weight`` is its
+      share of the positive score.
+    * **guardrail** (``guardrail=True``) — a pitfall to avoid (a critical error, a
+      contraindicated drug). It is *penalty-only*: passing it earns nothing (you
+      don't get points for simply not making a mistake), and failing it subtracts
+      ``weight`` points. This is what stops a do-nothing run from banking free
+      marks for "avoided errors".
+    """
 
     id: str
     label: str
     met: bool
     detail: str = ""
+    weight: int = 1
+    guardrail: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -47,10 +61,10 @@ def _score_recognition(session) -> Criterion:
     targets = [k for k in (case.meta.keywords or []) if k]
     hit = next((k for k in targets if _norm(k) and _norm(k) in said), None)
     if hit:
-        return Criterion("recognition", "Recognised the diagnosis", True, f"Named “{hit}”.")
+        return Criterion("recognition", "Recognised the diagnosis", True, f"Named “{hit}”.", weight=REC_WEIGHT)
     if not said.strip():
-        return Criterion("recognition", "Recognised the diagnosis", False, "No working diagnosis was stated.")
-    return Criterion("recognition", "Recognised the diagnosis", False, "Working diagnosis didn't match the target condition.")
+        return Criterion("recognition", "Recognised the diagnosis", False, "No working diagnosis was stated.", weight=REC_WEIGHT)
+    return Criterion("recognition", "Recognised the diagnosis", False, "Working diagnosis didn't match the target condition.", weight=REC_WEIGHT)
 
 
 def _order_texts(session) -> list[str]:
@@ -80,14 +94,17 @@ def _score_medications(session) -> list[Criterion]:
         matched = [t for t in texts if any(d and d in t for d in drugs)]
         given = bool(matched)
         if item.expectation == "avoid":
+            # A contraindicated drug is a pitfall, not an earnable point: penalty-only.
             out.append(Criterion(
                 f"med-{item.id}", item.label, not given,
                 item.note if given else "Correctly not given.",
+                weight=AVOID_PENALTY, guardrail=True,
             ))
         elif item.expectation == "preferred":
             out.append(Criterion(
                 f"med-{item.id}", item.label, given,
                 "" if given else item.note,
+                weight=MED_WEIGHT,
             ))
         elif item.expectation == "dose_adjust":
             if not given:
@@ -97,16 +114,31 @@ def _score_medications(session) -> list[Criterion]:
             out.append(Criterion(
                 f"med-{item.id}", item.label, tuned,
                 "" if tuned else item.note,
+                weight=MED_WEIGHT,
             ))
     return out
 
 
+# --- scoring weights ---------------------------------------------------------
+# Credit weights are relative shares of the positive score; guardrail weights are
+# absolute point penalties subtracted when the pitfall is triggered.
+REC_WEIGHT = 3          # naming the diagnosis is the biggest single credit
+MED_WEIGHT = 2          # each preferred / correctly-dosed drug
+SAFETY_PENALTY = 40     # a critical error is severe
+AVOID_PENALTY = 25      # giving a contraindicated drug
+
+
 def _score_no_critical_error(session) -> Criterion:
-    """Did the run avoid the case's authored critical-error paths?"""
+    """Did the run avoid the case's authored critical-error paths?
+
+    A guardrail: avoiding errors earns nothing on its own (otherwise doing nothing
+    banks free marks), but triggering one costs ``SAFETY_PENALTY`` points."""
     errors = list(session.engine.run.critical_errors)
     if errors:
-        return Criterion("safety", "Avoided critical errors", False, f"{len(errors)} critical error(s).")
-    return Criterion("safety", "Avoided critical errors", True, "No critical errors.")
+        return Criterion("safety", "Avoided critical errors", False, f"{len(errors)} critical error(s).",
+                         weight=SAFETY_PENALTY, guardrail=True)
+    return Criterion("safety", "Avoided critical errors", True, "No critical errors.",
+                     weight=SAFETY_PENALTY, guardrail=True)
 
 
 # Scorers run in order; each returns exactly one Criterion. Add new scorers here
@@ -133,11 +165,27 @@ def score_run(session) -> list[Criterion]:
 
 
 def overall_score(criteria: list[Criterion]) -> int:
-    """A single 0-100 figure for analytics: the percent of criteria met.
+    """A single 0-100 figure for analytics.
 
-    Empty criteria → 0 (nothing demonstrated). Rounded to the nearest integer so
-    it slots straight into the same charts as the manual-sim ``overall_score``."""
+    The positive score is the weighted share of **credit** criteria the resident
+    actually met (name the diagnosis, give the right drugs). **Guardrail** criteria
+    don't contribute credit — they only subtract their ``weight`` when breached.
+
+    This is what fixes the "50 for doing nothing" bug: an idle run meets no credit
+    criteria (base 0) and, because it took no harmful action, breaches no guardrails
+    (no penalty) — so it scores 0, not 50. Empty criteria → 0. Rounded to the
+    nearest integer so it slots into the same charts as the manual-sim score."""
     if not criteria:
         return 0
-    met = sum(1 for c in criteria if c.met)
-    return round(100 * met / len(criteria))
+    credits = [c for c in criteria if not c.guardrail]
+    guards = [c for c in criteria if c.guardrail]
+    if credits:
+        cw = sum(max(1, c.weight) for c in credits)
+        met = sum(max(1, c.weight) for c in credits if c.met)
+        base = 100.0 * met / cw
+    elif guards:
+        base = 100.0  # nothing to actively earn — full marks unless a pitfall is hit
+    else:
+        return 0
+    penalty = sum(c.weight for c in guards if not c.met)
+    return max(0, min(100, round(base - penalty)))

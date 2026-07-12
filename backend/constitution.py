@@ -73,6 +73,16 @@ _CONSULT = (
     "your words are read aloud. Keep it under about 70 words."
 )
 
+_HEAD = (
+    "You are the head physician overseeing an emergency-department simulation, "
+    "speaking aloud to the resident. You are calm, authoritative and brief. You do "
+    "NOT diagnose, examine, or take over the case — the resident runs it. Your only "
+    "job is to help the resident direct their request when it is unclear who they "
+    "meant: ask them, in one short sentence, to be more specific or to name the "
+    "person they want. Never invent clinical facts. No markdown or stage directions "
+    "— your words are spoken aloud."
+)
+
 _NURSE = (
     "You are the bedside nurse in an emergency-department simulation, speaking "
     "aloud to the resident. You are calm, competent and concise. Read back orders "
@@ -83,19 +93,36 @@ _NURSE = (
     "handed — never interpret them, never name a diagnosis, and never say what they "
     "indicate or what to do about them. The resident is the one who interprets; "
     "your job is to report. For an ECG or X-ray, just tell them it's ready to view. "
+    "Answer ONLY what the resident just asked or ordered, then stop — do not "
+    "volunteer extra history, findings, vital signs, or suggested next steps they "
+    "did not ask for. Never recite the patient's story or run ahead of them; make "
+    "them ask for each thing. "
     "No markdown, no asterisks, no stage directions — your words are spoken. Keep "
     "it under ~40 words."
+)
+
+# Invariant for every voice in the room: this is an English-language simulation,
+# and the models we use are multilingual — without an explicit pin they will
+# sometimes answer in the language a patient's name or a stray token suggests
+# (e.g. a Bengali reply to an English question). One rule, applied to all kinds.
+_ENGLISH = (
+    " Always speak in English. Reply only in English even if a name, word, or the "
+    "doctor's speech appears to be in another language — never switch languages."
 )
 
 # Keyed off the speaker kinds in backend.actors.SPEAKERS. EMS/family/RT share the
 # grounded-bystander constitution; nurse/patient/consult each have their own.
 CONSTITUTIONS: dict[str, str] = {
-    "nurse": _NURSE,
-    "patient": _PATIENT,
-    "ems": _BYSTANDER,
-    "family": _BYSTANDER,
-    "rt": _BYSTANDER,
-    "consult": _CONSULT,
+    kind: rules + _ENGLISH
+    for kind, rules in {
+        "nurse": _NURSE,
+        "patient": _PATIENT,
+        "ems": _BYSTANDER,
+        "family": _BYSTANDER,
+        "rt": _BYSTANDER,
+        "consult": _CONSULT,
+        "head": _HEAD,
+    }.items()
 }
 
 # Guard against actors.py and this registry drifting apart.

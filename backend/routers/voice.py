@@ -79,6 +79,10 @@ def _voice_session_payload(session: Any) -> dict[str, Any]:
             "opening_vignette": case.presentation.opening_vignette,
         },
         "vitals": engine.current_vitals().model_dump(exclude_none=True),
+        # The engine's scenario clock (seconds). The front-end seeds its scenario
+        # timer from this and re-syncs off the live event `t`, so timed arrivals show
+        # at their true time instead of a cosmetic client counter.
+        "elapsed_seconds": engine.run.elapsed_seconds,
         "state": {"id": engine.run.current_state_id, "name": engine.state.name},
         # The case's own menu, so the panels offer only orderable tests / examinable
         # systems / pageable consultants (everything here returns a real result).
@@ -150,6 +154,7 @@ def _turn_payload(turn: Any) -> dict[str, Any]:
         "working_dx": getattr(turn, "working_dx", None),
         "cues": getattr(turn, "cues", []),
         "needs_addressee": getattr(turn, "needs_addressee", False),
+        "summon": getattr(turn, "summon", None),
     }
 
 
@@ -601,13 +606,17 @@ def api_voice_tts(body: dict[str, Any], request: Request):
             stability_override = float(raw_stab)
         except (TypeError, ValueError):
             pass
+    # Speech tier from the launch chooser: 'extreme' → ElevenLabs frontier model.
+    tier = body.get("tier")
+    # Expressiveness opt-in (Extreme only) → more emotional style on the frontier model.
+    expressive = bool(body.get("expressive"))
 
     from backend.voice_service import synthesize_stream
     from fastapi.responses import StreamingResponse
 
     speaker_label = body.get("speaker") or "nurse"
     t0 = time.perf_counter()
-    media_type, chunks = synthesize_stream(text, voice, stability_override=stability_override)
+    media_type, chunks = synthesize_stream(text, voice, stability_override=stability_override, tier=tier, expressive=expressive)
 
     # ElevenLabs streams PCM-16000 (audio/pcm). Probe the first chunk before
     # committing to the content-type so a failed stream (auth/voice/quota error,
@@ -630,14 +639,14 @@ def api_voice_tts(body: dict[str, Any], request: Request):
     # PCM, so a single ElevenLabs hiccup doesn't silence a non-nurse speaker.
     if not first_chunk:
         logger.info("EL TTS stream empty for speaker=%s; retrying the stream once", speaker_label)
-        _media2, chunks2 = synthesize_stream(text, voice, stability_override=stability_override)
+        _media2, chunks2 = synthesize_stream(text, voice, stability_override=stability_override, tier=tier, expressive=expressive)
         first_chunk, chunks = _probe(chunks2)
 
     if not first_chunk:
         logger.info("EL TTS stream returned no bytes for speaker=%s; retrying non-streaming", speaker_label)
         from backend.voice_service import synthesize
         try:
-            audio = synthesize(text, voice, stability_override=stability_override)
+            audio = synthesize(text, voice, stability_override=stability_override, tier=tier, expressive=expressive)
             return Response(content=audio, media_type="audio/mpeg")
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"synthesis failed: {exc}")

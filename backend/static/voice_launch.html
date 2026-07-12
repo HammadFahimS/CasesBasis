@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CasesBasis — Start Live Case</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink-950:#0a0f17; --ink-900:#111824; --ink-800:#1a2332;
+    --ink-700:#273347; --ink-600:#3b4a63; --ink-500:#5b6b85;
+    --ink-400:#8696b0; --ink-300:#b3becf; --ink-200:#d6dde7; --ink-100:#e9edf2; --ink-50:#eef3f9;
+    --teal:#3aa7ba; --teal-deep:#0e8a9e; --teal-glow:#5fd8e6;
+    --amber:#d99a3c; --amber-deep:#b76e00;
+    --line:#1e2a3d; --panel:#111824; --panel-2:#131d2c; --raise:#182236;
+    --glow: 14,138,158;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body {
+    font-family:'Inter', system-ui, sans-serif;
+    background: radial-gradient(130% 120% at 50% 38%, #111a27 0%, #0c121d 45%, #080c14 100%);
+    color:var(--ink-200);
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh; display:grid; place-items:center; padding:24px;
+  }
+  .mono { font-family:'JetBrains Mono', ui-monospace, monospace; }
+  a { color:inherit; }
+
+  /* exit affordance */
+  .exit {
+    position:fixed; top:22px; left:22px; z-index:7;
+    display:inline-flex; align-items:center; gap:7px;
+    font-family:'JetBrains Mono', monospace; font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--ink-500); text-decoration:none; padding:8px 13px; border-radius:999px;
+    border:1px solid rgba(255,255,255,0.06); background:rgba(13,20,31,0.4); backdrop-filter:blur(8px);
+    transition:color .2s, border-color .2s;
+  }
+  .exit:hover { color:var(--ink-200); border-color:var(--teal-deep); }
+
+  /* card */
+  .launch {
+    width:min(680px, 100%);
+    background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+    border:1px solid var(--line); border-radius:22px;
+    box-shadow:0 30px 80px -30px rgba(0,0,0,0.8);
+    padding:34px 34px 30px; position:relative; overflow:hidden;
+  }
+  .launch::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(120% 80% at 50% -10%, rgba(var(--glow),0.14), transparent 55%);
+  }
+
+  /* header row: brand + ui toggle in the corner */
+  .lh { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; position:relative; }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .orb-mark {
+    width:40px; height:40px; border-radius:50%; flex-shrink:0; position:relative;
+    background:radial-gradient(circle at 38% 34%, #7fe9f2, #2aa6bd 42%, #0c5866 78%);
+    box-shadow:0 0 20px -2px rgba(var(--glow),0.65), inset 0 0 0 1px rgba(255,255,255,0.25);
+    animation:breathe 4.5s ease-in-out infinite;
+  }
+  @keyframes breathe { 0%,100%{ box-shadow:0 0 16px -2px rgba(var(--glow),0.55), inset 0 0 0 1px rgba(255,255,255,0.22);} 50%{ box-shadow:0 0 28px 2px rgba(var(--glow),0.8), inset 0 0 0 1px rgba(255,255,255,0.32);} }
+  .brand .bt .n { font-size:16px; font-weight:700; color:var(--ink-50); letter-spacing:0.01em; }
+  .brand .bt .n .lc { color:var(--teal-glow); font-weight:600; }
+  .brand .bt .s { font-size:10.5px; color:var(--ink-500); letter-spacing:0.16em; text-transform:uppercase; margin-top:2px; font-family:'JetBrains Mono',monospace; }
+
+  /* UI toggle (functional ⟷ cool), corner */
+  .ui-toggle { text-align:right; }
+  .ui-toggle .tlbl { font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:0.2em; text-transform:uppercase; color:var(--ink-600); margin-bottom:6px; }
+  .seg {
+    display:inline-flex; padding:3px; border-radius:999px;
+    background:var(--ink-950); border:1px solid var(--line);
+  }
+  .seg button {
+    appearance:none; border:0; cursor:pointer; font-family:'JetBrains Mono',monospace;
+    font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--ink-400); background:transparent; padding:7px 15px; border-radius:999px;
+    transition:all .22s;
+  }
+  .seg button.on { color:#04181c; background:linear-gradient(180deg, var(--teal-glow), var(--teal-deep)); box-shadow:0 4px 14px -4px rgba(var(--glow),0.7); }
+  .seg button:not(.on):hover { color:var(--ink-100); }
+
+  /* case line */
+  .case-line { margin:26px 0 6px; }
+  .case-eyebrow { font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase; color:var(--ink-500); }
+  .case-title { font-size:22px; font-weight:700; color:var(--ink-50); margin-top:5px; line-height:1.2; }
+  .case-sub { font-size:12.5px; color:var(--ink-400); margin-top:5px; line-height:1.5; }
+
+  .sec-label { font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase; color:var(--ink-500); margin:24px 0 10px; }
+
+  /* speech model options */
+  .opts { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .opt {
+    text-align:left; cursor:pointer; position:relative;
+    background:var(--panel); border:1px solid var(--line); border-radius:15px;
+    padding:16px 16px 15px; transition:border-color .2s, background .2s, box-shadow .2s;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .opt:hover { border-color:var(--teal-deep); }
+  .opt.sel { border-color:var(--teal-glow); background:linear-gradient(180deg, rgba(var(--glow),0.14), rgba(var(--glow),0.05)); box-shadow:0 0 0 1px rgba(var(--glow),0.35) inset; }
+  .opt .oic { width:34px; height:34px; border-radius:10px; display:grid; place-items:center; color:var(--teal-glow); background:var(--raise); border:1px solid var(--line); margin-bottom:6px; }
+  .opt.sel .oic { background:rgba(var(--glow),0.2); border-color:var(--teal-deep); }
+  .opt .ott { font-size:14px; font-weight:700; color:var(--ink-50); display:flex; align-items:center; gap:8px; }
+  .opt .otag { font-family:'JetBrains Mono',monospace; font-size:8.5px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; padding:2px 7px; border-radius:20px; }
+  .opt .otag.free { color:var(--teal-glow); background:rgba(var(--glow),0.16); border:1px solid var(--teal-deep); }
+  .opt .otag.cost { color:var(--amber); background:rgba(217,154,60,0.14); border:1px solid rgba(217,154,60,0.4); }
+  .opt .osub { font-size:11.5px; color:var(--ink-400); line-height:1.5; margin-top:2px; }
+  .opt .check { position:absolute; top:13px; right:13px; width:18px; height:18px; border-radius:50%; border:1.5px solid var(--ink-600); display:grid; place-items:center; color:transparent; transition:all .2s; }
+  .opt.sel .check { border-color:var(--teal-glow); background:var(--teal-glow); color:#04181c; }
+  .expr { margin-top:14px; display:flex; align-items:center; gap:14px; padding:13px 16px; border-radius:12px; border:1px solid var(--line); background:var(--panel-2); transition:opacity .2s; }
+  .expr.disabled { opacity:0.4; }
+  .expr.disabled .expr-sw { cursor:not-allowed; }
+  .expr .expr-txt { flex:1; }
+  .expr .expr-title { font-size:13px; font-weight:700; color:var(--ink-50); display:flex; align-items:center; gap:8px; }
+  .expr .expr-sub { font-size:11px; color:var(--ink-400); line-height:1.5; margin-top:2px; }
+  .expr-sw { width:42px; height:24px; border-radius:20px; background:var(--ink-700); border:1px solid var(--line); position:relative; cursor:pointer; flex-shrink:0; transition:background .2s; }
+  .expr-sw::after { content:''; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:var(--ink-300); transition:all .2s; }
+  .expr.on .expr-sw { background:var(--teal-deep); }
+  .expr.on .expr-sw::after { left:20px; background:var(--teal-glow); }
+
+  /* start row */
+  .foot { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:26px; }
+  .foot-note { font-size:11px; color:var(--ink-500); line-height:1.5; max-width:340px; }
+  .start {
+    display:inline-flex; align-items:center; gap:10px; cursor:pointer;
+    font-size:14px; font-weight:700; letter-spacing:0.02em; color:#04181c;
+    background:linear-gradient(180deg, var(--teal-glow), var(--teal-deep));
+    border:1px solid var(--teal-glow); border-radius:13px; padding:14px 26px;
+    box-shadow:0 12px 28px -10px rgba(var(--glow),0.8); transition:filter .2s, transform .1s;
+    white-space:nowrap;
+  }
+  .start:hover { filter:brightness(1.06); }
+  .start:active { transform:translateY(1px); }
+
+  /* golden lightning bolt beside the Extreme label */
+  .ott .bolt { color:#f2c94c; flex-shrink:0; filter:drop-shadow(0 0 4px rgba(242,201,76,0.65)); }
+
+  @media (max-width:560px){
+    .opts { grid-template-columns:1fr; }
+    .lh { flex-direction:column; }
+    .ui-toggle { text-align:left; }
+    .foot { flex-direction:column; align-items:stretch; }
+    .start { justify-content:center; }
+  }
+
+  /* ── cinematic intro: mark → wordmark → dive into the room ── */
+  .introfx {
+    position:fixed; inset:0; z-index:9999;
+    display:grid; place-items:center;
+    background:radial-gradient(130% 120% at 50% 46%, #0e1622 0%, #080c14 55%, #04070c 100%);
+    opacity:0; visibility:hidden; pointer-events:none;
+    transition:opacity .18s ease;
+  }
+  .introfx.play { opacity:1; visibility:visible; pointer-events:all; }
+  .ifx-stage {
+    display:grid; place-items:center; transform-origin:50% 50%;
+    will-change:transform, opacity, filter;
+  }
+  .introfx.play .ifx-stage { animation:ifxDive .82s cubic-bezier(.72,0,.28,1) 1.42s forwards; }
+  .ifx-lockup { display:flex; align-items:center; gap:20px; }
+  .ifx-mark {
+    width:78px; height:78px; border-radius:50%; flex-shrink:0;
+    background:radial-gradient(circle at 38% 34%, #7fe9f2, #2aa6bd 42%, #0c5866 78%);
+    box-shadow:0 0 44px -2px rgba(var(--glow),0.75), inset 0 0 0 1.5px rgba(255,255,255,0.28);
+    transform:scale(.18); opacity:0; will-change:transform, opacity;
+  }
+  .introfx.play .ifx-mark { animation:ifxMarkIn .74s cubic-bezier(.2,.85,.25,1) forwards; }
+  .ifx-word {
+    font-family:'Inter', system-ui, sans-serif; font-weight:700;
+    font-size:clamp(40px, 8vw, 66px); letter-spacing:-0.01em; line-height:1;
+    color:var(--ink-50); white-space:nowrap; overflow:hidden;
+    max-width:0; opacity:0; transform:translateX(-14px); will-change:max-width, opacity, transform;
+  }
+  .ifx-word .lc { color:var(--teal-glow); }
+  .introfx.play .ifx-word { animation:ifxWordIn .64s cubic-bezier(.2,.85,.25,1) .64s forwards; }
+  @keyframes ifxMarkIn {
+    0%   { transform:scale(.18) rotate(-20deg); opacity:0; }
+    55%  { opacity:1; }
+    100% { transform:scale(1) rotate(0); opacity:1; }
+  }
+  @keyframes ifxWordIn {
+    0%   { max-width:0; opacity:0; transform:translateX(-14px); }
+    100% { max-width:680px; opacity:1; transform:translateX(0); }
+  }
+  @keyframes ifxDive {
+    0%   { transform:scale(1); opacity:1; filter:blur(0); }
+    100% { transform:scale(20); opacity:0; filter:blur(7px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .introfx.play .ifx-stage,
+    .introfx.play .ifx-mark,
+    .introfx.play .ifx-word { animation:none; }
+  }
+</style>
+</head>
+<body>
+
+<a class="exit" href="/crud-simulations">
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+  Back to cases
+</a>
+
+<div class="launch">
+  <div class="lh">
+    <div class="brand">
+      <div class="orb-mark"></div>
+      <div class="bt">
+        <div class="n">Cases<span class="lc">Basis</span></div>
+        <div class="s">Live Simulation</div>
+      </div>
+    </div>
+
+    <div class="ui-toggle">
+      <div class="tlbl">Interface</div>
+      <div class="seg" id="uiSeg" role="tablist" aria-label="Interface style">
+        <button type="button" data-ui="functional" class="on" role="tab" aria-selected="true">Functional</button>
+        <button type="button" data-ui="cool" role="tab" aria-selected="false">Cool</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="case-line">
+    <div class="case-eyebrow">You're about to start</div>
+    <div class="case-title" id="caseTitle">Live case</div>
+    <div class="case-sub" id="caseSub">Choose your speech mode and interface, then step into the room.</div>
+  </div>
+
+  <div class="sec-label">Speech models</div>
+  <div class="opts" id="speechOpts">
+    <button type="button" class="opt sel" data-speech="native">
+      <span class="check"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 4.5"/></svg></span>
+      <span class="oic"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="1.5" width="4" height="8" rx="2"/><path d="M3.5 7c0 2.5 2 4.4 4.5 4.4S12.5 9.5 12.5 7M8 11.4v3M5.5 14.4h5"/></svg></span>
+      <span class="ott">Native <span class="otag free">Zero cost</span></span>
+      <span class="osub">Your browser's built-in dictation &amp; voice. Nothing billed, lower accuracy on drug names.</span>
+    </button>
+    <button type="button" class="opt" data-speech="models">
+      <span class="check"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 4.5"/></svg></span>
+      <span class="oic"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8c1.6-3.6 10.4-3.6 12 0M2 8c1.6 3.6 10.4 3.6 12 0"/><circle cx="8" cy="8" r="2"/></svg></span>
+      <span class="ott">Speech models <span class="otag cost">Costly</span></span>
+      <span class="osub">ElevenLabs premium voice AI models. Best accuracy for clinical terms.</span>
+    </button>
+    <button type="button" class="opt" data-speech="extreme">
+      <span class="check"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 4.5"/></svg></span>
+      <span class="oic"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5l1.9 4.2 4.6.5-3.4 3.1 1 4.5L8 11.6 3.9 13.8l1-4.5L1.5 6.2l4.6-.5z"/></svg></span>
+      <span class="ott">Extreme <svg class="bolt" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M9.3 1.2L3.3 9.2h3.4l-1 5.6 6-8.1H8.3z"/></svg> <span class="otag cost">Frontier</span></span>
+      <span class="osub">Uses ElevenLabs frontier models.</span>
+    </button>
+  </div>
+
+  <div class="expr disabled" id="exprRow">
+    <div class="expr-txt">
+      <div class="expr-title">Expressiveness <span class="otag cost">Frontier</span></div>
+      <div class="expr-sub">Emotionally expressive, context-aware voices. Available with Extreme.</div>
+    </div>
+    <div class="expr-sw" id="exprSw" role="switch" aria-checked="false" tabindex="0"></div>
+  </div>
+
+  <div class="foot">
+    <div class="foot-note" id="footNote">Native uses your device's speech engine — no key required. You can refresh to change any of this.</div>
+    <button class="start" id="startBtn">
+      Start simulation
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h9M8.5 4.5L12 8l-3.5 3.5"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="introfx" id="introFx" aria-hidden="true">
+  <div class="ifx-stage">
+    <div class="ifx-lockup">
+      <div class="ifx-mark"></div>
+      <div class="ifx-word">Cases<span class="lc">Basis</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const qs = new URLSearchParams(location.search);
+  const caseId = qs.get('case');
+  const sessionId = qs.get('session');
+
+  // ── state ──
+  let ui = 'functional';      // default per product spec
+  let speech = 'native';      // default speech mode (zero cost); user can switch
+  let expressive = false;     // Extreme-only: emotionally expressive voices
+
+  // ── UI toggle (corner) ──
+  const uiSeg = document.getElementById('uiSeg');
+  uiSeg.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    ui = b.dataset.ui;
+    uiSeg.querySelectorAll('button').forEach(x => { x.classList.toggle('on', x===b); x.setAttribute('aria-selected', x===b); });
+  }));
+
+  // ── speech model cards ──
+  const speechOpts = document.getElementById('speechOpts');
+  const exprRow = document.getElementById('exprRow');
+  const exprSw = document.getElementById('exprSw');
+  function syncExpr(){
+    const isExtreme = (speech === 'extreme');
+    exprRow.classList.toggle('disabled', !isExtreme);
+    if (!isExtreme){ expressive = false; exprRow.classList.remove('on'); exprSw.setAttribute('aria-checked', 'false'); }
+  }
+  function toggleExpr(){
+    if (speech !== 'extreme') return;   // only clickable under Extreme
+    expressive = !expressive;
+    exprRow.classList.toggle('on', expressive);
+    exprSw.setAttribute('aria-checked', String(expressive));
+  }
+  exprSw.addEventListener('click', toggleExpr);
+  exprSw.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggleExpr(); } });
+
+  speechOpts.querySelectorAll('.opt').forEach(o => o.addEventListener('click', () => {
+    speech = o.dataset.speech;
+    speechOpts.querySelectorAll('.opt').forEach(x => x.classList.toggle('sel', x===o));
+    syncExpr();
+    document.getElementById('footNote').textContent =
+      speech === 'extreme' ? 'Extreme uses ElevenLabs frontier models — highest fidelity, higher latency and cost. You can refresh to change any of this.'
+      : speech === 'models' ? 'Speech models use ElevenLabs premium voice AI (paid). You can refresh to change any of this.'
+      : "Native uses your device's speech engine — no key required. You can refresh to change any of this.";
+  }));
+
+  // ── case title (best-effort fetch for a nicer header) ──
+  if (caseId) {
+    document.getElementById('caseSub').textContent = 'Case ' + caseId;
+    fetch('/api/simulated-cases').then(r => r.ok ? r.json() : null).then(j => {
+      if (!j) return;
+      const c = (j.cases || []).find(x => x.id === caseId);
+      if (c) {
+        document.getElementById('caseTitle').textContent = c.title || 'Live case';
+        const bits = [c.specialty, c.difficulty].filter(Boolean).join(' · ');
+        document.getElementById('caseSub').textContent = c.summary || bits || '';
+      }
+    }).catch(()=>{});
+  } else if (sessionId) {
+    document.getElementById('caseEyebrow') && null;
+    document.querySelector('.case-eyebrow').textContent = "You're about to resume";
+    document.getElementById('caseTitle').textContent = 'Live session';
+    document.getElementById('caseSub').textContent = 'Session ' + sessionId;
+  }
+
+  // ── launch ──
+  document.getElementById('startBtn').addEventListener('click', () => {
+    const p = new URLSearchParams();
+    p.set('ui', ui);
+    p.set('speech', speech);
+    if (expressive && speech === 'extreme') p.set('expressive', '1');
+    if (caseId) p.set('case', caseId);
+    if (sessionId) p.set('session', sessionId);
+    const dest = '/simulator/voice-room?' + p.toString();
+
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const fx = document.getElementById('introFx');
+    if (reduce || !fx) { location.href = dest; return; }
+    // mark → wordmark reveal → dive into the room, then navigate.
+    // intro=1 tells the room page to continue the dive as an emerge-from-orb reveal.
+    fx.classList.add('play');
+    setTimeout(() => { location.href = dest + '&intro=1'; }, 2150);
+  });
+})();
+</script>
+</body>
+</html>

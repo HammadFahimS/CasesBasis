@@ -107,12 +107,29 @@ def _el_tts_request(
     similarity: float,
     model_id: str,
     fmt: str,
+    style: float = 0.0,
 ) -> bytes:
     """ElevenLabs TTS request.
 
     ``fmt='mp3'`` maps to ``mp3_44100_128`` (128 kbps, 44.1 kHz). Pass a raw
     ElevenLabs format string (e.g. ``pcm_16000``) directly for other formats."""
+    from backend.speech_normalize import normalize_for_speech
+    from backend.pronunciation import tts_locators
+    text = normalize_for_speech(text)
     output_format = "mp3_44100_128" if fmt == "mp3" else fmt
+    body = {
+        "text": text,
+        "model_id": model_id,
+        "voice_settings": {
+            "stability": stability,
+            "similarity_boost": similarity,
+            "style": style,
+            "use_speaker_boost": True,
+        },
+    }
+    locators = tts_locators()
+    if locators:
+        body["pronunciation_dictionary_locators"] = locators
     # NB: ElevenLabs reads output_format from the QUERY STRING. Putting it in the
     # JSON body is silently ignored and the API defaults to MP3 — which, on the
     # PCM path, the browser decodes as raw samples (loud static).
@@ -123,16 +140,7 @@ def _el_tts_request(
             "xi-api-key": _elevenlabs_key(),
             "Content-Type": "application/json",
         },
-        json={
-            "text": text,
-            "model_id": model_id,
-            "voice_settings": {
-                "stability": stability,
-                "similarity_boost": similarity,
-                "style": 0.0,
-                "use_speaker_boost": True,
-            },
-        },
+        json=body,
         timeout=60.0,
     )
     resp.raise_for_status()
@@ -144,11 +152,29 @@ def _el_tts_stream(
     voice_id: str,
     stability: float,
     similarity: float,
+    model_id: str = EL_TTS_MODEL,
+    style: float = 0.0,
 ):
     """Yield raw PCM-16000 chunks from ElevenLabs /stream endpoint.
 
     Format: 16 kHz, 16-bit signed little-endian, mono.  The caller converts
     these to Float32 AudioBuffers for scheduling on the Web Audio API timeline."""
+    from backend.speech_normalize import normalize_for_speech
+    from backend.pronunciation import tts_locators
+    text = normalize_for_speech(text)
+    body = {
+        "text": text,
+        "model_id": model_id,
+        "voice_settings": {
+            "stability": stability,
+            "similarity_boost": similarity,
+            "style": style,
+            "use_speaker_boost": True,
+        },
+    }
+    locators = tts_locators()
+    if locators:
+        body["pronunciation_dictionary_locators"] = locators
     # output_format MUST be a query parameter (ignored in the JSON body → MP3).
     with httpx.stream(
         "POST",
@@ -158,16 +184,7 @@ def _el_tts_stream(
             "xi-api-key": _elevenlabs_key(),
             "Content-Type": "application/json",
         },
-        json={
-            "text": text,
-            "model_id": EL_TTS_MODEL,
-            "voice_settings": {
-                "stability": stability,
-                "similarity_boost": similarity,
-                "style": 0.0,
-                "use_speaker_boost": True,
-            },
-        },
+        json=body,
         timeout=60.0,
     ) as resp:
         resp.raise_for_status()
@@ -194,30 +211,56 @@ def _resolve_el_voice(
     return voice_id, stability, similarity
 
 
+def _tts_model_for_tier(tier: str | None) -> str:
+    """Map a launch-chooser speech tier to an ElevenLabs TTS model.
+
+    ``extreme`` → the frontier expressive model (``eleven_v3``); everything else →
+    Flash v2.5, the low-latency default that carries every ordinary live turn."""
+    return EL_TTS_MODEL_V3 if (tier or "").lower() == "extreme" else EL_TTS_MODEL
+
+
+# Style boost applied when the resident opts into Expressiveness (Extreme tier only).
+# Higher `style` = more emotional variation/emphasis on the v3 frontier model.
+EL_EXPRESSIVE_STYLE = 0.6
+
+
+def _expressive_style(expressive: bool) -> float:
+    return EL_EXPRESSIVE_STYLE if expressive else 0.0
+
+
 def synthesize_stream(
-    text: str, voice: str | None = None, stability_override: float | None = None
+    text: str, voice: str | None = None, stability_override: float | None = None,
+    tier: str | None = None, expressive: bool = False,
 ) -> tuple[str, Any]:
     """Return ``('audio/pcm', PCM-16000 generator)`` for streaming TTS.
 
-    Voice is ElevenLabs only (Flash v2.5, streamed PCM-16000 — the browser plays
-    after the first ~75 ms chunk). Raises if ElevenLabs is unavailable; the room
+    Voice is ElevenLabs only. ``tier='extreme'`` selects the frontier model
+    (``eleven_v3``); otherwise Flash v2.5, streamed PCM-16000 (the browser plays
+    after the first ~75 ms chunk). ``expressive`` (Extreme only) raises the style so
+    speech carries more emotion. Raises if ElevenLabs is unavailable; the room
     surfaces the error rather than silently degrading to another provider."""
     if not _elevenlabs_key():
         raise RuntimeError("ELEVENLABS_API_KEY is not set — voice requires ElevenLabs")
     voice_id, stability, similarity = _resolve_el_voice(voice, stability_override)
-    return "audio/pcm", _el_tts_stream(text, voice_id, stability, similarity)
+    model_id = _tts_model_for_tier(tier)
+    style = _expressive_style(expressive)
+    return "audio/pcm", _el_tts_stream(text, voice_id, stability, similarity, model_id, style)
 
 
 def synthesize(text: str, voice: str | None = None, fmt: str = "mp3",
-               stability_override: float | None = None) -> bytes:
-    """TTS: text -> audio bytes via ElevenLabs Flash v2.5 (~75 ms).
+               stability_override: float | None = None, tier: str | None = None,
+               expressive: bool = False) -> bytes:
+    """TTS: text -> audio bytes via ElevenLabs (~75 ms on Flash v2.5).
 
     ``voice`` is an ElevenLabs voice_id; ``None`` resolves to the nurse default.
-    Raises on ElevenLabs failure — there is no second provider."""
+    ``tier='extreme'`` uses the frontier model (``eleven_v3``); ``expressive`` raises
+    the style boost. Raises on ElevenLabs failure — there is no second provider."""
     if not _elevenlabs_key():
         raise RuntimeError("ELEVENLABS_API_KEY is not set — voice requires ElevenLabs")
     voice_id, stability, similarity = _resolve_el_voice(voice, stability_override)
-    return _el_tts_request(text, voice_id, stability, similarity, EL_TTS_MODEL, fmt)
+    model_id = _tts_model_for_tier(tier)
+    style = _expressive_style(expressive)
+    return _el_tts_request(text, voice_id, stability, similarity, model_id, fmt, style)
 
 
 def nurse_reply(transcript: str, history: list[dict] | None = None) -> str:

@@ -1177,7 +1177,7 @@
         </span>
         <span>
           <span class="vm-tt">Speech models</span>
-          <span class="vm-sub">Whisper transcription + studio voices. Best accuracy for clinical terms.</span>
+          <span class="vm-sub">ElevenLabs premium voice AI models. Best accuracy for clinical terms.</span>
         </span>
         <span class="vm-tag">Costly</span>
       </button>
@@ -2453,9 +2453,31 @@
     }
   }
   document.getElementById('ambienceBtn').addEventListener('click', _toggleAmbience);
+  // In-app confirm (native confirm() can be swallowed by browser extensions /
+  // hosted contexts, leaving OK unresponsive).
+  function openEndConfirm(){
+    let back = document.getElementById('endConfirmBack');
+    if (!back){
+      back = document.createElement('div');
+      back.className = 'modal-back'; back.id = 'endConfirmBack';
+      back.innerHTML = '<div class="modal" role="dialog" aria-modal="true">' +
+        '<h2>Conclude the case?</h2>' +
+        '<p>This stops the clock and generates your debrief. You won\'t be able to return to the case afterward.</p>' +
+        '<div style="display:flex; gap:10px; justify-content:flex-end; margin-top:4px;">' +
+          '<button type="button" id="ecCancel" style="padding:10px 16px; border-radius:10px; cursor:pointer; font:inherit; font-weight:600; font-size:12.5px; background:transparent; border:1px solid var(--line,#2a3648); color:var(--ink-200,#c7d1de);">Keep going</button>' +
+          '<button type="button" id="ecOk" style="padding:10px 18px; border-radius:10px; cursor:pointer; font:inherit; font-weight:700; font-size:12.5px; background:linear-gradient(180deg,#b3392b,#8f2b20); border:1px solid #c74537; color:#ffe9e5;">End &amp; debrief</button>' +
+        '</div></div>';
+      document.body.appendChild(back);
+      back.addEventListener('click', e => { if (e.target === back) back.classList.remove('open'); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') back.classList.remove('open'); });
+      back.querySelector('#ecCancel').addEventListener('click', () => back.classList.remove('open'));
+      back.querySelector('#ecOk').addEventListener('click', () => { back.classList.remove('open'); concludeCase(); });
+    }
+    back.classList.add('open');
+  }
   document.getElementById('endCaseBtn').addEventListener('click', () => {
     if (debriefShown) return;
-    if (confirm('Conclude the case and see your debrief?')) concludeCase();
+    openEndConfirm();
   });
   // Pause: freeze the clock, save the run, and raise the overlay. The resident
   // can resume in place or exit to home and pick it up later.
@@ -2476,7 +2498,7 @@
     try { await startListening(); } catch(e){}
   });
   document.getElementById('pmHome').addEventListener('click', () => { location.href = '/home'; });
-  document.getElementById('dbNew').addEventListener('click', () => { location.href = '/simulator'; });
+  document.getElementById('dbNew').addEventListener('click', () => { location.href = '/home?new=1'; });
   // The case is over and the debrief is the terminal screen — closing it returns
   // the resident home, not back into the finished room.
   document.getElementById('dbClose').addEventListener('click', () => { location.href = '/home'; });
@@ -2769,7 +2791,7 @@
         ? await fetch('/api/voice/resume', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ session_id: resumeId }) })
         : await fetch('/api/voice/session', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ case_id: id }) });
       if (res.status === 401) { location.href = '/'; return; }
-      if (!res.ok){ if (resumeId) location.href = '/simulator'; return; }   // stale resume link → picker
+      if (!res.ok){ if (resumeId) location.href = '/home'; return; }   // stale resume link → home hub
       data = await res.json();
     } catch (e) { return; }
     if (!data) return;
@@ -2810,7 +2832,7 @@
     drawer.classList.add('collapsed');   // don't smother the room on load
   }
   let INTRO_TEXT = '', introPlayed = false;
-  startSession();
+  startSession().then(ensureMic);
 
   // ---------- real-time voice: hands-free VAD listening + barge-in ----------
   const talkBtn = document.getElementById('talkBtn');
@@ -2828,7 +2850,16 @@
 
   // Voice backend chosen at the start: 'native' (browser dictation + speech
   // synthesis, zero cost) or 'models' (Whisper STT + Cartesia TTS). Set once.
-  let VOICE_BACKEND = null;
+  // The pre-load chooser (voice_launch.html) may already have picked it and
+  // passed it as ?speech=native|models — honour that and skip the in-room modal.
+  const _speechParam = new URLSearchParams(location.search).get('speech');
+  // 'extreme' rides the server-side ('models') backend but requests the frontier
+  // TTS model via VOICE_TIER, sent on each /api/voice/tts call.
+  const VOICE_TIER = (_speechParam === 'extreme') ? 'extreme' : (_speechParam === 'models' ? 'models' : 'native');
+  let VOICE_BACKEND = (_speechParam === 'native' || _speechParam === 'models') ? _speechParam
+                    : (_speechParam === 'extreme' ? 'models' : null);
+  // Expressiveness is Extreme-only (emotionally expressive frontier voices).
+  const VOICE_EXPRESSIVE = (new URLSearchParams(location.search).get('expressive') === '1') && VOICE_TIER === 'extreme';
   let recognition = null;    // native SpeechRecognition (native mode)
   let recoSuspend = false;   // pause native recognition while the reply speaks (no AEC)
 
@@ -2932,11 +2963,11 @@
   const captionBar = document.getElementById('captionBar');
   const captionWho = document.getElementById('captionWho');
   const captionText = document.getElementById('captionText');
-  const CAP_WHO_LABELS = { nurse:'RN Nurse', patient:'Patient', ems:'EMS', family:'Family', rt:'RT', consult:'Consultant' };
+  const CAP_WHO_LABELS = { nurse:'RN Nurse', patient:'Patient', ems:'EMS', family:'Family', rt:'RT', consult:'Consultant', head:'Head Physician' };
   function showCaption(text, speaker){
     if (!captionBar) return;
     captionWho.textContent = CAP_WHO_LABELS[speaker] || speaker;
-    captionWho.style.color = { nurse:'var(--teal-glow)', patient:'#e0a85f', ems:'#8ab4f0', family:'#e7b35a', rt:'#6fd3c2', consult:'#c08cf0' }[speaker] || 'var(--ink-400)';
+    captionWho.style.color = { nurse:'var(--teal-glow)', patient:'#e0a85f', ems:'#8ab4f0', family:'#e7b35a', rt:'#6fd3c2', consult:'#c08cf0', head:'#d8c48a' }[speaker] || 'var(--ink-400)';
     captionText.textContent = text;
     captionBar.classList.add('visible');
   }
@@ -3014,6 +3045,8 @@
     showCaption(text, speaker);
     const body = { text, speaker };
     if (stabilityOverride != null) body.stability = stabilityOverride;
+    if (VOICE_TIER === 'extreme') body.tier = 'extreme';
+    if (VOICE_EXPRESSIVE) body.expressive = true;
     const abortCtrl = new AbortController();
     curAbortCtrl = abortCtrl;
     try {
@@ -3278,6 +3311,32 @@
     return true;
   }
 
+  // Request microphone access as soon as the case loads (voice is the primary
+  // input). If already granted we leave the device closed until the resident taps
+  // to start; if blocked we surface a persistent prompt instead of failing on the
+  // first tap.
+  let micDenied = false;
+  async function ensureMic(){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      micDenied = true; setNow(NURSE_CH, 'this browser blocks microphone access — voice input won’t work'); NURSE_CH.root.classList.remove('collapsed'); return false;
+    }
+    try {
+      if (navigator.permissions && navigator.permissions.query){
+        try { const st = await navigator.permissions.query({ name:'microphone' }); if (st.state === 'granted') return true; } catch(e){}
+      }
+      const s = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
+      // Native dictation manages its own capture — release the device now; the
+      // server backend reuses this stream for VAD/recording.
+      if (VOICE_BACKEND === 'native'){ s.getTracks().forEach(t => t.stop()); } else { stream = s; }
+      return true;
+    } catch(e){
+      micDenied = true;
+      setNow(NURSE_CH, 'microphone access is needed — allow it in your browser and reload');
+      NURSE_CH.root.classList.remove('collapsed');
+      return false;
+    }
+  }
+
   // ── server backend: getUserMedia + RMS VAD + MediaRecorder → Whisper ──
   async function startServer(){
     try {
@@ -3379,6 +3438,39 @@
   document.addEventListener('keydown', e => {
     if (e.code==='Space' && !e.repeat && e.target===document.body){ e.preventDefault(); onBegin(); }
   });
+})();
+</script>
+
+<!-- arrival: continue the launch-page dive as an emerge-from-orb reveal (intro=1) -->
+<style>
+  /* First frame matches the launch dive's last frame exactly (a teal orb-core
+     over the same dark radial field), so the page swap is seamless; then it
+     fades to reveal the room. */
+  #cbEnterFx {
+    position:fixed; inset:0; z-index:99999; pointer-events:none;
+    background:
+      radial-gradient(closest-side at 50% 47%, rgba(127,233,242,0.24), rgba(42,166,189,0.10) 42%, transparent 66%),
+      radial-gradient(130% 120% at 50% 46%, #0e1622 0%, #080c14 55%, #04070c 100%);
+    will-change:opacity, transform;
+  }
+  #cbEnterFx.go { animation:cbEnterReveal .58s cubic-bezier(.33,0,.2,1) forwards; }
+  @keyframes cbEnterReveal {
+    0%   { opacity:1; transform:scale(1.04); }
+    100% { opacity:0; transform:scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) { #cbEnterFx { display:none; } }
+</style>
+<div id="cbEnterFx" aria-hidden="true"></div>
+<script>
+(function(){
+  var q = new URLSearchParams(location.search);
+  var fx = document.getElementById('cbEnterFx');
+  if (!fx) return;
+  if (q.get('intro') !== '1') { fx.remove(); return; }
+  requestAnimationFrame(function(){ fx.classList.add('go'); });
+  fx.addEventListener('animationend', function(){ fx.remove(); });
+  q.delete('intro');   // don't replay the arrival on refresh
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString() : '') + location.hash);
 })();
 </script>
 

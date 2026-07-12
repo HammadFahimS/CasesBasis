@@ -100,6 +100,10 @@ class RunState:
     # Actors whose arrival has already been announced to the room, so the "X has
     # just arrived" line fires exactly once when presence flips true (RA-1).
     announced_arrivals: list[str] = field(default_factory=list)
+    # Actors the resident has actually engaged (they've spoken/answered at least
+    # once). A "go and talk to X" prompt cue is obsolete once X is engaged, so these
+    # suppress redundant nudges — see due_cues + mark_engaged.
+    engaged_actors: list[str] = field(default_factory=list)
     # Scheduled "room talks back" results: tests ordered before they're ready. Each
     # is {"inv_id", "fire_at" (elapsed_seconds), "actor_id"}; drained by due_deferred
     # once the clock passes fire_at, producing a spoken report + a panel card.
@@ -201,6 +205,13 @@ class SimulationEngine:
         self._log("summon", actor_id)
         return True
 
+    def mark_engaged(self, actor_id: str | None) -> None:
+        """Record that the resident has engaged this actor (they've answered). Once
+        engaged, prompt cues that only nudge the resident *to* talk to them stop
+        firing (due_cues). Idempotent."""
+        if actor_id and actor_id not in self.run.engaged_actors:
+            self.run.engaged_actors.append(actor_id)
+
     def due_arrivals(self) -> list[dict[str, str]]:
         """Timed-arrival actors who just entered the room and haven't been announced.
 
@@ -217,10 +228,26 @@ class SimulationEngine:
                 continue
             if not self.is_present(actor.id):
                 continue
-            self.run.announced_arrivals.append(actor.id)
+            self.run.announced_arrivals.append(actor.id)   # dedup: fire at most once
             self._log("arrival", actor.id)
+            # Avoid a double announcement: if an authored, not-yet-fired cue already
+            # references this actor (via requires_present), let that single cue be the
+            # arrival line — don't also emit the generic "just arrived" here.
+            if self._has_pending_cue_for(actor.id):
+                continue
             out.append({"actor_id": actor.id, "role": actor.role or actor.id})
         return out
+
+    def _has_pending_cue_for(self, actor_id: str) -> bool:
+        """Does the current state have an unfired authored cue that requires this
+        actor present? If so it will announce them, so the generic arrival line is
+        redundant (RA-1 dedup)."""
+        for i, cue in enumerate(self.state.cues):
+            if f"{self.run.current_state_id}:{i}" in self.run.fired_cues:
+                continue
+            if actor_id in cue.requires_present:
+                return True
+        return False
 
     # --------------------------------------------------------------- actions #
     def ask(self, history_id: str) -> StepResult:
@@ -402,8 +429,6 @@ class SimulationEngine:
         Fires at most one cue per call (so prompts trickle rather than pile up),
         once the resident has been in the state a while. Each cue fires once; the
         record lives in ``run.fired_cues`` so it survives park/resume."""
-        if self.elapsed_in_state < self.CUE_AFTER_SECONDS:
-            return []
         for i, cue in enumerate(self.state.cues):
             key = f"{self.run.current_state_id}:{i}"
             if key in self.run.fired_cues:
@@ -412,6 +437,23 @@ class SimulationEngine:
             # husband") must wait until they're in the room — don't mark it fired, so
             # it becomes eligible once they arrive rather than firing a lie now.
             if any(not self.is_present(aid) for aid in cue.requires_present):
+                continue
+            # Engagement gate: a cue that only prompts "go talk to X" is obsolete once
+            # the resident has already engaged everyone it references — retire it
+            # silently so the room doesn't re-nudge about someone already spoken to.
+            if cue.requires_present and all(
+                aid in self.run.engaged_actors for aid in cue.requires_present
+            ):
+                self.run.fired_cues.append(key)
+                continue
+            # A cue that waits on a timed-arrival actor fires the moment that person
+            # is in the room, so the arrival is announced on time (RA-1). Every other
+            # cue holds until the resident has lingered in the state a while.
+            arrival_gated = any(
+                getattr(self._actor(aid), "available_after_seconds", None) is not None
+                for aid in cue.requires_present
+            )
+            if not arrival_gated and self.elapsed_in_state < self.CUE_AFTER_SECONDS:
                 continue
             self.run.fired_cues.append(key)
             self._log("cue", cue.text)

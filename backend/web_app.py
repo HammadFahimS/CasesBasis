@@ -74,6 +74,12 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # never block startup on seeding
         logging.getLogger(__name__).warning("gold case seeding failed: %s", exc)
 
+    from backend.qbank_store import seed_qbank_cases
+    try:
+        seed_qbank_cases()
+    except Exception as exc:  # never block startup on seeding
+        logging.getLogger(__name__).warning("qbank seeding failed: %s", exc)
+
     from backend.cxr_service import _faiss_index
     logger = logging.getLogger(__name__)
     logger.info("Warming up CXR FAISS index ...")
@@ -148,6 +154,7 @@ from backend.routers import auth as _auth_router  # noqa: E402
 from backend.routers import cases as _cases_router  # noqa: E402
 from backend.routers import dashboard as _dashboard_router  # noqa: E402
 from backend.routers import pages as _pages_router  # noqa: E402
+from backend.routers import qbank as _qbank_router  # noqa: E402
 from backend.routers import simulator as _simulator_router  # noqa: E402
 from backend.routers import voice as _voice_router  # noqa: E402
 
@@ -155,6 +162,7 @@ app.include_router(_auth_router.router)
 app.include_router(_cases_router.router)
 app.include_router(_dashboard_router.router)
 app.include_router(_pages_router.router)
+app.include_router(_qbank_router.router)
 app.include_router(_simulator_router.router)
 app.include_router(_voice_router.router)
 
@@ -200,9 +208,17 @@ from backend.routers.pages import (  # noqa: E402,F401
     favicon,
     home_page,
     index,
+    qbank_page,
     simulated_intro_page,
     simulator_page,
     voice_room_page,
+)
+from backend.routers.qbank import (  # noqa: E402,F401
+    api_qbank_attempt,
+    api_qbank_count,
+    api_qbank_facets,
+    api_qbank_session,
+    api_qbank_stats,
 )
 from backend.routers.simulator import (  # noqa: E402,F401
     DiagnosisRequest,

@@ -6,9 +6,59 @@
 
 ## What This Project Is
 
-**CasesBasis** is a clinical case simulator for trainee doctors. A student interacts with an AI patient, orders investigations, writes clinical interpretations, and attempts a diagnosis. The system evaluates the student's reasoning, tracks a knowledge graph of what they've discovered, and provides a senior clinician consult on demand.
+**CasesBasis** is a clinical case simulator for trainee doctors. It has grown into **two
+experiences that share one FastAPI backend, one case/knowledge model, and one imaging stack:**
 
-It is a FastAPI single-page web application. All HTML, CSS, and JavaScript is served from one Python file (`backend/web_app.py`). No frontend build step, no separate React app.
+1. **Live Agentic Simulation (the current flagship)** — a real-time, **voice-driven ED
+   simulation**. The resident speaks; a whole **room of AI agents** (patient, nurse, EMS,
+   family, respiratory therapist, consultants) speaks back, each bounded to its own knowledge
+   and never speaking for another. A **state machine on a wall-clock** drives the case forward
+   while the resident deliberates; ordered results report back later, out of a real character's
+   mouth. Entry point `GET /simulator/voice-room` → `backend/static/voice_room.html`. This is
+   where active development lives.
+
+2. **Workbench v3 (the single-encounter cockpit)** — the original text/panel UI: interview an
+   AI patient, order investigations, examine, interpret, submit a diagnosis, get scored. Still
+   fully supported; entry point is the main app page in `backend/web_app.py`.
+
+Both share: LLM-generated cases, a per-session **clinical knowledge graph**, a **generated
+12-lead ECG** (LLM parameters → numpy/SVG synthesizer), and a **chest-X-ray retrieval** stack
+(FAISS embedding search over an indexed RoentGen dataset). SQLite persistence; no frontend
+build step, no separate React app.
+
+---
+
+## ⭐ Current State — Room-of-Agents live sim (read this first)
+
+The live voice sim was rewritten from a **nurse-as-sink** design (every routing miss was
+laundered into confident nurse filler) into an explicit **Room of Agents**. The pieces:
+
+| Module | Role |
+|---|---|
+| `backend/routing.py` | **The Router (C2)** — single server-side authority that turns one spoken utterance into an explicit `Route`: *who* is addressed and *whether they're present*. Resolution priority: forced chip → pending-answer channel → explicit vocative → … Never invents clinical content. |
+| `backend/agents.py` | **Character agents (C3)** — each actor is bounded to its own knowledge and **refuses in character** when asked outside it (`refuse()`), instead of the nurse fabricating a cover. `ROOM_AGENTS` documents what each kind may answer from. |
+| `backend/director.py` | **The Director** — once the Router picks the addressee, voices the right one (`voice_reply`), fires proactive authored cues when due, and drives the **deferred-result subsystem** (ordered tests report back later via `fire_deferred` / `pending_deferred`). |
+| `backend/constitution.py` + `emotional_state.py` | Per-kind invariant rules + evolving emotional register that shape each agent's `CharacterAgent = Constitution + CaseFlavor + EmotionalState + VoiceBinding`. |
+
+- **Single turn endpoint:** `POST /api/voice/turn` (in `backend/routers/voice.py`) is the one
+  router path; `/llm`, `/action`, `/llm-patient` are **deprecated aliases** kept for in-flight
+  clients. The real speaker is persisted per line; a `pending_action` channel fixes the
+  med/admission confirm-loop (an affirmation can't leak to the patient and loop forever).
+- **Presence model:** actors are `present` / `en-route` / `arriving`; the voice-room UI shows a
+  presence roster, en-route ghosts, and phone badges. (Presence logic lives inside
+  `routing.py` + `director.py` + the engine — there is no separate `presence.py`.)
+- **Voice-room UI:** the current `voice_room.html` is a **round-table theater** — a central
+  luminous AI hub orb with the real case cast on a ring, a directional beam to the active
+  speaker, an address-to bar, in-flight `.working` spinners driven by `payload["pending"]`, a
+  typewriter bubble reveal, and a vitals dock. (Branch `live-sim-middle-orb`.)
+- **Observability:** LangSmith voice tracing is wired in.
+- **Tests:** ~471 test functions (`pytest -q`); the router/agents/deferred paths are unit-tested
+  offline behind monkeypatched LLM seams.
+
+The deeper live-sim internals (engine, session lifecycle, turn pipeline, gating, scoring,
+debrief) are documented in **"Live Voice Sim — the dynamic case engine"** further down. Read
+that section before touching `backend/voice_*`, `nurse_brain`, `routing`, `agents`, or the
+`actors` registry.
 
 ---
 
@@ -580,7 +630,7 @@ for a full step-by-step run that exercises every feature.
 (patient turn) · `/debrief` · `/pause` + `/unpause` · `/sessions` (list) + `DELETE /sessions/{id}` ·
 `/tts` · `/sample`.
 
-### Files in the live-sim work (current `feature/workbench-v3-ui` branch, uncommitted)
+### Files in the live-sim work (later superseded by the Room-of-Agents rewrite — see the ⭐ Current State section at the top; addressee routing now lives in `backend/routing.py`, not `actors.py`)
 - `backend/actors.py` (new) + `tests/test_actors.py` (new) — the cast registry.
 - `backend/actor_voice.py`, `backend/nurse_brain.py`, `backend/patient_voice.py`,
   `backend/voice_debrief.py`, `backend/web_app.py`, `backend/static/voice_room.html` — refactored to

@@ -75,12 +75,20 @@ def simulated_intro_page() -> str:
 
 
 @router.get("/simulator/voice-room", response_class=HTMLResponse)
-def voice_room_page() -> str:
+def voice_room_page(ui: str | None = None) -> str:
     """Full-screen voice-driven simulation room (the simulated-case runtime UI).
 
-    Standalone immersive page; the case id is read from ?case= in JS and the
-    patient HUD + vitals are seeded from the loaded simulated case."""
-    return (_STATIC / "voice_room.html").read_text()
+    Entry is gated by a pre-load chooser: with no ``?ui=`` the resident first
+    picks a speech mode and interface style (``voice_launch.html``), which then
+    re-enters this route with ``ui=functional`` (the dark cockpit, default) or
+    ``ui=cool`` (the round-table orb room). The case id / session id and the
+    chosen speech mode ride along in the query string and are read in JS."""
+    if ui == "cool":
+        return (_STATIC / "voice_room.html").read_text()
+    if ui == "functional":
+        return (_STATIC / "voice_room_functional.html").read_text()
+    # no interface chosen yet → show the pre-load chooser popup
+    return (_STATIC / "voice_launch.html").read_text()
 
 
 @router.get("/crud-simulations", response_class=HTMLResponse)
@@ -108,6 +116,12 @@ def home_page() -> str:
 def analytics_page() -> str:
     """The dense analytics & performance view (was /dashboard)."""
     return _serve_with_chrome("analytics.html")
+
+
+@router.get("/qbank", response_class=HTMLResponse)
+def qbank_page() -> str:
+    """Question Bank — UWorld-style practice over the seeded qbank cases."""
+    return _serve_with_chrome("qbank.html")
 
 
 @router.get("/dashboard")

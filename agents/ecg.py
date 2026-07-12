@@ -1,12 +1,30 @@
 from __future__ import annotations
 
-from agents.base import OpenAIJsonAgent
+from typing import Any
+
+from agents.base import CEREBRAS_ECG_MODEL, OpenAIJsonAgent, get_llm_provider
 from agents.prompt_loader import load
 from schemas.ecg import ALL_LEADS, ECGParameters, LeadFindings
 
 
 class ECGParameterAgent(OpenAIJsonAgent):
-    """Maps a diagnosis string to validated ECGParameters via structured LLM output."""
+    """Maps a diagnosis string to validated ECGParameters via structured LLM output.
+
+    ECG generation is pinned to gpt-oss-120b on Cerebras (the live sim runs on
+    zai-glm-4.7; the manual sim also uses gpt-oss-120b). When the provider is
+    Cerebras and no model is explicitly given, we force the ECG model so this
+    stays true regardless of the ``CEREBRAS_MODEL`` env default."""
+
+    def __init__(
+        self,
+        client: Any | None = None,
+        model: str | None = None,
+        provider: str | None = None,
+    ) -> None:
+        resolved_provider = provider or get_llm_provider()
+        if model is None and resolved_provider == "cerebras":
+            model = CEREBRAS_ECG_MODEL
+        super().__init__(client=client, model=model, provider=resolved_provider)
 
     def generate(self, diagnosis: str, *, heart_rate: int | None = None) -> ECGParameters:
         user_prompt = f"Generate 12-lead ECG parameters for: {diagnosis}"

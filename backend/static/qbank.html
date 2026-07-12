@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CasesBasis — Question Bank</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink-950:#0a0f17; --ink-900:#111824; --ink-800:#1a2332;
+    --ink-700:#273347; --ink-600:#3b4a63; --ink-500:#5b6b85;
+    --ink-400:#8696b0; --ink-300:#b3becf; --ink-200:#d6dde7;
+    --ink-100:#e9edf2; --ink-50:#f4f6f9; --paper:#fbfcfd;
+    --teal-800: oklch(0.40 0.09 195);
+    --teal-700: oklch(0.45 0.10 195);
+    --teal-600: oklch(0.55 0.10 195);
+    --teal-500: oklch(0.65 0.10 195);
+    --teal-100: oklch(0.93 0.04 195);
+    --teal-50:  oklch(0.97 0.02 195);
+    --critical:#c43a2c; --critical-bg:#fdecea;
+    --caution:#b76e00;  --caution-bg:#fdf3e2;
+    --normal:#1f7a55;   --normal-bg:#e6f4ec;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,0.04);
+    --shadow-md: 0 2px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.05);
+    --shadow-lg: 0 12px 32px rgba(15,23,42,0.10), 0 2px 4px rgba(15,23,42,0.04);
+    --shadow-xl: 0 24px 60px rgba(10,15,23,0.18), 0 4px 12px rgba(10,15,23,0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px; line-height: 1.5;
+    color: var(--ink-900); background: var(--ink-50);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv11','ss01';
+  }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-feature-settings: 'zero','ss02'; }
+  a { color: inherit; }
+
+  main.qb { max-width: 1080px; margin: 0 auto; padding: 26px 22px 80px; }
+  .qb-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .qb-head h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+  .qb-head .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--teal-700); }
+  .qb-head p { margin: 4px 0 0; color: var(--ink-500); font-size: 13.5px; }
+  .qb-head-spacer { flex: 1; }
+
+  /* ── cards ── */
+  .card { background: var(--paper); border: 1px solid var(--ink-100); border-radius: 16px; box-shadow: var(--shadow-sm); }
+  .qb-grid { display: grid; grid-template-columns: 1fr 320px; gap: 18px; align-items: start; }
+  @media (max-width: 860px) { .qb-grid { grid-template-columns: 1fr; } }
+
+  .sect { padding: 18px 20px; }
+  .sect + .sect { border-top: 1px solid var(--ink-100); }
+  .sect h3 { margin: 0 0 3px; font-size: 14px; font-weight: 700; }
+  .sect .hint { margin: 0 0 14px; font-size: 12px; color: var(--ink-500); }
+
+  /* ── filter chips ── */
+  .facet-group { margin-bottom: 16px; }
+  .facet-group:last-child { margin-bottom: 0; }
+  .facet-lbl { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-400); font-weight: 700; margin-bottom: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    padding: 6px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 500;
+    background: white; border: 1px solid var(--ink-200); color: var(--ink-700);
+    transition: all .14s; user-select: none;
+  }
+  .chip:hover { border-color: var(--teal-500); color: var(--ink-900); }
+  .chip.on { background: var(--teal-50); border-color: var(--teal-100); color: var(--teal-800); font-weight: 600; }
+  .chip .n { font-size: 10.5px; color: var(--ink-400); font-family: 'JetBrains Mono', monospace; }
+  .chip.on .n { color: var(--teal-700); }
+
+  .toggle-row { display: flex; gap: 8px; }
+  .seg { display: inline-flex; background: var(--ink-50); border: 1px solid var(--ink-200); border-radius: 10px; padding: 3px; }
+  .seg button { border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink-500); padding: 7px 14px; border-radius: 7px; transition: all .14s; }
+  .seg button.on { background: white; color: var(--ink-900); box-shadow: var(--shadow-sm); }
+  .switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; font-size: 13px; font-weight: 500; }
+  .switch input { position: absolute; opacity: 0; }
+  .switch .track { width: 38px; height: 22px; border-radius: 999px; background: var(--ink-200); position: relative; transition: background .16s; flex-shrink: 0; }
+  .switch .track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: white; box-shadow: var(--shadow-sm); transition: transform .16s; }
+  .switch input:checked + .track { background: var(--teal-500); }
+  .switch input:checked + .track::after { transform: translateX(16px); }
+
+  /* ── side summary / start ── */
+  .side .big { font-size: 34px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+  .side .big small { font-size: 14px; font-weight: 600; color: var(--ink-400); }
+  .side .sub { font-size: 12px; color: var(--ink-500); margin-top: 4px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; border: 0; font: inherit; font-weight: 700; border-radius: 12px; padding: 13px 18px; transition: all .16s; }
+  .btn-primary { width: 100%; background: linear-gradient(180deg, var(--teal-600), var(--teal-700)); color: white; box-shadow: var(--shadow-md); }
+  .btn-primary:hover { filter: brightness(1.06); }
+  .btn-primary:disabled { background: var(--ink-200); color: var(--ink-400); cursor: not-allowed; box-shadow: none; }
+  .btn-ghost { background: white; border: 1px solid var(--ink-200); color: var(--ink-700); font-weight: 600; }
+  .btn-ghost:hover { border-color: var(--teal-500); color: var(--ink-900); }
+
+  .lifetime { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .lt-cell { background: var(--ink-50); border: 1px solid var(--ink-100); border-radius: 10px; padding: 10px 12px; }
+  .lt-cell .v { font-size: 20px; font-weight: 700; }
+  .lt-cell .k { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-400); font-weight: 700; margin-top: 2px; }
+  .barlist { display: flex; flex-direction: column; gap: 9px; }
+  .barrow { font-size: 12px; }
+  .barrow .top { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .barrow .top .k { color: var(--ink-700); font-weight: 500; }
+  .barrow .top .v { color: var(--ink-500); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .bar { height: 6px; border-radius: 999px; background: var(--ink-100); overflow: hidden; }
+  .bar > i { display: block; height: 100%; border-radius: 999px; background: var(--teal-500); }
+  .bar > i.lo { background: var(--caution); }
+  .bar > i.hi { background: var(--normal); }
+
+  /* ── runner ── */
+  .runner { display: none; }
+  .runbar { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  .runbar .prog { flex: 1; }
+  .runbar .prog .meta { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-500); margin-bottom: 6px; }
+  .runbar .prog .meta b { color: var(--ink-800); font-weight: 700; }
+  .stem { padding: 18px 22px; font-size: 15px; line-height: 1.62; color: var(--ink-800); border-left: 3px solid var(--teal-500); background: linear-gradient(90deg, var(--teal-50), transparent 70%); border-radius: 0 12px 12px 0; margin-bottom: 16px; }
+  .stem .tag { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--teal-700); margin-bottom: 8px; }
+  .qwrap { padding: 22px 24px; }
+  .qmeta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .pill { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 9px; border-radius: 999px; background: var(--ink-50); border: 1px solid var(--ink-100); color: var(--ink-500); }
+  .pill.voice { background: #f2ecfb; border-color: #e4d8f6; color: #6b3fa0; }
+  .pill.seen { background: var(--caution-bg); border-color: #f4e2c4; color: var(--caution); }
+  button.pill.speak { font: inherit; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: filter .12s, background .12s; }
+  button.pill.speak:hover { filter: brightness(0.97); }
+  button.pill.speak.on { background: #6b3fa0; border-color: #6b3fa0; color: #fff; }
+  button.pill.speak svg { display: block; }
+  .qtext { font-size: 16px; font-weight: 600; line-height: 1.5; margin-bottom: 16px; }
+  .choices { display: flex; flex-direction: column; gap: 10px; }
+  .choice {
+    display: flex; gap: 12px; align-items: flex-start; cursor: pointer;
+    padding: 13px 15px; border-radius: 12px; border: 1.5px solid var(--ink-200);
+    background: white; transition: border-color .12s, background .12s;
+  }
+  .choice:hover { border-color: var(--teal-500); }
+  .choice .key { flex-shrink: 0; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--ink-50); border: 1px solid var(--ink-200); color: var(--ink-600); }
+  .choice .body { flex: 1; }
+  .choice .ctext { font-size: 14px; line-height: 1.45; }
+  .choice .expl { margin-top: 10px; font-size: 13px; line-height: 1.55; color: var(--ink-600); padding-top: 10px; border-top: 1px dashed var(--ink-200); display: none; }
+  .choice.sel { border-color: var(--teal-600); background: var(--teal-50); }
+  .choice.sel .key { background: var(--teal-600); border-color: var(--teal-600); color: white; }
+  /* locked reveal states */
+  .locked .choice { cursor: default; }
+  .locked .choice .expl { display: block; }
+  .locked .choice.correct { border-color: var(--normal); background: var(--normal-bg); }
+  .locked .choice.correct .key { background: var(--normal); border-color: var(--normal); color: white; }
+  .locked .choice.wrong { border-color: var(--critical); background: var(--critical-bg); }
+  .locked .choice.wrong .key { background: var(--critical); border-color: var(--critical); color: white; }
+  .locked .choice.dim { opacity: 0.72; }
+
+  .klp { margin-top: 16px; padding: 14px 16px; border-radius: 12px; background: var(--ink-900); color: var(--ink-100); font-size: 13.5px; line-height: 1.55; display: none; }
+  .locked .klp { display: block; }
+  .klp .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--teal-500); margin-bottom: 5px; }
+  .remediate { margin-top: 12px; padding: 13px 15px; border-radius: 12px; background: var(--caution-bg); border: 1px solid #f4e2c4; display: none; align-items: center; gap: 12px; }
+  .remediate.show { display: flex; }
+  .remediate .rx { flex: 1; font-size: 12.5px; color: #7a5000; line-height: 1.4; }
+  .remediate .rx b { color: var(--caution); }
+
+  .runfoot { display: flex; align-items: center; gap: 12px; margin-top: 20px; }
+  .runfoot .verdict { font-size: 13.5px; font-weight: 700; }
+  .runfoot .verdict.ok { color: var(--normal); }
+  .runfoot .verdict.no { color: var(--critical); }
+  .runfoot .spacer { flex: 1; }
+  .kbd { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-400); }
+  .kbd b { display: inline-block; padding: 1px 5px; border: 1px solid var(--ink-200); border-bottom-width: 2px; border-radius: 5px; color: var(--ink-600); background: white; }
+
+  /* ── results ── */
+  .results { display: none; }
+  .score-hero { text-align: center; padding: 30px 20px 26px; }
+  .score-hero .ring { font-size: 52px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+  .score-hero .ring small { font-size: 20px; color: var(--ink-400); }
+  .score-hero .cap { color: var(--ink-500); margin-top: 6px; font-size: 13.5px; }
+  .missed { display: flex; flex-direction: column; gap: 8px; }
+  .missed-row { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--critical-bg); border: 1px solid #f4d3ce; font-size: 13px; }
+  .missed-row .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--critical); flex-shrink: 0; }
+  .missed-row .sub { color: var(--ink-500); font-size: 11.5px; }
+  .empty { color: var(--ink-400); font-size: 13px; padding: 8px 0; }
+
+  /* ── in-app confirm modal ── */
+  .qb-modal[hidden] { display: none; }
+  .qb-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; }
+  .qb-modal-scrim { position: absolute; inset: 0; background: rgba(10,15,23,0.5); backdrop-filter: blur(2px); }
+  .qb-modal-card { position: relative; width: 92%; max-width: 420px; background: var(--paper); border: 1px solid var(--ink-100); border-radius: 16px; box-shadow: var(--shadow-xl); padding: 22px 24px; }
+  .qb-modal-card h3 { margin: 0 0 8px; font-size: 17px; font-weight: 700; }
+  .qb-modal-card p { margin: 0 0 20px; font-size: 13.5px; color: var(--ink-500); line-height: 1.5; }
+  .qb-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+</style>
+</head>
+<body>
+
+<!--CHROME-->
+
+<main class="qb">
+  <div class="qb-head">
+    <div>
+      <div class="eyebrow">Practice</div>
+      <h1>Question Bank</h1>
+      <p id="qbSub">Build a set, then work each case checkpoint by checkpoint.</p>
+    </div>
+    <div class="qb-head-spacer"></div>
+    <button class="btn btn-ghost" id="qbExit" style="display:none">Exit set</button>
+  </div>
+
+  <!-- ═══ BUILDER ═══ -->
+  <div class="builder" id="qbBuilder">
+    <div class="qb-grid">
+      <div class="card">
+        <div class="sect">
+          <h3>Filters</h3>
+          <p class="hint">Narrow the pool by subject, system, exam and difficulty. Everything is high-yield.</p>
+          <div id="facets"><div class="empty">Loading filters…</div></div>
+        </div>
+        <div class="sect">
+          <h3>Mode</h3>
+          <p class="hint">Tutor reveals every explanation right after you answer. Test defers all feedback to the end.</p>
+          <div class="toggle-row" style="align-items:center; gap:16px; flex-wrap:wrap;">
+            <div class="seg" id="modeSeg">
+              <button data-mode="tutor" class="on">Tutor</button>
+              <button data-mode="test">Test</button>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="hyToggle" />
+              <span class="track"></span>
+              <span>High-yield only</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="side" style="display:flex; flex-direction:column; gap:18px;">
+        <div class="card sect">
+          <div class="big" id="matchCases">—<small> cases</small></div>
+          <div class="sub" id="matchCps">— checkpoints match</div>
+          <div style="height:14px"></div>
+          <button class="btn btn-primary" id="startBtn" disabled>Start practice</button>
+          <button class="btn btn-ghost" id="resetBtn" style="width:100%; margin-top:9px;">Clear filters</button>
+        </div>
+        <div class="card sect">
+          <h3 style="margin-bottom:12px;">Your performance</h3>
+          <div class="lifetime">
+            <div class="lt-cell"><div class="v" id="ltPct">—</div><div class="k">Correct</div></div>
+            <div class="lt-cell"><div class="v" id="ltSeen">—</div><div class="k">Answered</div></div>
+          </div>
+          <div style="height:14px"></div>
+          <div class="facet-lbl">By subject</div>
+          <div class="barlist" id="ltSubjects"><div class="empty">No attempts yet.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ RUNNER ═══ -->
+  <div class="runner" id="qbRunner">
+    <div class="runbar">
+      <div class="prog">
+        <div class="meta">
+          <span id="progCase">Case 1 of 1 · <b id="progCp">Q1 of 1</b></span>
+          <span><b id="progOverall">1</b> / <span id="progTotal">1</span> overall</span>
+        </div>
+        <div class="bar"><i id="progBar" style="width:0%"></i></div>
+      </div>
+    </div>
+
+    <div class="stem card" id="stemBox">
+      <span class="tag" id="stemTag">Clinical vignette</span>
+      <div id="stemText"></div>
+    </div>
+
+    <div class="card qwrap" id="qBox">
+      <div class="qmeta" id="qMeta"></div>
+      <div class="qtext" id="qText"></div>
+      <div class="choices" id="qChoices"></div>
+      <div class="klp" id="qKlp"><div class="lbl">Key learning point</div><div id="qKlpText"></div></div>
+      <div class="remediate" id="qRemediate">
+        <div class="rx">This is a <b>high-stakes decision point</b>. Reinforce it with a live simulated encounter.</div>
+        <button class="btn btn-ghost" id="remediateBtn" style="white-space:nowrap;">Practice live →</button>
+      </div>
+      <div class="runfoot">
+        <span class="verdict" id="verdict"></span>
+        <span class="spacer"></span>
+        <span class="kbd" id="kbdHint"><b>1</b>–<b>4</b> pick · <b>Enter</b> submit</span>
+        <button class="btn btn-primary" id="submitBtn" style="width:auto; padding:11px 22px;" disabled>Submit</button>
+        <button class="btn btn-primary" id="nextBtn" style="width:auto; padding:11px 22px; display:none;">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ RESULTS ═══ -->
+  <div class="results" id="qbResults">
+    <div class="card score-hero">
+      <div class="ring" id="resPct">—<small>%</small></div>
+      <div class="cap" id="resCap">—</div>
+    </div>
+    <div class="qb-grid" style="margin-top:18px;">
+      <div class="card">
+        <div class="sect"><h3>By subject</h3><div class="barlist" id="resSubjects"></div></div>
+        <div class="sect"><h3>By system</h3><div class="barlist" id="resSystems"></div></div>
+      </div>
+      <div class="side" style="display:flex; flex-direction:column; gap:18px;">
+        <div class="card sect">
+          <h3 style="margin-bottom:10px;">Missed cases</h3>
+          <div class="missed" id="resMissed"></div>
+        </div>
+        <div class="card sect">
+          <button class="btn btn-primary" id="againBtn">New practice set</button>
+          <button class="btn btn-ghost" id="reviewBtn" style="width:100%; margin-top:9px;">Review answers</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- In-app confirm (replaces native confirm(), which browser extensions/tunnels can swallow) -->
+<div class="qb-modal" id="qbModal" hidden>
+  <div class="qb-modal-scrim" id="qbModalScrim"></div>
+  <div class="qb-modal-card" role="dialog" aria-modal="true" aria-labelledby="qbModalTitle">
+    <h3 id="qbModalTitle">Leave this set?</h3>
+    <p>Your progress on answered questions is already saved. You can start a fresh set any time.</p>
+    <div class="qb-modal-actions">
+      <button class="btn btn-ghost" id="qbModalCancel">Stay</button>
+      <button class="btn btn-primary" id="qbModalOk" style="width:auto; padding:11px 20px;">Leave set</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const KEYS = ["A", "B", "C", "D", "E", "F"];
+
+  // ── state ──
+  const filters = { subject: [], system: [], subtopic: [], exam: [], difficulty: [], high_yield: false };
+  let mode = "tutor";
+  let seenIds = new Set();
+  let queue = [];      // flattened checkpoint items
+  let pos = 0;
+  let answers = [];    // {case_id, subject, system, subtopic, correct, cp}
+  const FACET_ORDER = ["subject", "system", "exam", "difficulty"];
+  const FACET_LABEL = { subject: "Subject", system: "System", exam: "Exam", difficulty: "Difficulty" };
+
+  // ── read-aloud (output only, no mic) ──
+  // Uses the app's ElevenLabs nurse voice via /api/voice/tts (not the browser's
+  // built-in speech, which sounds robotic). The endpoint streams raw PCM-16000
+  // when ElevenLabs is on, or an MP3 blob on the fallback path — we handle both.
+  const SPEECH_OK = !!(window.AudioContext || window.webkitAudioContext);
+  let audioCtx = null, curSource = null, curAudioEl = null;
+  let speaking = false, loading = false, speakReq = 0;
+
+  function updateSpeakBtn() {
+    const btn = $("#speakBtn"), lbl = $("#speakLbl");
+    if (!btn) return;
+    btn.classList.toggle("on", speaking || loading);
+    if (lbl) lbl.textContent = loading ? "Loading…" : (speaking ? "Stop" : "Listen");
+  }
+  function stopSpeak() {
+    speakReq++;                       // invalidate any in-flight request
+    if (curSource) { try { curSource.stop(); } catch (e) {} try { curSource.disconnect(); } catch (e) {} curSource = null; }
+    if (curAudioEl) { try { curAudioEl.pause(); } catch (e) {} curAudioEl = null; }
+    speaking = false; loading = false;
+    updateSpeakBtn();
+  }
+  function _questionText() {
+    const it = queue[pos];
+    if (!it) return "";
+    const parts = [];
+    if (it.caseFirst && it.case.stem) parts.push(it.case.stem);
+    parts.push(it.cp.question);
+    it.choices.forEach((c, i) => parts.push(`Option ${KEYS[i]}. ${c.text}`));
+    return parts.join(". ");
+  }
+  async function speakCurrent() {
+    if (speaking || loading) { stopSpeak(); return; }
+    const text = _questionText();
+    if (!text) return;
+    const req = ++speakReq;
+    loading = true; updateSpeakBtn();
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") await audioCtx.resume();
+      const res = await fetch("/api/voice/tts", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text, speaker: "nurse" }),
+      });
+      if (!res.ok) throw new Error("tts " + res.status);
+      const ct = res.headers.get("content-type") || "";
+      const buf = await res.arrayBuffer();
+      if (req !== speakReq) return;              // stopped / superseded while fetching
+      if (ct.includes("audio/pcm")) {
+        const view = new DataView(buf), n = Math.floor(buf.byteLength / 2);
+        const f32 = new Float32Array(n);
+        for (let i = 0; i < n; i++) f32[i] = view.getInt16(i * 2, true) / 32768;
+        const ab = audioCtx.createBuffer(1, n, 16000);
+        ab.getChannelData(0).set(f32);
+        const src = audioCtx.createBufferSource();
+        src.buffer = ab; src.connect(audioCtx.destination);
+        src.onended = () => { if (curSource === src) { curSource = null; speaking = false; updateSpeakBtn(); } };
+        curSource = src; loading = false; speaking = true; updateSpeakBtn();
+        src.start();
+      } else {
+        const el = new Audio(URL.createObjectURL(new Blob([buf], { type: ct || "audio/mpeg" })));
+        el.onended = () => { if (curAudioEl === el) { curAudioEl = null; speaking = false; updateSpeakBtn(); } };
+        curAudioEl = el; loading = false; speaking = true; updateSpeakBtn();
+        el.play();
+      }
+    } catch (e) {
+      if (req !== speakReq) return;
+      loading = false; speaking = false;
+      const lbl = $("#speakLbl"); if (lbl) lbl.textContent = "Unavailable";
+      setTimeout(() => { if (!speaking && !loading) updateSpeakBtn(); }, 1600);
+    }
+  }
+
+  async function api(path, opts) {
+    const res = await fetch(path, Object.assign({ headers: { "content-type": "application/json" } }, opts));
+    if (!res.ok) throw new Error(path + " → " + res.status);
+    return res.json();
+  }
+
+  // ── builder: facets ──
+  async function loadFacets() {
+    let data;
+    try { data = await api("/api/qbank/facets"); }
+    catch (e) { $("#facets").innerHTML = '<div class="empty">Could not load the question bank.</div>'; return; }
+    const f = data.facets || {};
+    const html = FACET_ORDER.map(key => {
+      const items = f[key] || [];
+      if (!items.length) return "";
+      const chips = items.map(it => {
+        const val = key === "difficulty" ? it.value : it.value;
+        const lbl = key === "difficulty" ? ("Level " + it.value) : it.value;
+        return `<span class="chip" data-facet="${key}" data-val="${esc(String(val))}">${esc(lbl)} <span class="n">${it.count}</span></span>`;
+      }).join("");
+      return `<div class="facet-group"><div class="facet-lbl">${FACET_LABEL[key]}</div><div class="chips">${chips}</div></div>`;
+    }).join("");
+    $("#facets").innerHTML = html || '<div class="empty">No cases available.</div>';
+    $("#facets").querySelectorAll(".chip").forEach(chip => chip.addEventListener("click", () => toggleChip(chip)));
+    refreshCount();
+  }
+
+  function toggleChip(chip) {
+    const facet = chip.dataset.facet;
+    let val = chip.dataset.val;
+    if (facet === "difficulty") val = parseInt(val, 10);
+    const arr = filters[facet];
+    const i = arr.findIndex(x => x === val);
+    if (i >= 0) { arr.splice(i, 1); chip.classList.remove("on"); }
+    else { arr.push(val); chip.classList.add("on"); }
+    refreshCount();
+  }
+
+  let countTimer = null;
+  function refreshCount() {
+    clearTimeout(countTimer);
+    countTimer = setTimeout(async () => {
+      try {
+        const c = await api("/api/qbank/count", { method: "POST", body: JSON.stringify({ filters }) });
+        $("#matchCases").innerHTML = `${c.cases}<small> case${c.cases === 1 ? "" : "s"}</small>`;
+        $("#matchCps").textContent = `${c.checkpoints} checkpoint${c.checkpoints === 1 ? "" : "s"} match`;
+        $("#startBtn").disabled = c.cases === 0;
+      } catch (e) { /* leave prior count */ }
+    }, 180);
+  }
+
+  // ── lifetime stats ──
+  function barClass(p) { return p >= 75 ? "hi" : (p < 50 ? "lo" : ""); }
+  function renderBars(el, rows, keyName) {
+    if (!rows || !rows.length) { el.innerHTML = '<div class="empty">No attempts yet.</div>'; return; }
+    el.innerHTML = rows.map(r => `
+      <div class="barrow">
+        <div class="top"><span class="k">${esc(r[keyName] || r.key)}</span><span class="v">${r.correct}/${r.total} · ${r.percent}%</span></div>
+        <div class="bar"><i class="${barClass(r.percent)}" style="width:${r.percent}%"></i></div>
+      </div>`).join("");
+  }
+  async function loadLifetime() {
+    try {
+      const s = await api("/api/qbank/stats");
+      $("#ltPct").textContent = s.total ? (s.percent + "%") : "—";
+      $("#ltSeen").textContent = s.answered_checkpoints || 0;
+      renderBars($("#ltSubjects"), (s.by_subject || []).slice(0, 6), "key");
+    } catch (e) { /* non-fatal */ }
+  }
+
+  // ── start a set ──
+  function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  async function startSet() {
+    $("#startBtn").disabled = true;
+    let data;
+    try { data = await api("/api/qbank/session", { method: "POST", body: JSON.stringify({ filters, mode }) }); }
+    catch (e) { $("#startBtn").disabled = false; $("#matchCps").textContent = "No cases match these filters — adjust and try again."; return; }
+    seenIds = new Set(data.seen_checkpoint_ids || []);
+    queue = [];
+    (data.cases || []).forEach((cs, ci) => {
+      (cs.checkpoints || []).forEach((cp, pi) => {
+        const choices = cp.choices.map((c, idx) => ({ orig: idx, text: c.text, explanation: c.explanation, correct: !!c.correct }));
+        shuffle(choices);
+        queue.push({
+          caseIdx: ci, caseTotal: (data.cases || []).length,
+          cpIdx: pi, cpTotal: cs.checkpoints.length,
+          caseFirst: pi === 0, case: cs, cp: cp, choices,
+          chosenOrig: null, answered: false, correct: null,
+        });
+      });
+    });
+    answers = [];
+    pos = 0;
+    showView("runner");
+    renderItem();
+  }
+
+  function showView(v) {
+    stopSpeak();   // never leave a read-aloud running across views
+    $("#qbBuilder").style.display = v === "builder" ? "" : "none";
+    $("#qbRunner").style.display = v === "runner" ? "block" : "none";
+    $("#qbResults").style.display = v === "results" ? "block" : "none";
+    $("#qbExit").style.display = v === "builder" ? "none" : "";
+    $("#qbSub").textContent = v === "builder"
+      ? "Build a set, then work each case checkpoint by checkpoint."
+      : (v === "runner" ? (mode === "tutor" ? "Tutor mode — feedback after each answer." : "Test mode — feedback at the end.") : "Session complete.");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // ── runner rendering ──
+  let selectedOrig = null;
+  function renderItem() {
+    const it = queue[pos];
+    selectedOrig = it.chosenOrig;
+    stopSpeak();   // silence any read-aloud from the previous question
+
+    // progress
+    $("#progCase").innerHTML = `Case ${it.caseIdx + 1} of ${it.caseTotal} · <b id="progCp">Q${it.cpIdx + 1} of ${it.cpTotal}</b>`;
+    $("#progOverall").textContent = pos + 1;
+    $("#progTotal").textContent = queue.length;
+    $("#progBar").style.width = Math.round((pos) / queue.length * 100) + "%";
+
+    // stem — show only when entering a new case (or first item)
+    if (it.caseFirst) {
+      $("#stemBox").style.display = "";
+      $("#stemText").textContent = it.case.stem;
+      const t = it.case.tags || {};
+      $("#stemTag").textContent = [t.subtopic, t.subject].filter(Boolean).join(" · ") || "Clinical vignette";
+    } else {
+      $("#stemBox").style.display = "none";
+    }
+
+    // question meta pills
+    const t = it.case.tags || {};
+    const pills = [];
+    if (t.subject) pills.push(`<span class="pill">${esc(t.subject)}</span>`);
+    if (it.cp.skill_tested) pills.push(`<span class="pill">${esc(it.cp.skill_tested)}</span>`);
+    if (t.difficulty) pills.push(`<span class="pill">Level ${t.difficulty}</span>`);
+    if (it.cp.voice_suitable && SPEECH_OK) pills.push(
+      `<button type="button" class="pill voice speak" id="speakBtn" title="Read the question and options aloud">` +
+      `<svg id="speakIcon" width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2.2 4.6 5H2.2v6h2.4L8 13.8zM10.6 5.6a3.2 3.2 0 0 1 0 4.8"/></svg>` +
+      `<span id="speakLbl">Listen</span></button>`);
+    if (seenIds.has(it.cp.checkpoint_id)) pills.push(`<span class="pill seen">Seen before</span>`);
+    $("#qMeta").innerHTML = pills.join("");
+    const sb = $("#speakBtn");
+    if (sb) sb.addEventListener("click", speakCurrent);
+
+    $("#qText").textContent = it.cp.question;
+
+    // choices
+    $("#qChoices").innerHTML = it.choices.map((c, i) => `
+      <div class="choice" data-orig="${c.orig}">
+        <div class="key">${KEYS[i]}</div>
+        <div class="body">
+          <div class="ctext">${esc(c.text)}</div>
+          <div class="expl">${esc(c.explanation)}</div>
+        </div>
+      </div>`).join("");
+    $("#qChoices").querySelectorAll(".choice").forEach(el => {
+      el.addEventListener("click", () => { if (!it.answered) selectChoice(parseInt(el.dataset.orig, 10)); });
+    });
+
+    $("#qKlpText").textContent = it.cp.key_learning_point || "";
+    $("#qBox").classList.remove("locked");
+    $("#qRemediate").classList.remove("show");
+    $("#verdict").textContent = "";
+    $("#verdict").className = "verdict";
+    $("#kbdHint").style.display = "";
+
+    if (it.answered) { applyReveal(it); }   // returning to an answered item (review)
+    else {
+      $("#submitBtn").style.display = "";
+      $("#submitBtn").disabled = it.chosenOrig == null;
+      $("#nextBtn").style.display = "none";
+      if (selectedOrig != null) markSelected(selectedOrig);
+    }
+  }
+
+  function markSelected(orig) {
+    $("#qChoices").querySelectorAll(".choice").forEach(el => {
+      el.classList.toggle("sel", parseInt(el.dataset.orig, 10) === orig);
+    });
+  }
+  function selectChoice(orig) {
+    selectedOrig = orig;
+    queue[pos].chosenOrig = orig;
+    markSelected(orig);
+    $("#submitBtn").disabled = false;
+  }
+
+  async function submitAnswer() {
+    const it = queue[pos];
+    if (it.answered || it.chosenOrig == null) return;
+    $("#submitBtn").disabled = true;
+
+    // server resolves correctness + records the attempt
+    let resp = { correct: null, correct_index: null, triggers_remediation: !!it.cp.triggers_remediation };
+    try {
+      resp = await api("/api/qbank/attempt", {
+        method: "POST",
+        body: JSON.stringify({ case_id: it.case.case_id, checkpoint_id: it.cp.checkpoint_id, chosen_index: it.chosenOrig, mode }),
+      });
+    } catch (e) {
+      // fall back to local grading so the session isn't blocked
+      const picked = it.choices.find(c => c.orig === it.chosenOrig);
+      resp.correct = picked ? picked.correct : false;
+      resp.correct_index = it.cp.choices.findIndex(c => c.correct);
+    }
+    it.answered = true;
+    it.correct = !!resp.correct;
+    it.correctOrig = resp.correct_index;
+    const t = it.case.tags || {};
+    answers.push({ case_id: it.case.case_id, subtopic: t.subtopic, subject: t.subject || "General", system: t.system || "General", correct: it.correct, question: it.cp.question });
+
+    if (mode === "tutor") { applyReveal(it); }
+    else { advance(); }   // test mode: no feedback, straight on
+  }
+
+  function applyReveal(it) {
+    $("#qBox").classList.add("locked");
+    $("#kbdHint").style.display = "none";
+    $("#qChoices").querySelectorAll(".choice").forEach(el => {
+      const orig = parseInt(el.dataset.orig, 10);
+      el.classList.remove("sel");
+      const isCorrect = it.correctOrig != null ? (orig === it.correctOrig) : (it.cp.choices[orig] && it.cp.choices[orig].correct);
+      const isChosen = orig === it.chosenOrig;
+      if (isCorrect) el.classList.add("correct");
+      else if (isChosen) el.classList.add("wrong");
+      else el.classList.add("dim");
+    });
+    const v = $("#verdict");
+    v.textContent = it.correct ? "✓ Correct" : "✗ Incorrect";
+    v.className = "verdict " + (it.correct ? "ok" : "no");
+
+    // remediation hook: wrong answer on a flagged checkpoint
+    if (!it.correct && it.cp.triggers_remediation) {
+      $("#qRemediate").classList.add("show");
+    }
+    $("#submitBtn").style.display = "none";
+    $("#nextBtn").style.display = "";
+    $("#nextBtn").textContent = (pos === queue.length - 1) ? "See results" : "Next";
+    $("#nextBtn").focus();
+  }
+
+  function advance() {
+    if (pos >= queue.length - 1) { finish(); return; }
+    pos++;
+    renderItem();
+  }
+
+  // ── remediation (stub hand-off to the live simulator) ──
+  // TODO(remediation): the simulator has no topic→case resolver yet — only one
+  // authored live case exists. For now we hand off to the simulator launcher
+  // carrying the topic as a hint in the query string. When a resolver lands,
+  // map `subtopic` → the matching simulated case id and deep-link straight in.
+  function remediate() {
+    const it = queue[pos];
+    const topic = (it.case.tags && it.case.tags.subtopic) || (it.case.tags && it.case.tags.subject) || "";
+    const url = "/simulator/voice-room?topic=" + encodeURIComponent(topic) + "&from=qbank";
+    window.location.href = url;
+  }
+
+  // ── results ──
+  function groupPct(rows, key) {
+    const m = {};
+    rows.forEach(a => {
+      const k = a[key] || "General";
+      (m[k] = m[k] || { key: k, total: 0, correct: 0 });
+      m[k].total++; if (a.correct) m[k].correct++;
+    });
+    return Object.values(m).map(r => (r.percent = Math.round(100 * r.correct / r.total), r)).sort((x, y) => x.key.localeCompare(y.key));
+  }
+
+  function finish() {
+    $("#progBar").style.width = "100%";
+    const total = answers.length;
+    const correct = answers.filter(a => a.correct).length;
+    const pct = total ? Math.round(100 * correct / total) : 0;
+    $("#resPct").innerHTML = pct + '<small>%</small>';
+    $("#resCap").textContent = `${correct} of ${total} checkpoints correct · ${mode === "tutor" ? "Tutor" : "Test"} mode`;
+    renderBars($("#resSubjects"), groupPct(answers, "subject"), "key");
+    renderBars($("#resSystems"), groupPct(answers, "system"), "key");
+
+    const missed = answers.filter(a => !a.correct);
+    $("#resMissed").innerHTML = missed.length
+      ? missed.map(a => `<div class="missed-row"><span class="dot"></span><div><div>${esc(a.subtopic || a.subject)}</div><div class="sub">${esc(a.question.slice(0, 70))}${a.question.length > 70 ? "…" : ""}</div></div></div>`).join("")
+      : '<div class="empty">Nothing missed — clean sweep.</div>';
+
+    showView("results");
+    loadLifetime();   // reflect the just-recorded attempts
+  }
+
+  // ── keyboard ──
+  document.addEventListener("keydown", e => {
+    if ($("#qbRunner").style.display === "none") return;
+    const it = queue[pos]; if (!it) return;
+    if (!it.answered && /^[1-6]$/.test(e.key)) {
+      const idx = parseInt(e.key, 10) - 1;
+      if (idx < it.choices.length) { selectChoice(it.choices[idx].orig); e.preventDefault(); }
+    } else if (e.key === "Enter") {
+      if (!it.answered) { if (it.chosenOrig != null) { submitAnswer(); e.preventDefault(); } }
+      else { advance(); e.preventDefault(); }
+    }
+  });
+
+  // ── wire builder controls ──
+  $("#modeSeg").querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    mode = b.dataset.mode;
+    $("#modeSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+  }));
+  $("#hyToggle").addEventListener("change", e => { filters.high_yield = e.target.checked; refreshCount(); });
+  $("#startBtn").addEventListener("click", startSet);
+  $("#resetBtn").addEventListener("click", () => {
+    filters.subject = []; filters.system = []; filters.subtopic = []; filters.exam = []; filters.difficulty = []; filters.high_yield = false;
+    $("#hyToggle").checked = false;
+    document.querySelectorAll("#facets .chip.on").forEach(c => c.classList.remove("on"));
+    refreshCount();
+  });
+  $("#submitBtn").addEventListener("click", submitAnswer);
+  $("#nextBtn").addEventListener("click", advance);
+  $("#remediateBtn").addEventListener("click", remediate);
+  $("#againBtn").addEventListener("click", () => { showView("builder"); loadLifetime(); });
+  $("#reviewBtn").addEventListener("click", () => { pos = 0; showView("runner"); renderItem(); });
+  // In-app exit confirmation (no native confirm() — it can be blocked by
+  // extensions / some hosted contexts, which was leaving the dialog unresponsive).
+  const exitModal = $("#qbModal");
+  function openExitModal() { exitModal.hidden = false; $("#qbModalOk").focus(); }
+  function closeExitModal() { exitModal.hidden = true; }
+  $("#qbExit").addEventListener("click", openExitModal);
+  $("#qbModalCancel").addEventListener("click", closeExitModal);
+  $("#qbModalScrim").addEventListener("click", closeExitModal);
+  $("#qbModalOk").addEventListener("click", () => { closeExitModal(); showView("builder"); loadLifetime(); });
+  document.addEventListener("keydown", e => { if (!exitModal.hidden && e.key === "Escape") closeExitModal(); });
+
+  // ── boot ──
+  loadFacets();
+  loadLifetime();
+})();
+</script>
+</body>
+</html>

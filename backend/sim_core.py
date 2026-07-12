@@ -24,6 +24,7 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 
+from agents.base import manual_sim_model
 from agents.physical_exam_agent import PhysicalExamAgent
 from backend.auth import get_current_resident_id
 from backend.clinical_evaluator import ClinicalEvaluator
@@ -97,38 +98,42 @@ def get_simulator() -> ClinicalCaseSimulator:
     return SIMULATOR
 
 
+# Every LLM agent the manual simulator drives is pinned to gpt-oss-120b on
+# Cerebras (see agents.base.manual_sim_model): the live-sim default zai-glm-4.7
+# can't reliably satisfy the manual sim's strict schemas. Non-Cerebras providers
+# get None (their own default). The live voice sim uses none of these services.
 def get_patient_service() -> PatientResponseService:
     global PATIENT_SERVICE
     if PATIENT_SERVICE is None:
-        PATIENT_SERVICE = PatientResponseService()
+        PATIENT_SERVICE = PatientResponseService(model=manual_sim_model())
     return PATIENT_SERVICE
 
 
 def get_investigation_service() -> InvestigationService:
     global INVESTIGATION_SERVICE
     if INVESTIGATION_SERVICE is None:
-        INVESTIGATION_SERVICE = InvestigationService()
+        INVESTIGATION_SERVICE = InvestigationService(model=manual_sim_model())
     return INVESTIGATION_SERVICE
 
 
 def get_doctor_consult_service() -> DoctorConsultService:
     global DOCTOR_CONSULT_SERVICE
     if DOCTOR_CONSULT_SERVICE is None:
-        DOCTOR_CONSULT_SERVICE = DoctorConsultService()
+        DOCTOR_CONSULT_SERVICE = DoctorConsultService(model=manual_sim_model())
     return DOCTOR_CONSULT_SERVICE
 
 
 def get_physical_exam_agent() -> PhysicalExamAgent:
     global PHYSICAL_EXAM_AGENT
     if PHYSICAL_EXAM_AGENT is None:
-        PHYSICAL_EXAM_AGENT = PhysicalExamAgent()
+        PHYSICAL_EXAM_AGENT = PhysicalExamAgent(model=manual_sim_model())
     return PHYSICAL_EXAM_AGENT
 
 
 def get_evaluator() -> ClinicalEvaluator:
     global EVALUATOR
     if EVALUATOR is None:
-        EVALUATOR = ClinicalEvaluator()
+        EVALUATOR = ClinicalEvaluator(model=manual_sim_model())
     return EVALUATOR
 
 
