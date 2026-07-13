@@ -124,8 +124,49 @@ def _score_medications(session) -> list[Criterion]:
 # absolute point penalties subtracted when the pitfall is triggered.
 REC_WEIGHT = 3          # naming the diagnosis is the biggest single credit
 MED_WEIGHT = 2          # each preferred / correctly-dosed drug
+WORKUP_WEIGHT = 2       # each expected exam / investigation performed
 SAFETY_PENALTY = 40     # a critical error is severe
 AVOID_PENALTY = 25      # giving a contraindicated drug
+
+
+def _examined_systems(session) -> set[str]:
+    """Body systems the resident examined. A full physical exam (logged as ``all``)
+    counts as every documented system."""
+    logged = {str(e.get("detail")) for e in session.engine.run.log if e.get("kind") == "exam"}
+    if "all" in logged:
+        return {e.system for e in session.case.exam}
+    return logged
+
+
+def _score_workup(session) -> list[Criterion]:
+    """Grade the diagnostic workup against the case's ``workup_rubric``.
+
+    One criterion per rubric item: an ``expected`` exam/investigation earns
+    ``WORKUP_WEIGHT`` when any of its ``targets`` was performed/ordered; an
+    ``avoid`` item is a penalty-only guardrail. Cases without a rubric yield
+    nothing — fully backward-compatible."""
+    rubric = getattr(session.case, "workup_rubric", None) or []
+    if not rubric:
+        return []
+    examined = _examined_systems(session)
+    ordered = set(session.engine.run.ordered_investigations)
+    out: list[Criterion] = []
+    for item in rubric:
+        pool = examined if item.kind == "exam" else ordered
+        did = any(t in pool for t in item.targets)
+        if item.expectation == "avoid":
+            out.append(Criterion(
+                f"workup-{item.id}", item.label, not did,
+                item.note if did else "Correctly not ordered.",
+                weight=AVOID_PENALTY, guardrail=True,
+            ))
+        else:  # expected
+            out.append(Criterion(
+                f"workup-{item.id}", item.label, did,
+                "" if did else item.note,
+                weight=WORKUP_WEIGHT,
+            ))
+    return out
 
 
 def _score_no_critical_error(session) -> Criterion:
@@ -159,6 +200,10 @@ def score_run(session) -> list[Criterion]:
             continue
     try:
         out.extend(_score_medications(session))
+    except Exception:
+        pass
+    try:
+        out.extend(_score_workup(session))
     except Exception:
         pass
     return out

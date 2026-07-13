@@ -213,6 +213,12 @@
       "name": "Venous blood gas",
       "category": "lab",
       "result": "VBG: pH 7.31, pCO2 55 mmHg, HCO3 26 mmol/L, lactate 1.4 mmol/L. (Venous sample — use pulse oximetry for oxygenation; pCO2 and pH are reliable.)",
+      "values": [
+        { "name": "pH", "value": "7.31", "unit": "", "reference_range": "7.35-7.45", "flag": "low" },
+        { "name": "pCO2", "value": "55", "unit": "mmHg", "reference_range": "35-45", "flag": "high" },
+        { "name": "HCO3", "value": "26", "unit": "mmol/L", "reference_range": "22-26", "flag": "normal" },
+        { "name": "Lactate", "value": "1.4", "unit": "mmol/L", "reference_range": "0.5-2.2", "flag": "normal" }
+      ],
       "interpretation": "Hypercapnic (type-2) respiratory failure from neuromuscular fatigue. The elevated pCO2 and low-normal pH confirm ventilatory failure.",
       "available_after_seconds": 120
     },
@@ -220,7 +226,17 @@
       "id": "cbc_lytes",
       "name": "CBC, electrolytes, renal function",
       "category": "lab",
-      "result": "CBC, electrolytes, urea/creatinine all within normal limits. No leukocytosis."
+      "result": "CBC, electrolytes, urea/creatinine all within normal limits. No leukocytosis.",
+      "values": [
+        { "name": "Haemoglobin", "value": "134", "unit": "g/L", "reference_range": "120-160", "flag": "normal" },
+        { "name": "White cell count", "value": "7.8", "unit": "x10^9/L", "reference_range": "4.0-11.0", "flag": "normal" },
+        { "name": "Neutrophils", "value": "4.9", "unit": "x10^9/L", "reference_range": "2.0-7.5", "flag": "normal" },
+        { "name": "Platelets", "value": "265", "unit": "x10^9/L", "reference_range": "150-400", "flag": "normal" },
+        { "name": "Sodium", "value": "139", "unit": "mmol/L", "reference_range": "135-145", "flag": "normal" },
+        { "name": "Potassium", "value": "4.2", "unit": "mmol/L", "reference_range": "3.5-5.3", "flag": "normal" },
+        { "name": "Urea", "value": "5.1", "unit": "mmol/L", "reference_range": "2.5-7.8", "flag": "normal" },
+        { "name": "Creatinine", "value": "74", "unit": "umol/L", "reference_range": "60-110", "flag": "normal" }
+      ]
     },
     {
       "id": "ecg",
@@ -243,6 +259,9 @@
       "name": "Bedside vital capacity (VC)",
       "category": "bedside",
       "result": "VC less than 20 mL/kg, and falling.",
+      "values": [
+        { "name": "Vital capacity", "value": "<20", "unit": "mL/kg", "reference_range": ">50 normal; intubate if <15-20", "flag": "critical" }
+      ],
       "interpretation": "Below the threshold that mandates intubation in neuromuscular respiratory failure.",
       "result_latency_seconds": 45,
       "result_actor_id": "rt"
@@ -252,6 +271,9 @@
       "name": "Negative inspiratory force (NIF)",
       "category": "bedside",
       "result": "NIF approximately -25 cmH2O.",
+      "values": [
+        { "name": "Negative inspiratory force", "value": "-25", "unit": "cmH2O", "reference_range": "more negative than -60", "flag": "critical" }
+      ],
       "interpretation": "Markedly weak inspiratory effort — impending respiratory failure.",
       "result_latency_seconds": 45,
       "result_actor_id": "rt"
@@ -590,6 +612,56 @@
       "expectation": "dose_adjust",
       "dose_keywords": ["increased", "increase", "higher", "larger", "more", "greater", "double"],
       "note": "MG patients are relatively resistant to succinylcholine — a larger dose is needed if it is used."
+    }
+  ],
+  "workup_rubric": [
+    {
+      "id": "exam_neuro",
+      "label": "Examined the neuromuscular system",
+      "kind": "exam",
+      "targets": ["Neurological"],
+      "expectation": "expected",
+      "note": "A focused neuro exam reveals the fatigable weakness, ptosis and neck-flexion weakness central to the diagnosis."
+    },
+    {
+      "id": "exam_resp",
+      "label": "Assessed respiratory status at the bedside",
+      "kind": "exam",
+      "targets": ["Respiratory"],
+      "expectation": "expected",
+      "note": "Shallow, fatiguing breathing and a weak cough signal impending neuromuscular respiratory failure."
+    },
+    {
+      "id": "inv_vc",
+      "label": "Measured vital capacity",
+      "kind": "investigation",
+      "targets": ["vital_capacity"],
+      "expectation": "expected",
+      "note": "VC < 15-20 mL/kg is a threshold to intubate in neuromuscular respiratory failure — the single most useful bedside number here."
+    },
+    {
+      "id": "inv_nif",
+      "label": "Measured negative inspiratory force",
+      "kind": "investigation",
+      "targets": ["nif"],
+      "expectation": "expected",
+      "note": "NIF quantifies inspiratory-muscle strength alongside VC and trends the decline."
+    },
+    {
+      "id": "inv_gas",
+      "label": "Checked a blood gas",
+      "kind": "investigation",
+      "targets": ["vbg"],
+      "expectation": "expected",
+      "note": "A rising pCO2 confirms type-2 (ventilatory) respiratory failure from hypoventilation — do not be reassured by the SpO2."
+    },
+    {
+      "id": "inv_thymoma",
+      "label": "Imaged the mediastinum for a thymoma",
+      "kind": "investigation",
+      "targets": ["ct_chest"],
+      "expectation": "expected",
+      "note": "An anterior mediastinal mass (thymoma) is a treatable driver of myasthenia and should be sought."
     }
   ],
   "debrief": {

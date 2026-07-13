@@ -642,6 +642,20 @@
   .dr-card-b .dr-img svg { width: 100%; height: auto; display:block; }
   .dr-card-b img { width: 100%; border-radius: 6px; display:block; }
   .dr-card-b .rep { font-size: 12.5px; line-height: 1.5; color: var(--ink-200); white-space: pre-line; margin-top: 8px; }
+  .dr-card-b .rep.hint { color: var(--ink-500); font-style: italic; }
+  /* pre-seeded, not-yet-run rows read as actionable sections */
+  .dr-card.pending .dr-card-h { cursor: pointer; }
+  .dr-card.pending .title { color: var(--ink-300); }
+  .dr-card-h .tag.act { color: var(--teal-2, #4fd1c5); border-color: rgba(79,209,197,0.4); }
+  .dr-card.working .tag.act { color: var(--ink-400); }
+  /* structured lab table */
+  .dr-card-b table.lab { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+  .dr-card-b table.lab td { padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,0.05); vertical-align: top; }
+  .dr-card-b table.lab td.k { color: var(--ink-300); }
+  .dr-card-b table.lab td.v { color: var(--ink-100); font-family:'JetBrains Mono', monospace; white-space: nowrap; }
+  .dr-card-b table.lab td.rng { color: var(--ink-500); text-align: right; font-family:'JetBrains Mono', monospace; white-space: nowrap; }
+  .dr-card-b table.lab tr.ab td.v { color: var(--caution, #f0b429); font-weight: 600; }
+  .dr-card-b table.lab tr.ab.critical td.v { color: var(--critical, #e5484d); }
   /* ===== Per-tab control strips (click-to-order, mirrors voice commands) ===== */
   .dr-ctl { flex-shrink: 0; margin-bottom: 11px; }
   .dr-ctl:empty { display: none; }
@@ -2162,16 +2176,29 @@
   drTabBtns.forEach(b => b.addEventListener('click', () => showPane(b.dataset.tab)));
 
   function chevSvg(){ return '<svg class="chev" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6 L8 10 L12 6"/></svg>'; }
+  function valueTable(values){
+    if (!values || !values.length) return '';
+    const rows = values.map(v => {
+      const flag = (v.flag || '').toLowerCase();
+      const ab = (flag === 'low' || flag === 'high' || flag === 'critical' || flag === 'abnormal');
+      const val = escapeHtml(String(v.value != null ? v.value : '')) + (v.unit ? ' ' + escapeHtml(v.unit) : '');
+      return `<tr class="${ab ? 'ab ' + flag : ''}"><td class="k">${escapeHtml(v.name || '')}</td>` +
+             `<td class="v">${val}</td><td class="rng">${escapeHtml(v.reference_range || '')}</td></tr>`;
+    }).join('');
+    return `<table class="lab">${rows}</table>`;
+  }
   function diagBody(card){
     const vp = card.visual_payload;
+    const tbl = valueTable(card.values);
     const cap = card.summary ? `<div class="rep">${escapeHtml(card.summary)}</div>` : '';
     if (card.kind === 'ecg' && vp && vp.svg) return `<div class="dr-img">${vp.svg}</div>${cap}`;
     if (card.kind === 'cxr' && vp && vp.data) return `<img alt="Chest X-ray" src="data:image/${vp.format||'jpeg'};base64,${vp.data}">${cap}`;
-    return `<div class="rep">${escapeHtml(card.summary || 'No result.')}</div>`;
+    return `${tbl}${cap || (tbl ? '' : '<div class="rep">No result.</div>')}`;
   }
   function updateTabCount(name){
     const btn = drTabBtns.find(b => b.dataset.tab === name); if (!btn) return;
-    const n = drPanes[name].querySelectorAll('.dr-card').length;
+    // Count completed results only — pre-seeded, not-yet-run rows don't inflate the badge.
+    const n = drPanes[name].querySelectorAll('.dr-card:not(.pending)').length;
     btn.classList.toggle('has', n > 0);
     btn.querySelector('.dr-t-n').textContent = n;
   }
@@ -2196,14 +2223,13 @@
     const paneEl = drPanes[pane] || drPanes.investigations;
     const host = paneEl.querySelector('.dr-list') || paneEl;
     const empty = host.querySelector('.dr-empty'); if (empty) empty.remove();
-    // Re-ordering the same drug upserts its card instead of stacking duplicates.
-    if (card.kind === 'order' && card.id){
-      const prev = host.querySelector(`.dr-card[data-card-id="${CSS.escape(card.id)}"]`);
-      if (prev) prev.remove();
-    }
-    host.querySelectorAll('.dr-card').forEach(c => c.classList.add('collapsed'));  // newest stays open
-    const el = document.createElement('div');
-    el.className = 'dr-card';
+    // Upsert by id: a pre-seeded row (or a prior result / re-ordered drug) is
+    // filled IN PLACE so each test/exam/consult stays a single section — the
+    // manual-sim accordion. No id → always a fresh card.
+    const existing = card.id ? host.querySelector(`.dr-card[data-card-id="${CSS.escape(card.id)}"]`) : null;
+    host.querySelectorAll('.dr-card').forEach(c => c.classList.add('collapsed'));  // the updated one re-opens
+    const el = existing || document.createElement('div');
+    el.className = 'dr-card';                 // clears pending/working/collapsed → the result row opens
     if (card.id) el.dataset.cardId = card.id;
     const body = card.kind === 'order' ? orderBody(card) : diagBody(card);
     el.innerHTML =
@@ -2227,7 +2253,7 @@
         if (e.key === 'Enter'){ e.preventDefault(); fire(); }
       });
     }
-    host.insertBefore(el, host.firstChild);
+    if (!existing) host.insertBefore(el, host.firstChild);  // new cards on top; seeded rows keep menu order
     updateTabCount(pane);
     showPane(pane);                 // surface the pane the newest result landed in
     drawer.classList.remove('collapsed');
@@ -2517,10 +2543,12 @@
   function renderPanels(menu){
     MENU = menu || {};
     const invs = MENU.investigations || [];
-    renderExamCtl(MENU.exam_systems || []);
-    renderOrderCtl('investigations', invs.filter(i => i.category !== 'imaging'));
-    renderOrderCtl('imaging', invs.filter(i => i.category === 'imaging'));
-    renderConsultCtl(MENU.consultants || []);
+    seedExamPane(MENU.exam_systems || []);
+    // cardPane() routes lab/ecg/bedside/other → investigations, imaging → imaging;
+    // seed each item into the same pane its result will land in.
+    seedOrderPane('investigations', invs.filter(i => i.category !== 'imaging'));
+    seedOrderPane('imaging', invs.filter(i => i.category === 'imaging'));
+    seedConsultPane(MENU.consultants || []);
     renderMedCtl();
   }
 
@@ -2534,66 +2562,68 @@
     inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fire(); } });
   }
 
-  function renderExamCtl(systems){
-    const ctl = document.querySelector('.dr-ctl[data-ctl="exam"]'); if (!ctl) return;
-    EXAM_SYS = systems; examSel.clear();
-    if (!systems.length){ ctl.innerHTML = ''; return; }
-    ctl.innerHTML =
-      '<div class="dr-ctl-h">Examine — select systems</div>' +
-      '<div class="ex-grid">' + systems.map((s, i) =>
-        `<div class="ex-row" data-idx="${i}"><span class="ex-box">${checkSvg()}</span><span>${escapeHtml(s)}</span></div>`
-      ).join('') + '</div>' +
-      '<div class="ex-foot"><span class="ex-n">0 selected</span><button class="ex-do" disabled>Examine</button></div>';
-    ctl.querySelectorAll('.ex-row').forEach(row => row.addEventListener('click', () => {
-      const s = EXAM_SYS[+row.dataset.idx];
-      if (examSel.has(s)){ examSel.delete(s); row.classList.remove('sel'); }
-      else { examSel.add(s); row.classList.add('sel'); }
-      updateExamFoot();
-    }));
-    ctl.querySelector('.ex-do').addEventListener('click', examineSelected);
-  }
-  function updateExamFoot(){
-    const ctl = document.querySelector('.dr-ctl[data-ctl="exam"]'); if (!ctl) return;
-    const n = ctl.querySelector('.ex-n'), btn = ctl.querySelector('.ex-do');
-    if (n) n.textContent = examSel.size + ' selected';
-    if (btn) btn.disabled = examSel.size === 0 || actionBusy;
-  }
-  async function examineSelected(){
-    if (!examSel.size) return;
-    const systems = [...examSel]; examSel.clear();
-    document.querySelectorAll('.dr-ctl[data-ctl="exam"] .ex-row.sel').forEach(r => r.classList.remove('sel'));
-    updateExamFoot();
-    for (const s of systems){ await sendAction('perform_exam', s, `Examine the ${s} system.`); }
-  }
+  // Pre-seed one collapsible row per orderable item (manual-sim style): each exam
+  // system / investigation / consultant is its own section. Tapping a pending row
+  // runs it through the engine; the result then fills that same row in place (see
+  // addDiagnostic's upsert-by-id). A spoken order lands in the same row too.
+  function drListFor(pane){ const p = drPanes[pane]; return p ? p.querySelector('.dr-list') : null; }
 
-  function renderOrderCtl(pane, invs){
+  function seedRow(host, { id, title, tag, kind, op }){
+    if (!host || !id) return;
+    if (host.querySelector(`.dr-card[data-card-id="${CSS.escape(id)}"]`)) return;  // already seeded/done
+    const empty = host.querySelector('.dr-empty'); if (empty) empty.remove();
+    const el = document.createElement('div');
+    el.className = 'dr-card pending collapsed';
+    el.dataset.cardId = id; el.dataset.op = op;
+    el.innerHTML =
+      `<div class="dr-card-h"><span class="dot ${kind}"></span>` +
+      `<span class="title">${escapeHtml(title)}</span>` +
+      `<span class="tag act">${escapeHtml(tag)}</span>${chevSvg()}</div>` +
+      `<div class="dr-card-b"><div class="rep hint">Tap to run — the result appears here.</div></div>`;
+    el.querySelector('.dr-card-h').addEventListener('click', () => onRowTap(el));
+    host.appendChild(el);
+  }
+  function onRowTap(el){
+    if (el.classList.contains('working')) return;         // already in flight
+    if (el.classList.contains('pending')){
+      el.classList.add('working');
+      const tag = el.querySelector('.tag'); if (tag) tag.textContent = '…';
+      sendAction(el.dataset.op, el.dataset.cardId);
+    } else {
+      el.classList.toggle('collapsed');                    // completed row → just expand/collapse
+    }
+  }
+  function seedExamPane(systems){
+    const host = drListFor('exam'); if (!host) return;
+    const ctl = document.querySelector('.dr-ctl[data-ctl="exam"]'); if (ctl) ctl.innerHTML = '';
+    systems.forEach(s => seedRow(host, { id: s, title: s, tag: 'Examine', kind: 'exam', op: 'perform_exam' }));
+    updateTabCount('exam');
+  }
+  function seedOrderPane(pane, invs){
+    const host = drListFor(pane); if (!host) return;
+    invs.forEach(i => seedRow(host, {
+      id: i.id, title: i.name, tag: pane === 'imaging' ? 'Image' : 'Order',
+      kind: i.category === 'ecg' ? 'ecg' : (i.category === 'imaging' ? 'cxr' : 'report'),
+      op: 'order_investigation',
+    }));
+    updateTabCount(pane);
+    // Keep a free-text order for anything the case doesn't list (investigations pane only).
     const ctl = document.querySelector(`.dr-ctl[data-ctl="${pane}"]`); if (!ctl) return;
-    const chips = invs.map(i =>
-      `<button class="chip" data-op="order_investigation" data-id="${escapeHtml(i.id)}" title="${escapeHtml(i.name)}">${escapeHtml(shortName(i.name))}</button>`
-    ).join('');
-    const free = pane === 'investigations'
-      ? '<div class="ord-row"><input type="text" placeholder="Order any test… e.g. troponin"><button class="ord-go">Order</button></div>'
-      : '';
-    ctl.innerHTML = `<div class="dr-ctl-h">${pane === 'imaging' ? 'Order imaging' : 'Quick order'}</div>` +
-      (chips ? `<div class="chip-row">${chips}</div>` : '') + free;
-    ctl.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => sendAction(c.dataset.op, c.dataset.id)));
-    const inp = ctl.querySelector('input'), go = ctl.querySelector('.ord-go');
-    if (go && inp){
+    if (pane === 'investigations'){
+      ctl.innerHTML = '<div class="ord-row"><input type="text" placeholder="Order any test… e.g. troponin"><button class="ord-go">Order</button></div>';
+      const inp = ctl.querySelector('input'), go = ctl.querySelector('.ord-go');
       const fire = () => { const t = inp.value.trim(); if (t){ inp.value = ''; sendFreeOrder(t); } };
       go.addEventListener('click', fire);
       inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fire(); } });
-    }
+    } else { ctl.innerHTML = ''; }
   }
-
-  function renderConsultCtl(cons){
-    const ctl = document.querySelector('.dr-ctl[data-ctl="consults"]'); if (!ctl) return;
-    if (!cons.length){ ctl.innerHTML = ''; return; }
-    const chips = cons.map(c =>
-      `<button class="chip" data-op="request_consult" data-id="${escapeHtml(c.id)}">${escapeHtml(c.role || c.id)}</button>`
-    ).join('');
-    ctl.innerHTML = '<div class="dr-ctl-h">Call a specialist</div>' + `<div class="chip-row">${chips}</div>`;
-    ctl.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => sendAction(c.dataset.op, c.dataset.id)));
+  function seedConsultPane(cons){
+    const host = drListFor('consults'); if (!host) return;
+    const ctl = document.querySelector('.dr-ctl[data-ctl="consults"]'); if (ctl) ctl.innerHTML = '';
+    cons.forEach(c => seedRow(host, { id: c.id, title: c.role || c.id, tag: 'Call', kind: 'consult', op: 'request_consult' }));
+    updateTabCount('consults');
   }
+  function updateExamFoot(){}   // legacy no-op — the accordion replaced the select-and-examine footer
 
   function actionLabel(op, target){
     if (op === 'order_investigation'){ const i = (MENU.investigations || []).find(x => x.id === target); return `Order ${i ? i.name : target}.`; }
@@ -3236,6 +3266,12 @@
 
   // Shared by both backends: a recognised utterance → routed, grounded, spoken reply.
   async function handleSaid(said, _forcedAddr){
+    if (clockPaused){                          // frozen: drop anything captured around a pause
+      processing = false;
+      if (!capturing) setMic(listening ? 'listen' : 'off');
+      selectState(listening ? 'listening' : 'idle');
+      return;
+    }
     if (looksLikeEcho(said)){                 // our own TTS bled into the mic — ignore it
       processing = false;
       if (!capturing) setMic(listening ? 'listen' : 'off');
@@ -3296,15 +3332,20 @@
   async function playHandoff(){
     if (INTRO_TEXT && !introPlayed){
       setMic('busy');
-      try {
-        await playTTS(INTRO_TEXT, 'nurse');
-        introPlayed = true;            // mark played ONLY after it actually played, so a
-      }                                // transient TTS failure doesn't silently swallow the
-      catch(e){                        // one-time briefing for the whole session.
-        setNow(NURSE_CH, (e && e.message) || 'voice service unavailable — tap again to hear the handoff');
+      // One automatic retry — the handoff is a one-time briefing, so a transient
+      // TTS failure shouldn't silently swallow it. introPlayed stays false on
+      // failure so a tap can still replay it.
+      let spoke = false;
+      for (let a = 0; a < 2 && !spoke; a++){
+        try { await playTTS(INTRO_TEXT, 'nurse'); spoke = true; }
+        catch(e){ if (a === 0) await new Promise(r => setTimeout(r, 400)); }
+      }
+      if (!spoke){
+        setNow(NURSE_CH, 'voice service unavailable — tap again to hear the handoff');
         NURSE_CH.root.classList.remove('collapsed');
         return true;                   // let the floor open; they can retry the tap
       }
+      introPlayed = true;
       if (!listening) return false;     // resident stopped during the handoff
       setMic('listen');
     }

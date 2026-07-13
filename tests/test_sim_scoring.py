@@ -39,6 +39,43 @@ def test_recognition_unmet_when_no_diagnosis_stated():
     assert "no working diagnosis" in rec.detail.lower()
 
 
+# ── workup rubric (expected exams / investigations) ──────────────────────────
+def test_workup_credits_exams_and_investigations_that_were_done():
+    s = _session()
+    s.engine.examine("Neurological")                  # exam_neuro target
+    s.engine.order_investigation("vital_capacity")    # inv_vc target
+    s.engine.order_investigation("vbg")               # inv_gas target
+    crit = score_run(s)
+    assert _by_id(crit, "workup-exam_neuro").met is True
+    assert _by_id(crit, "workup-inv_vc").met is True
+    assert _by_id(crit, "workup-inv_gas").met is True
+    assert _by_id(crit, "workup-inv_nif").met is False   # not done → missed
+    assert _by_id(crit, "workup-exam_resp").met is False
+
+
+def test_full_physical_exam_credits_every_exam_expectation():
+    s = _session()
+    s.engine.examine_all()   # a full physical exam covers all systems
+    crit = score_run(s)
+    assert _by_id(crit, "workup-exam_neuro").met is True
+    assert _by_id(crit, "workup-exam_resp").met is True
+
+
+def test_incomplete_workup_scores_below_a_full_one():
+    partial = _session()
+    partial.engine.diagnose("myasthenic crisis")
+    lo = overall_score(score_run(partial))
+
+    full = _session()
+    full.engine.diagnose("myasthenic crisis")
+    for sys in ("Neurological", "Respiratory"):
+        full.engine.examine(sys)
+    for inv in ("vital_capacity", "nif", "vbg", "ct_chest"):
+        full.engine.order_investigation(inv)
+    hi = overall_score(score_run(full))
+    assert hi > lo   # doing the expected workup earns real credit
+
+
 def test_recognition_unmet_on_wrong_diagnosis():
     s = _session()
     s.engine.diagnose("looks like a pulmonary embolism")

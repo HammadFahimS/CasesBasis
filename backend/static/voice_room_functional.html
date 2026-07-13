@@ -317,8 +317,14 @@ button { font-family:inherit; }
 .inv-chev { color:var(--ink-500); transition:transform .3s; }
 .inv-card.collapsed .inv-detail { display:none; }
 .inv-card.collapsed .inv-chev { transform:rotate(-90deg); }
-.inv-note { font-size:11.5px; color:var(--ink-400); margin-top:9px; line-height:1.5; }
+.inv-note { font-size:11.5px; color:var(--ink-400); margin-top:9px; line-height:1.5; white-space:pre-line; }
 .inv-note b { color:var(--red-soft); font-weight:600; }
+.inv-note.hint { color:var(--ink-500); font-style:italic; }
+/* pre-seeded, not-yet-run sections read as actionable rows */
+.inv-card.pending .it { color:var(--ink-300); }
+.inv-card.pending .inv-top { cursor:pointer; }
+.ist.act { color:var(--teal-glow); background:transparent; }
+.inv-card.working .ist.act { color:var(--ink-400); }
 
 .ecg-strip { width:100%; height:82px; border-radius:8px; overflow:hidden; background:#0d0708; border:1px solid #2a1414; position:relative; }
 .ecg12 { width:100%; border-radius:8px; overflow:hidden; background:#fff; border:1px solid var(--line); cursor:zoom-in; }
@@ -1346,7 +1352,8 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     let html = '';
     const rows = card.rows || card.values;
     if (Array.isArray(rows) && rows.length){
-      html += '<table class="cbc">' + rows.map(r => '<tr'+(r.flag||r.abnormal?' class="hi"':'')+'><td class="k">'+escapeHtml(r.label||r.name||r.k||'')+'</td><td class="v">'+escapeHtml(String(r.value!=null?r.value:(r.v!=null?r.v:'')))+'</td><td class="u">'+escapeHtml(r.unit||r.u||'')+'</td><td class="rng">'+escapeHtml(r.range||r.reference||r.rng||'')+'</td></tr>').join('') + '</table>';
+      const isAbn = r => r.abnormal === true || ['low','high','critical','abnormal'].includes(String(r.flag||'').toLowerCase());
+      html += '<table class="cbc">' + rows.map(r => '<tr'+(isAbn(r)?' class="hi"':'')+'><td class="k">'+escapeHtml(r.label||r.name||r.k||'')+'</td><td class="v">'+escapeHtml(String(r.value!=null?r.value:(r.v!=null?r.v:'')))+'</td><td class="u">'+escapeHtml(r.unit||r.u||'')+'</td><td class="rng">'+escapeHtml(r.range||r.reference||r.rng||'')+'</td></tr>').join('') + '</table>';
     }
     if (note) html += '<div class="inv-note">'+escapeHtml(note)+'</div>';
     return html || '<div class="inv-note">Result recorded.</div>';
@@ -1354,8 +1361,10 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   function addCard(card){
     if (!card) return;
     const cat = catFor(card);
-    if (card.id){ const prev = invList.querySelector('.inv-card[data-card-id="'+CSS.escape(card.id)+'"]'); if (prev) prev.remove(); }
-    const el = document.createElement('div');
+    // Upsert by id: fill a pre-seeded (or prior) section IN PLACE so each test /
+    // exam stays a single accordion row — the manual-sim layout. No id → new card.
+    const existing = card.id ? invList.querySelector('.inv-card[data-card-id="'+CSS.escape(card.id)+'"]') : null;
+    const el = existing || document.createElement('div');
     el.className = 'card inv-card'; el.dataset.cat = cat; if (card.id) el.dataset.cardId = card.id;
     el.innerHTML =
       '<div class="inv-top"><span class="it">'+escapeHtml(card.title||'Result')+'</span>'+
@@ -1373,8 +1382,46 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     const vis = el.querySelector('.card-visual');
     if (vis) vis.addEventListener('click', ev => { ev.stopPropagation(); openLightbox(card); });
     $$('.inv-card', invList).forEach(c => c.classList.add('collapsed'));
-    invList.insertBefore(el, invList.firstChild);
+    el.classList.remove('collapsed', 'pending', 'working');   // the updated result row opens
+    if (!existing) invList.insertBefore(el, invList.firstChild);   // new cards on top; seeded rows keep menu order
     if (curFilter !== 'all' && cat !== curFilter) el.style.display='none';
+  }
+
+  // Pre-seed one collapsible section per exam system + investigation (manual-sim
+  // layout). Tapping a pending section runs it through the engine; the result then
+  // fills that same section (addCard upsert). A spoken order lands there too.
+  function actionLabelF(op, id){
+    if (op === 'perform_exam') return 'Examine the ' + id + ' system.';
+    if (op === 'order_investigation'){ const i = (MENU.investigations||[]).find(x => x.id === id); return 'Order ' + (i ? i.name : id) + '.'; }
+    return id;
+  }
+  function onInvRowTap(el){
+    if (el.classList.contains('working')) return;
+    if (el.classList.contains('pending')){
+      el.classList.add('working');
+      const t = el.querySelector('.ist'); if (t) t.textContent = '…';
+      runAction(el.dataset.op, el.dataset.cardId, actionLabelF(el.dataset.op, el.dataset.cardId));
+    } else { el.classList.toggle('collapsed'); }
+  }
+  function seedInvRow(o){
+    if (!o.id || invList.querySelector('.inv-card[data-card-id="'+CSS.escape(o.id)+'"]')) return;
+    const el = document.createElement('div');
+    el.className = 'card inv-card pending collapsed'; el.dataset.cat = o.cat; el.dataset.cardId = o.id; el.dataset.op = o.op;
+    el.innerHTML =
+      '<div class="inv-top"><span class="it">'+escapeHtml(o.title)+'</span>'+
+      '<span class="ist act">'+escapeHtml(o.tag)+'</span></div>'+
+      '<div class="inv-body inv-detail"><div class="inv-note hint">Tap to run — the result appears here.</div></div>';
+    const top = el.querySelector('.inv-top'); top.style.cursor='pointer';
+    const chev = document.createElement('span'); chev.className='inv-chev';
+    chev.innerHTML='<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>';
+    top.appendChild(chev);
+    top.addEventListener('click', () => onInvRowTap(el));
+    invList.appendChild(el);
+    if (curFilter !== 'all' && o.cat !== curFilter) el.style.display='none';
+  }
+  function seedInvSections(){
+    (MENU.exam_systems||[]).forEach(s => seedInvRow({ id: s, title: s + ' exam', tag: 'Examine', cat: 'other', op: 'perform_exam' }));
+    (MENU.investigations||[]).forEach(i => seedInvRow({ id: i.id, title: i.name, tag: 'Order', cat: catFor(i), op: 'order_investigation' }));
   }
   function buildEcgStrip(id, morph){
     const strip = document.getElementById(id); if (!strip) return;
@@ -1509,6 +1556,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   // same way a spoken "order the chest x-ray" would.
   async function runAction(op, target, label){
     if (!SESSION_ID) return;
+    if (paused){ roomHint('paused — resume to continue'); return; }  // frozen: no actions
     if (processing){ roomHint('one moment — the room is mid-response'); return; }
     try {
       processing = true;
@@ -1534,6 +1582,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
 
   async function handleSaid(said, forced){
     if (!said || !SESSION_ID) return;
+    if (paused){ roomHint('paused — resume to continue'); return; }  // frozen: no turns
     const effAddr = forced || forcedAddressee || null;
     forcedAddressee = null; clearAddrChips();
     try {
@@ -1731,7 +1780,19 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   }
   let INTRO_TEXT='', introPlayed=false;
   async function playHandoff(){
-    if (INTRO_TEXT && !introPlayed){ setMic('busy'); setSpeaking('nurse', INTRO_TEXT); try { await playTTS(INTRO_TEXT, 'nurse'); introPlayed=true; } catch(e){ roomHint('voice unavailable — tap again for the handoff'); clearSpeaking(); return true; } clearSpeaking(); if (!listening) return false; setMic('listen'); }
+    if (INTRO_TEXT && !introPlayed){
+      setMic('busy'); setSpeaking('nurse', INTRO_TEXT);
+      // One automatic retry — the handoff is a one-time briefing, so a transient
+      // TTS hiccup shouldn't silently swallow it. introPlayed stays false on
+      // failure so a tap can still replay it.
+      let spoke=false;
+      for (let a=0; a<2 && !spoke; a++){
+        try { await playTTS(INTRO_TEXT, 'nurse'); spoke=true; }
+        catch(e){ if (a===0) await new Promise(r=>setTimeout(r,400)); }
+      }
+      if (!spoke){ roomHint('voice unavailable — tap again for the handoff'); clearSpeaking(); return true; }
+      introPlayed=true; clearSpeaking(); if (!listening) return false; setMic('listen');
+    }
     return true;
   }
   async function startServer(){
@@ -1786,7 +1847,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   });
 
   /* ---------------- CLOCK / PAUSE ---------------- */
-  let secs = 0, paused = false;
+  let secs = 0, paused = false, _wasListening = false;
   const clockValEl = $('#clockVal'), clockBox = $('#clock');
   function pad(n){ return String(n).padStart(2,'0'); }
   function clockStr(){ const h=Math.floor(secs/3600), m=Math.floor((secs%3600)/60), s=secs%60; return pad(h)+':'+pad(m)+':'+pad(s); }
@@ -1827,7 +1888,15 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     $('#pauseIcon').outerHTML = paused
       ? '<svg id="pauseIcon" width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5l9 5.5-9 5.5z"/></svg>'
       : '<svg id="pauseIcon" width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="2.5" width="3.2" height="11" rx="1"/><rect x="9.3" y="2.5" width="3.2" height="11" rx="1"/></svg>';
+    // Freeze the room, not just the clock: close the mic so nothing is captured
+    // (and cut any in-flight reply) while paused; restore listening on resume.
+    if (paused){
+      _wasListening = listening;
+      stopAudio();
+      if (listening) stopListening();
+    }
     if (SESSION_ID){ try { await postJSON(paused ? '/api/voice/pause' : '/api/voice/unpause', { session_id: SESSION_ID }); } catch(e){} }
+    if (!paused && _wasListening){ _wasListening = false; startListening(); }
     setState(paused ? 'idle' : (listening ? 'listening' : 'idle'));
   });
 
@@ -2324,6 +2393,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     buildCast(data.roster);
     MENU = data.menu || MENU;   // the case's orderable tests / exams / consultants
     invList.innerHTML = '';   // drop the static mock cards — only real results from here
+    seedInvSections();          // pre-seed one tappable section per exam/investigation
     if (data.live_runtime) connectLiveEvents();
     if (data.resumed){
       (data.history||[]).forEach(t => { const you = (t.role==='resident'); addTurn({ who: you?undefined:(t.speaker||'nurse'), you, t:'', line:t.text }); });

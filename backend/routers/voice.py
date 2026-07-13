@@ -371,6 +371,11 @@ def api_voice_turn(body: dict[str, Any], request: Request) -> dict[str, Any]:
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
     session = _owned_session_or_404(session_id, resident_id)
+    # A paused run is parked — the clock is frozen and the room must not respond.
+    # The UI stops listening on pause, but guard here too so a stray utterance from
+    # a still-open mic can't drive a turn while the case is on hold.
+    if getattr(session, "status", "active") == "paused":
+        raise HTTPException(status_code=409, detail="session is paused")
     forced_addressee = (body.get("forced_addressee") or "").strip() or None
     try:
         return _run_grounded_turn(session, text, forced_addressee)
@@ -401,6 +406,11 @@ def api_voice_llm(body: dict[str, Any], request: Request) -> dict[str, Any]:
             raise HTTPException(status_code=502, detail=f"nurse reply failed: {exc}")
 
     session = _owned_session_or_404(session_id, resident_id)
+    # A paused run is parked — the clock is frozen and the room must not respond.
+    # The UI stops listening on pause, but guard here too so a stray utterance from
+    # a still-open mic can't drive a turn while the case is on hold.
+    if getattr(session, "status", "active") == "paused":
+        raise HTTPException(status_code=409, detail="session is paused")
     forced_addressee = (body.get("forced_addressee") or "").strip() or None
     try:
         return _run_grounded_turn(session, text, forced_addressee)
@@ -432,6 +442,8 @@ def api_voice_action(body: dict[str, Any], request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="session not found")
     except AccessDenied:
         raise HTTPException(status_code=403, detail="access denied")
+    if getattr(session, "status", "active") == "paused":
+        raise HTTPException(status_code=409, detail="session is paused")
     try:
         turn = run_action(session, op, target)
     except Exception as exc:
@@ -466,6 +478,11 @@ def api_voice_patient(body: dict[str, Any], request: Request) -> dict[str, Any]:
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
     session = _owned_session_or_404(session_id, resident_id)
+    # A paused run is parked — the clock is frozen and the room must not respond.
+    # The UI stops listening on pause, but guard here too so a stray utterance from
+    # a still-open mic can't drive a turn while the case is on hold.
+    if getattr(session, "status", "active") == "paused":
+        raise HTTPException(status_code=409, detail="session is paused")
     forced_addressee = (body.get("forced_addressee") or "").strip() or None
     try:
         return _run_grounded_turn(session, text, forced_addressee)

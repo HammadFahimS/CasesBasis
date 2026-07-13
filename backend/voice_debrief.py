@@ -59,6 +59,19 @@ def _cards_by(session: VoiceSession, *categories: str) -> list[str]:
     return [c.get("title", "?") for c in session.cards if c.get("category") in categories]
 
 
+def _exam_findings(session: VoiceSession) -> list[dict]:
+    """The actual findings the resident uncovered on each exam they performed —
+    so the debrief can coach on whether they acted on what they found, not just
+    that they examined something."""
+    out = []
+    for c in session.cards:
+        if c.get("category") == "exam":
+            findings = (c.get("summary") or "").strip()
+            if findings:
+                out.append({"system": c.get("title", "exam"), "findings": findings})
+    return out
+
+
 def _result_reads(session: VoiceSession) -> list[dict]:
     """The clinical read of each investigation the resident ordered — kept hidden
     during the case (the resident interprets live) and surfaced here so the debrief
@@ -90,6 +103,7 @@ def run_summary(session: VoiceSession) -> dict:
         "investigations": _cards_by(session, "lab", "ecg", "imaging", "bedside", "other"),
         "result_reads": _result_reads(session),
         "exams": _cards_by(session, "exam"),
+        "exam_findings": _exam_findings(session),
         "consults": _cards_by(session, "consult"),
         "critical_errors": list(run.critical_errors),
         "working_diagnoses": list(run.working_diagnoses),
@@ -116,7 +130,8 @@ def _coaching_note(summary: dict, teaching: dict, engaged: bool = True) -> str:
     did = (
         f"Outcome: {summary['outcome']} after {summary['elapsed_label']}.\n"
         f"Examined: {', '.join(summary['exams']) or 'nothing'}.\n"
-        f"Investigations: {', '.join(summary['investigations']) or 'none'}.\n"
+        + "".join(f"  - {e['system']} found: {e['findings'][:220]}\n" for e in summary.get("exam_findings") or [])
+        + f"Investigations: {', '.join(summary['investigations']) or 'none'}.\n"
         + "".join(f"  - {r['test']} meant: {r['read']}\n" for r in summary.get("result_reads") or [])
         + f"Consults: {', '.join(summary['consults']) or 'none'}.\n"
         f"Working diagnosis: {', '.join(summary.get('working_diagnoses') or []) or 'none stated'}.\n"

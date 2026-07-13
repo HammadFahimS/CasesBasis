@@ -382,8 +382,17 @@ def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> 
         return engine.ask(intent.target)
     if intent.op == "order_investigation" and intent.target:
         return engine.order_investigation(intent.target)
-    if intent.op == "perform_exam" and intent.target:
-        return engine.examine(intent.target)
+    if intent.op == "perform_exam":
+        # A named system with no "full exam" phrasing → focused single-system exam.
+        # A generic "do a physical exam" / "examine the patient" → reveal the whole
+        # authored exam at once, matching the manual sim.
+        if intent.target and not _is_full_exam_request(transcript):
+            return engine.examine(intent.target)
+        # A full exam has no single system — clear any stray target the classifier
+        # tagged (e.g. a real "General" system) so the card titles as "Physical exam"
+        # and the nurse says "the exam", not that one system.
+        intent.target = None
+        return engine.examine_all()
     if intent.op == "order_medication":
         med = parse_med(intent.target, intent.action_text or transcript)
         if needs_dose_confirm(med) and not med.dose:
@@ -414,6 +423,28 @@ def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> 
 def _med_dose(transcript: str, action_text: str) -> str | None:
     from backend.medication import _extract_dose
     return _extract_dose(transcript, action_text)
+
+
+# A generic "examine the patient" with no single body system → reveal the WHOLE
+# authored exam at once (like the manual sim's full physical exam), even if the
+# classifier tagged a stray system. "examine her chest" / "check reflexes" name a
+# region and stay a focused, single-system exam.
+# Only unambiguous full-exam phrases. A bare "examine her" (no system) already
+# routes to examine_all via the no-target path, so the pronoun object is left out
+# here to avoid swallowing "examine her chest" as a full exam.
+_FULL_EXAM_RE = re.compile(
+    r"\b(?:"
+    r"(?:full|complete|general|thorough|proper|quick|systematic)\s+(?:physical\s+)?exam(?:ination)?|"
+    r"physical\s+exam(?:ination)?|"
+    r"head[\s-]?to[\s-]?toe|top[\s-]?to[\s-]?toe|"
+    r"examine\s+(?:the\s+|this\s+)?(?:patient|pt)"
+    r")\b",
+    re.I,
+)
+
+
+def _is_full_exam_request(transcript: str) -> bool:
+    return bool(_FULL_EXAM_RE.search(transcript or ""))
 
 
 # Which vital(s) a read_vitals utterance actually named. Deliberately mirrors the
@@ -681,8 +712,9 @@ def _build_card(intent: NurseIntent, engine: SimulationEngine, result: StepResul
             return build_investigation_card(
                 inv, engine.current_vitals(), engine.case.patient, result.revealed
             )
-    if intent.op == "perform_exam" and intent.target:
-        return build_exam_card(intent.target, result.revealed)
+    if intent.op == "perform_exam":
+        # Focused exam → the named system; full exam (no target) → "Physical".
+        return build_exam_card(intent.target or "Physical", result.revealed)
     return None
 
 
