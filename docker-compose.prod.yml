@@ -1,0 +1,92 @@
+# Production stack for CasesBasis.
+#
+#   app         — the FastAPI server (single worker; in-process session state)
+#   falkordb    — the knowledge-graph DB (internal only; never exposed)
+#   cloudflared — Cloudflare Tunnel; the ONLY thing that faces the internet
+#
+# Security posture: no host ports are published. The app is not reachable from
+# the VPS's public interface at all — Cloudflare Tunnel dials OUT from the box
+# and Cloudflare terminates TLS. FalkorDB is reachable only on the internal
+# compose network. API keys live in .env.production (git-ignored) and are never
+# baked into the image.
+#
+# Usage on the server:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml logs -f app
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: casesbasis-app:latest
+    container_name: casesbasis-app
+    restart: unless-stopped
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    env_file:
+      - .env.production
+    environment:
+      # These override whatever is in .env.production for the container context.
+      ENV: production
+      LLM_PROVIDER: cerebras
+      DB_PATH: /app/var/casesbasis.db
+      FALKORDB_HOST: falkordb
+      FALKORDB_PORT: "6379"
+      ALLOWED_ORIGINS: https://casesbasis.com
+    volumes:
+      # Static datasets + FAISS indexes + raw CXR images (read-only).
+      - ./data:/app/data:ro
+      # Persistent runtime state: SQLite DB (sessions, evals, seeded cases).
+      - app_state:/app/var
+    # Sized for a 4-8 GB VPS; raise if you give the box more RAM.
+    mem_limit: 4g
+    logging: *default-logging
+    # Fallback if the container engine ignores the image HEALTHCHECK.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: casesbasis-falkordb
+    restart: unless-stopped
+    # No published ports — internal network only.
+    volumes:
+      - falkordb_data:/data
+    mem_limit: 1g
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: casesbasis-tunnel
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    # TUNNEL_TOKEN comes from .env.production. The tunnel's public hostname
+    # (casesbasis.com -> http://app:8000) is configured in the Cloudflare
+    # Zero Trust dashboard when you create the tunnel.
+    env_file:
+      - .env.production
+    command: tunnel --no-autoupdate run
+    logging: *default-logging
+
+volumes:
+  app_state:
+  falkordb_data:
