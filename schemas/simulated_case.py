@@ -177,6 +177,19 @@ class ActorRole(StrictModel):
     available_after_seconds: int | None = None
 
 
+class LabValue(StrictModel):
+    """One measured line in a structured investigation result, so the live sim
+    can render a proper lab table (name / value / unit / range / flag) instead of
+    a prose blob. ``value`` is a string so it can carry numbers ("139"), operators
+    ("<20"), sizes ("5 x 3 x 3.6 cm") or categoricals ("Positive")."""
+
+    name: str
+    value: str
+    unit: str = ""
+    reference_range: str = ""
+    flag: Literal["low", "high", "critical", "abnormal", "normal"] | None = None
+
+
 class InvestigationDef(StrictModel):
     """An orderable test and its result. ``result_by_state`` lets a result
     differ depending on which state it's ordered in (e.g. a repeat gas)."""
@@ -184,6 +197,10 @@ class InvestigationDef(StrictModel):
     id: str
     name: str
     category: Literal["lab", "imaging", "ecg", "bedside", "other"] = "lab"
+    # Structured result lines rendered as a table in the live sim. Optional and
+    # additive: when empty for a lab/bedside test, the engine generates values on
+    # order (see backend.sim_diagnostics). Never contains the clinical read.
+    values: list["LabValue"] = Field(default_factory=list)
     # The RAW finding the resident sees/hears — values, measurements, what's on the
     # film. It must NOT contain the clinical read or a management directive: the
     # resident interprets it. (Tests/exams hand over signal, not the answer.)
@@ -333,6 +350,27 @@ class MedicationExpectation(StrictModel):
     note: str = ""
 
 
+class WorkupExpectation(StrictModel):
+    """One graded expectation about the diagnostic workup — an exam or an
+    investigation the resident should (or should not) do. The live-sim analogue of
+    :class:`MedicationExpectation`; powers ``backend.sim_scoring._score_workup``.
+
+    * ``expected`` — the resident should do this; *met* if any of ``targets`` was
+      examined / ordered.
+    * ``avoid``    — a low-value or harmful test to skip; *met* if none was ordered.
+
+    ``targets`` are exam **system names** (``kind="exam"``) or investigation **ids**
+    (``kind="investigation"``); they are checked against real case content at load.
+    """
+
+    id: str
+    label: str
+    kind: Literal["exam", "investigation"]
+    targets: list[str] = Field(default_factory=list)
+    expectation: Literal["expected", "avoid"] = "expected"
+    note: str = ""
+
+
 # --------------------------------------------------------------------------- #
 # Root document                                                               #
 # --------------------------------------------------------------------------- #
@@ -353,6 +391,7 @@ class SimulatedCase(StrictModel):
     states: list[ScenarioState]
     debrief: Debrief = Field(default_factory=Debrief)
     medication_rubric: list[MedicationExpectation] = Field(default_factory=list)
+    workup_rubric: list[WorkupExpectation] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_graph(self) -> "SimulatedCase":
@@ -395,6 +434,19 @@ class SimulatedCase(StrictModel):
                     f"investigation '{inv.id}' names unknown result_actor_id "
                     f"'{inv.result_actor_id}'"
                 )
+
+        # Referential check for the workup rubric: targets must name real content
+        # so a scored expectation can never silently miss because of a typo.
+        exam_systems = {e.system for e in self.exam}
+        inv_ids = {i.id for i in self.investigations}
+        for item in self.workup_rubric:
+            pool = exam_systems if item.kind == "exam" else inv_ids
+            for target in item.targets:
+                if target not in pool:
+                    raise ValueError(
+                        f"workup_rubric '{item.id}' ({item.kind}) references unknown "
+                        f"target '{target}'"
+                    )
         return self
 
     def state(self, state_id: str) -> ScenarioState:

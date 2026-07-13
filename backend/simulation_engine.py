@@ -377,6 +377,26 @@ class SimulationEngine:
         step.revealed = "\n".join(parts)
         return step
 
+    def examine_all(self) -> StepResult:
+        """Reveal every authored exam finding across all documented systems as one
+        systematic physical exam — the live-sim equivalent of the manual sim's
+        full physical exam. Counts as a single action."""
+        self._log("exam", "all")
+        step = self._after_action("physical exam")
+        if not self.case.exam:
+            step.revealed = "No specific examination findings documented."
+            return step
+        parts = []
+        for finding in self.case.exam:
+            line = f"{finding.system}: " + "; ".join(finding.findings)
+            if finding.note:
+                line += f" — {finding.note}"
+            parts.append(line)
+        # Blank line between systems so the full-exam card is scannable per system
+        # (the drawer's .rep uses white-space: pre-line, so the gap survives).
+        step.revealed = "\n\n".join(parts)
+        return step
+
     def diagnose(self, text: str) -> StepResult:
         """Record the resident's working diagnosis.
 

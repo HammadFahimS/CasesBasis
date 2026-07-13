@@ -1,0 +1,42 @@
+# Keep the build context (and image) lean and secret-free.
+
+# Secrets — never bake into the image. Provided at runtime via env_file.
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Local virtualenv / caches (1.5 GB — rebuilt inside the image).
+.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+
+# Runtime data + DB — mounted as volumes at runtime, not baked in.
+data/
+casesbasis.db
+*.db
+*.db-wal
+*.db-shm
+
+# VCS / editor / OS cruft.
+.git/
+.gitignore
+.claude/
+.DS_Store
+**/.DS_Store
+
+# Docs, design assets, tests — not needed to run the server.
+# NOTE: only root-level *.md (README, notes) — the anchored "/" keeps the 28
+# runtime prompt files under agents/prompts/**/*.md in the image.
+tests/
+docs/
+live-sim-ui-mehmood/
+/*.md
+CasesBasis-design.html
+generatedimageofbody.png
+testing_groq.py
+environment.yml

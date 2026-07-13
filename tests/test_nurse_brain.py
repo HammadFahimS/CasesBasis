@@ -7,6 +7,8 @@ from backend.nurse_brain import (
     NurseIntent,
     dispatch,
     run_turn,
+    _build_card,
+    _is_full_exam_request,
     _parse_intent,
 )
 from backend.simulated_case_store import load_seed_case
@@ -172,6 +174,39 @@ def test_dispatch_perform_exam_reveals_and_can_transition():
     assert result is not None and result.revealed
     # A neuro exam in baseline is an expected action that advances the case.
     assert engine.run.current_state_id == "recognition"
+
+
+def test_full_exam_matcher_distinguishes_generic_from_focused():
+    for phrase in ("do a physical exam", "perform a full examination",
+                   "examine the patient", "head to toe exam"):
+        assert _is_full_exam_request(phrase) is True
+    for phrase in ("examine her chest", "check her reflexes", "listen to the lungs"):
+        assert _is_full_exam_request(phrase) is False
+
+
+def test_generic_physical_exam_reveals_every_authored_system():
+    engine = _engine()
+    all_systems = {e.system for e in engine.case.exam}
+    assert len(all_systems) > 1  # guard: the case must have a multi-system exam
+    intent = NurseIntent(op="perform_exam", target=None)
+    result = dispatch(intent, engine, "do a full physical exam")
+    assert result is not None and result.revealed
+    # Every documented system appears in the one-shot full exam.
+    for system in all_systems:
+        assert system in result.revealed
+    card = _build_card(intent, engine, result)
+    assert card is not None and card["kind"] == "exam"
+    assert card["title"] == "Physical exam"
+
+
+def test_full_exam_phrase_overrides_a_stray_focused_target():
+    # Even if the classifier tags a single system, an explicit full-exam phrase
+    # reveals the whole exam, not just that one system.
+    engine = _engine()
+    intent = NurseIntent(op="perform_exam", target="Neurological")
+    result = dispatch(intent, engine, "just do a complete physical examination")
+    revealed_systems = [e.system for e in engine.case.exam if e.system in (result.revealed or "")]
+    assert len(revealed_systems) == len({e.system for e in engine.case.exam})
 
 
 # ── LLM intent matcher (for soft action transitions) ─────────────────────────
