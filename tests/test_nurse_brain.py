@@ -8,7 +8,6 @@ from backend.nurse_brain import (
     dispatch,
     run_turn,
     _build_card,
-    _is_full_exam_request,
     _parse_intent,
 )
 from backend.simulated_case_store import load_seed_case
@@ -176,12 +175,18 @@ def test_dispatch_perform_exam_reveals_and_can_transition():
     assert engine.run.current_state_id == "recognition"
 
 
-def test_full_exam_matcher_distinguishes_generic_from_focused():
-    for phrase in ("do a physical exam", "perform a full examination",
-                   "examine the patient", "head to toe exam"):
-        assert _is_full_exam_request(phrase) is True
-    for phrase in ("examine her chest", "check her reflexes", "listen to the lungs"):
-        assert _is_full_exam_request(phrase) is False
+def test_exam_scope_is_decided_by_the_classifier_target():
+    """No transcript keyword matching: the classifier's target drives scope —
+    'all' → whole-body exam, a system name → that system only."""
+    full = dispatch(NurseIntent(op="perform_exam", target="all"),
+                    _engine(), "give her a once-over")
+    all_systems = {e.system for e in _engine().case.exam}
+    for system in all_systems:
+        assert system in full.revealed                 # 'all' covers every system
+    focused = dispatch(NurseIntent(op="perform_exam", target="Neurological"),
+                       _engine(), "check her neuro")
+    assert "Neurological" in focused.revealed
+    assert "Abdominal" not in focused.revealed          # a system target → just that system
 
 
 def test_generic_physical_exam_reveals_every_authored_system():
@@ -199,12 +204,11 @@ def test_generic_physical_exam_reveals_every_authored_system():
     assert card["title"] == "Physical exam"
 
 
-def test_full_exam_phrase_overrides_a_stray_focused_target():
-    # Even if the classifier tags a single system, an explicit full-exam phrase
-    # reveals the whole exam, not just that one system.
+def test_full_exam_target_all_reveals_every_system():
+    # target='all' reveals the whole exam; dispatch never re-parses the transcript.
     engine = _engine()
-    intent = NurseIntent(op="perform_exam", target="Neurological")
-    result = dispatch(intent, engine, "just do a complete physical examination")
+    intent = NurseIntent(op="perform_exam", target="all")
+    result = dispatch(intent, engine, "examine her")
     revealed_systems = [e.system for e in engine.case.exam if e.system in (result.revealed or "")]
     assert len(revealed_systems) == len({e.system for e in engine.case.exam})
 
@@ -477,3 +481,33 @@ def test_run_turn_exam_produces_card(db_path, monkeypatch):
     assert turn.intent.op == "perform_exam"
     assert turn.diagnostic and turn.diagnostic["kind"] == "exam"
     assert turn.diagnostic["title"] == "Neurological exam"
+
+
+# ── clarify flag must not swallow cheap, unambiguous actions (regression) ──────
+def test_clarify_flag_does_not_swallow_a_full_physical_exam():
+    """Regression: a generic 'perform a physical exam' that the classifier flagged
+    clarify=true returned None from dispatch, so the nurse said 'nothing to note'
+    (then worked on retry when the LLM happened to return clarify=false). A full
+    exam is cheap and unambiguous — a low-confidence flag must not block it."""
+    engine = _engine()
+    intent = NurseIntent(op="perform_exam", target=None, clarify=True)
+    result = dispatch(intent, engine, "perform a physical exam")
+    assert result is not None                       # examine_all actually ran
+    assert result.revealed and "No specific" not in result.revealed  # real findings
+    # the nurse reports the exam as done — never the empty "nothing to note" fallback
+    brief = nurse_brain._outcome_brief(
+        intent, result, {}, engine=engine, transcript="perform a physical exam"
+    )
+    assert "nothing to note" not in brief.lower()
+
+
+def test_clarify_still_pauses_a_costly_order_to_confirm():
+    """The safety half: a low-confidence order/medication/action still parks for a
+    'did you mean X?' confirmation instead of firing on the best guess."""
+    engine = _engine()
+    intent = NurseIntent(op="order_investigation", target="ecg", clarify=True)
+    assert dispatch(intent, engine, "get the… thing") is None   # held, not executed
+    brief = nurse_brain._outcome_brief(
+        intent, None, {}, engine=engine, transcript="get the… thing"
+    )
+    assert "clarify" in brief.lower() or "did you mean" in brief.lower()

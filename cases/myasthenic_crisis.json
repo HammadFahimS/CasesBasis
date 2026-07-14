@@ -117,7 +117,7 @@
         "Decreased air entry bilaterally"
       ],
       "abnormal": true,
-      "note": "Pattern is rapid and shallow from respiratory-muscle fatigue, not airway obstruction or consolidation."
+      "note": "Weak cough; poor inspiratory effort on request."
     },
     {
       "system": "Cardiovascular",
@@ -138,7 +138,7 @@
       "system": "General",
       "findings": ["Will cough and choke if given anything to drink (bulbar weakness / unsafe swallow)"],
       "abnormal": true,
-      "note": "Bedside swallow demonstrates an unprotected airway — a key indication for intubation in this case."
+      "note": "Bedside swallow: overt coughing and pooling of secretions; wet, gurgly voice afterward."
     }
   ],
   "actors": [

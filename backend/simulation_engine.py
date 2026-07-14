@@ -378,9 +378,10 @@ class SimulationEngine:
         return step
 
     def examine_all(self) -> StepResult:
-        """Reveal every authored exam finding across all documented systems as one
-        systematic physical exam — the live-sim equivalent of the manual sim's
-        full physical exam. Counts as a single action."""
+        """A succinct whole-body screen: ONE headline finding per system, no
+        interpretive notes — the "keep it brief, give detail only when asked"
+        physical exam. The resident examines a specific system (:meth:`examine`)
+        for the full findings. Counts as a single action."""
         self._log("exam", "all")
         step = self._after_action("physical exam")
         if not self.case.exam:
@@ -388,13 +389,9 @@ class SimulationEngine:
             return step
         parts = []
         for finding in self.case.exam:
-            line = f"{finding.system}: " + "; ".join(finding.findings)
-            if finding.note:
-                line += f" — {finding.note}"
-            parts.append(line)
-        # Blank line between systems so the full-exam card is scannable per system
-        # (the drawer's .rep uses white-space: pre-line, so the gap survives).
-        step.revealed = "\n\n".join(parts)
+            headline = finding.findings[0] if finding.findings else "no specific findings"
+            parts.append(f"{finding.system}: {headline}")
+        step.revealed = "\n".join(parts)
         return step
 
     def diagnose(self, text: str) -> StepResult:

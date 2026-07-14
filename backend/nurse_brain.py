@@ -65,6 +65,15 @@ _PARKABLE_OPS = {
     "perform_exam", "request_consult", "diagnose",
 }
 
+# Ops costly/irreversible enough that a low-confidence ("clarify") match should
+# pause and ask the resident to confirm rather than execute the best guess. Cheap,
+# reversible ops (perform_exam, ask_history, diagnose, read_vitals) instead run the
+# most-likely interpretation the classifier already picked — blocking them on a
+# clarify flag only produces a misleading fallback (e.g. a full physical exam
+# collapsing to "nothing to note"). dispatch() and _outcome_brief() must agree on
+# this set, or a clarify'd op with no reply handler falls through to a wrong line.
+_CLARIFY_ASK_OPS = {"order_investigation", "order_medication", "perform_action"}
+
 INTERPRET_SYSTEM = (
     "You are the routing brain of a bedside nurse in an emergency-department "
     "simulation. The physician (resident) speaks to you; classify their single "
@@ -85,7 +94,11 @@ INTERPRET_SYSTEM = (
     "ask_history to elicit history from the patient/"
     "EMS/family (pick the closest history id). order_investigation for tests/labs/"
     "imaging (pick the closest investigation id). perform_exam to physically "
-    "examine the patient (pick the closest body-system name as target). "
+    "examine the patient — set target to the closest body-system name for a "
+    "FOCUSED exam of one region (e.g. 'examine her chest', 'check her reflexes'), "
+    "or to \"all\" for a WHOLE-BODY / systematic / head-to-toe physical exam or "
+    "whenever no single region is named (e.g. 'do a physical exam', 'examine the "
+    "patient', 'give her a once-over'). "
     "request_consult to call, page or refer to a specialist (pick the closest "
     "consultant id as target). order_medication for giving a drug or medication — "
     "set target to the drug name and action_text to the dose/route if stated. "
@@ -356,8 +369,8 @@ def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> 
     ``engine.run.pending_action`` and the nurse reads it back. A following
     affirmation ("proceed"), or the missing dose, executes it; a negation cancels
     it; a brand-new order supersedes it."""
-    if intent.clarify:
-        return None  # hold — let speak() produce a "did you mean X?" line
+    if intent.clarify and intent.op in _CLARIFY_ASK_OPS:
+        return None  # hold — let _outcome_brief ask "did you mean X?" (costly ops only)
 
     # 1 — resolve a parked action against this utterance, before normal routing.
     pending = engine.run.pending_action
@@ -383,15 +396,14 @@ def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> 
     if intent.op == "order_investigation" and intent.target:
         return engine.order_investigation(intent.target)
     if intent.op == "perform_exam":
-        # A named system with no "full exam" phrasing → focused single-system exam.
-        # A generic "do a physical exam" / "examine the patient" → reveal the whole
-        # authored exam at once, matching the manual sim.
-        if intent.target and not _is_full_exam_request(transcript):
+        # The classifier decides scope (no keyword matching — it understands
+        # paraphrase): a body-system target is a focused exam; the sentinel "all"
+        # (or an empty target) is a whole-body physical exam. A stray/unknown
+        # system still degrades gracefully in engine.examine().
+        target = (intent.target or "").strip()
+        if target and target.lower() != "all":
             return engine.examine(intent.target)
-        # A full exam has no single system — clear any stray target the classifier
-        # tagged (e.g. a real "General" system) so the card titles as "Physical exam"
-        # and the nurse says "the exam", not that one system.
-        intent.target = None
+        intent.target = None   # a full exam has no single system → titles as "Physical exam"
         return engine.examine_all()
     if intent.op == "order_medication":
         med = parse_med(intent.target, intent.action_text or transcript)
@@ -423,28 +435,6 @@ def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> 
 def _med_dose(transcript: str, action_text: str) -> str | None:
     from backend.medication import _extract_dose
     return _extract_dose(transcript, action_text)
-
-
-# A generic "examine the patient" with no single body system → reveal the WHOLE
-# authored exam at once (like the manual sim's full physical exam), even if the
-# classifier tagged a stray system. "examine her chest" / "check reflexes" name a
-# region and stay a focused, single-system exam.
-# Only unambiguous full-exam phrases. A bare "examine her" (no system) already
-# routes to examine_all via the no-target path, so the pronoun object is left out
-# here to avoid swallowing "examine her chest" as a full exam.
-_FULL_EXAM_RE = re.compile(
-    r"\b(?:"
-    r"(?:full|complete|general|thorough|proper|quick|systematic)\s+(?:physical\s+)?exam(?:ination)?|"
-    r"physical\s+exam(?:ination)?|"
-    r"head[\s-]?to[\s-]?toe|top[\s-]?to[\s-]?toe|"
-    r"examine\s+(?:the\s+|this\s+)?(?:patient|pt)"
-    r")\b",
-    re.I,
-)
-
-
-def _is_full_exam_request(transcript: str) -> bool:
-    return bool(_FULL_EXAM_RE.search(transcript or ""))
 
 
 # Which vital(s) a read_vitals utterance actually named. Deliberately mirrors the
@@ -483,7 +473,7 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict,
                    transcript: str = "") -> str:
     """The factual nugget speak() must report — the engine's real output."""
     # Clarification guard: interpreter flagged ambiguous/uncertain match
-    if intent.clarify and intent.op in ("order_investigation", "order_medication", "perform_action"):
+    if intent.clarify and intent.op in _CLARIFY_ASK_OPS:
         label = intent.target or intent.action_text or "that"
         return (
             f"You were uncertain what the resident meant. Ask them to clarify: "
