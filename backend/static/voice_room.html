@@ -2193,7 +2193,9 @@
     const cap = card.summary ? `<div class="rep">${escapeHtml(card.summary)}</div>` : '';
     if (card.kind === 'ecg' && vp && vp.svg) return `<div class="dr-img">${vp.svg}</div>${cap}`;
     if (card.kind === 'cxr' && vp && vp.data) return `<img alt="Chest X-ray" src="data:image/${vp.format||'jpeg'};base64,${vp.data}">${cap}`;
-    return `${tbl}${cap || (tbl ? '' : '<div class="rep">No result.</div>')}`;
+    // A lab shows its values, not an "all normal" sentence — the prose result only
+    // appears when there's no value table (e.g. a plain text report).
+    return tbl ? tbl : (cap || '<div class="rep">No result.</div>');
   }
   function updateTabCount(name){
     const btn = drTabBtns.find(b => b.dataset.tab === name); if (!btn) return;
@@ -2568,7 +2570,12 @@
   // addDiagnostic's upsert-by-id). A spoken order lands in the same row too.
   function drListFor(pane){ const p = drPanes[pane]; return p ? p.querySelector('.dr-list') : null; }
 
+  // Request-driven drawer: when false, no exam/order/consult rows are pre-listed at
+  // launch — each appears only once the resident requests it (by voice, or via the
+  // free-text order box). Flip to true to restore the full pre-seeded menu.
+  const PRESEED_MENU = false;
   function seedRow(host, { id, title, tag, kind, op }){
+    if (!PRESEED_MENU) return;
     if (!host || !id) return;
     if (host.querySelector(`.dr-card[data-card-id="${CSS.escape(id)}"]`)) return;  // already seeded/done
     const empty = host.querySelector('.dr-empty'); if (empty) empty.remove();
@@ -3428,7 +3435,12 @@
       const r = event.results[i];
       if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
     }
-    if (interim){ stopAudio(); setNow(NURSE_CH, interim); }   // show live partial
+    // Barge-in guard: the mic hears the nurse's own TTS while she speaks (browser
+    // echo-cancellation doesn't cover the Web-Speech recogniser), and a bare
+    // `if (interim) stopAudio()` let that echo abort her mid-sentence (the "text but
+    // no audio" dropout). Only cut her off for a REAL utterance — multi-word and not
+    // an echo of what she just said. Not-speaking → stopAudio is a harmless no-op.
+    if (interim){ const t = interim.trim(); const words = t ? t.split(/\s+/).filter(Boolean).length : 0; if (words >= 2 && !looksLikeEcho(t)){ stopAudio(); setNow(NURSE_CH, interim); } }   // show live partial
     const said = finalText.trim();
     if (!said) return;
     // half-duplex: stop listening while we think + speak, so the reply isn't

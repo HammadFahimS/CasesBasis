@@ -1351,11 +1351,14 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     }
     let html = '';
     const rows = card.rows || card.values;
-    if (Array.isArray(rows) && rows.length){
+    const hasTable = Array.isArray(rows) && rows.length;
+    if (hasTable){
       const isAbn = r => r.abnormal === true || ['low','high','critical','abnormal'].includes(String(r.flag||'').toLowerCase());
       html += '<table class="cbc">' + rows.map(r => '<tr'+(isAbn(r)?' class="hi"':'')+'><td class="k">'+escapeHtml(r.label||r.name||r.k||'')+'</td><td class="v">'+escapeHtml(String(r.value!=null?r.value:(r.v!=null?r.v:'')))+'</td><td class="u">'+escapeHtml(r.unit||r.u||'')+'</td><td class="rng">'+escapeHtml(r.range||r.reference||r.rng||'')+'</td></tr>').join('') + '</table>';
     }
-    if (note) html += '<div class="inv-note">'+escapeHtml(note)+'</div>';
+    // A lab shows its values, not an "all normal" sentence — only fall back to the
+    // prose result when there's no value table (e.g. a plain text report).
+    if (note && !hasTable) html += '<div class="inv-note">'+escapeHtml(note)+'</div>';
     return html || '<div class="inv-note">Result recorded.</div>';
   }
   function addCard(card){
@@ -1403,7 +1406,12 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
       runAction(el.dataset.op, el.dataset.cardId, actionLabelF(el.dataset.op, el.dataset.cardId));
     } else { el.classList.toggle('collapsed'); }
   }
+  // Request-driven panel: when false, nothing is pre-listed at launch — each exam
+  // / investigation appears only once the resident asks for it (by voice, or via
+  // the Add Investigation picker). Flip to true to restore the full pre-seeded menu.
+  const PRESEED_MENU = false;
   function seedInvRow(o){
+    if (!PRESEED_MENU) return;
     if (!o.id || invList.querySelector('.inv-card[data-card-id="'+CSS.escape(o.id)+'"]')) return;
     const el = document.createElement('div');
     el.className = 'card inv-card pending collapsed'; el.dataset.cat = o.cat; el.dataset.cardId = o.id; el.dataset.op = o.op;
@@ -1816,7 +1824,13 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   function onNativeResult(event){
     let finalText='', interim='';
     for (let i=event.resultIndex;i<event.results.length;i++){ const r=event.results[i]; if (r.isFinal) finalText+=r[0].transcript; else interim+=r[0].transcript; }
-    if (interim){ stopAudio(); }
+    // Barge-in guard: the mic picks up the nurse's own TTS while she speaks (the
+    // browser's echo-cancellation doesn't cover the Web-Speech recogniser), and a
+    // bare `if (interim) stopAudio()` let that echo abort her mid-sentence — the
+    // intermittent "text but no audio" dropout. Only cut her off for a REAL utterance:
+    // multi-word and not an echo of what she just said (recentSpoken/looksLikeEcho
+    // already power the server path). Not-speaking → stopAudio is a harmless no-op.
+    if (interim){ const t = interim.trim(); const words = t ? t.split(/\s+/).filter(Boolean).length : 0; if (words >= 2 && !looksLikeEcho(t)) stopAudio(); }
     const said=finalText.trim(); if (!said) return;
     recoSuspend=true; try { recognition.stop(); } catch(e){}
     processing=true; setMic('busy'); setState('thinking');
