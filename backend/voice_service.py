@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from typing import Any
 
@@ -28,6 +29,32 @@ logger = logging.getLogger(__name__)
 
 # ── ElevenLabs — the sole voice provider (TTS + STT) ─────────────────────────
 ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1"
+
+# A single, connection-pooled client shared by every STT and TTS call. Without
+# this, each `httpx.post`/`httpx.stream` opened a *fresh* TLS connection to
+# ElevenLabs — ~100–300 ms of handshake baked into every hop, every turn. The
+# real killer is httpx's default ``keepalive_expiry`` of only 5 s: any gap while
+# the resident is talking or listening dropped the connection, so the next turn
+# paid the handshake again. A 5-minute keepalive keeps the connection warm
+# across normal between-turn idle. The client is thread-safe (pool-locked), so
+# it is safe to share across the worker's request threads.
+_EL_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
+_EL_LIMITS = httpx.Limits(
+    max_keepalive_connections=8, max_connections=16, keepalive_expiry=300.0
+)
+_client: httpx.Client | None = None
+_client_lock = threading.Lock()
+
+
+def _http() -> httpx.Client:
+    """The shared, warm-connection ElevenLabs client (built once, lazily)."""
+    global _client
+    if _client is None:
+        with _client_lock:
+            if _client is None:
+                _client = httpx.Client(timeout=_EL_TIMEOUT, limits=_EL_LIMITS)
+    return _client
+
 EL_TTS_MODEL = "eleven_flash_v2_5"   # ~75 ms, low-latency; all live chatty turns
 EL_TTS_MODEL_V3 = "eleven_v3"        # expressive + audio tags; reserved for set-pieces
 EL_STT_MODEL = "scribe_v1"           # ElevenLabs Scribe — speech-to-text
@@ -79,12 +106,11 @@ def transcribe(audio: bytes, content_type: str = "audio/webm",
         if attempt:
             time.sleep(1.0)
         try:
-            resp = httpx.post(
+            resp = _http().post(
                 f"{ELEVENLABS_BASE_URL}/speech-to-text",
                 headers={"xi-api-key": key},
                 files={"file": (f"audio.{ext}", audio, content_type)},
                 data={"model_id": EL_STT_MODEL, "language_code": "en", "tag_audio_events": "false"},
-                timeout=60.0,
             )
             resp.raise_for_status()
             return (resp.json().get("text") or "").strip()
@@ -133,7 +159,7 @@ def _el_tts_request(
     # NB: ElevenLabs reads output_format from the QUERY STRING. Putting it in the
     # JSON body is silently ignored and the API defaults to MP3 — which, on the
     # PCM path, the browser decodes as raw samples (loud static).
-    resp = httpx.post(
+    resp = _http().post(
         f"{ELEVENLABS_BASE_URL}/text-to-speech/{voice_id}",
         params={"output_format": output_format},
         headers={
@@ -141,7 +167,6 @@ def _el_tts_request(
             "Content-Type": "application/json",
         },
         json=body,
-        timeout=60.0,
     )
     resp.raise_for_status()
     return resp.content
@@ -176,7 +201,7 @@ def _el_tts_stream(
     if locators:
         body["pronunciation_dictionary_locators"] = locators
     # output_format MUST be a query parameter (ignored in the JSON body → MP3).
-    with httpx.stream(
+    with _http().stream(
         "POST",
         f"{ELEVENLABS_BASE_URL}/text-to-speech/{voice_id}/stream",
         params={"output_format": "pcm_16000"},
@@ -185,7 +210,6 @@ def _el_tts_stream(
             "Content-Type": "application/json",
         },
         json=body,
-        timeout=60.0,
     ) as resp:
         resp.raise_for_status()
         yield from resp.iter_bytes(chunk_size=4096)
