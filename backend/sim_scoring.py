@@ -79,6 +79,27 @@ def _order_texts(session) -> list[str]:
     return out
 
 
+def _avoid_violated(session, item, drugs: list[str]) -> bool:
+    """An ``avoid`` item is tripped by a live intercept, or by an order carrying the
+    drug (and, when the item names dose phrases, one of them). State-scoped items
+    are judged on the engine's own action log, which carries each order's state."""
+    from backend.medication import dose_phrase_matches
+    log = session.engine.run.log
+    if any(e.get("kind") == "intercept" and e.get("detail") == item.id for e in log):
+        return True
+    if item.states:
+        texts = [str(e.get("detail") or "") for e in log
+                 if e.get("kind") == "medicate" and e.get("state") in item.states]
+    else:
+        texts = _order_texts(session)
+    for t in texts:
+        if not any(d and d in _norm(t) for d in drugs):
+            continue
+        if not item.dose_keywords or dose_phrase_matches(t, item.dose_keywords):
+            return True
+    return False
+
+
 def _score_medications(session) -> list[Criterion]:
     """Grade the resident's drug orders against the case's medication rubric.
 
@@ -95,6 +116,7 @@ def _score_medications(session) -> list[Criterion]:
         given = bool(matched)
         if item.expectation == "avoid":
             # A contraindicated drug is a pitfall, not an earnable point: penalty-only.
+            given = _avoid_violated(session, item, drugs)
             out.append(Criterion(
                 f"med-{item.id}", item.label, not given,
                 item.note if given else "Correctly not given.",

@@ -608,6 +608,11 @@ class SimulationEngine:
         if state.is_terminal:
             self.run.ended = True
 
+    def log_event(self, kind: str, detail: str) -> None:
+        """Record a protocol event on the run log (e.g. an intercepted order) so
+        the debrief can read it with its state and time."""
+        self._log(kind, detail)
+
     def _log(self, kind: str, detail: str) -> None:
         self.run.log.append(
             {"t": self.run.elapsed_seconds, "state": self.run.current_state_id, "kind": kind, "detail": detail}

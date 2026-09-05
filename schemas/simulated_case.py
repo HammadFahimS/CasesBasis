@@ -162,6 +162,15 @@ class ExamFinding(StrictModel):
     note: str = ""
 
 
+class ActorResponse(StrictModel):
+    """State-scoped grounded content for a consultant: what they actually tell the
+    resident while the run is in one of ``states`` (empty = any state). The LLM only
+    phrases it in character and may add no facts of its own."""
+
+    states: list[str] = Field(default_factory=list)
+    content: str
+
+
 class ActorRole(StrictModel):
     """A character the LLM can role-play (patient, EMS, family, consultant)."""
 
@@ -170,6 +179,10 @@ class ActorRole(StrictModel):
     voice: str = ""
     persona: str = ""
     script: list[str] = Field(default_factory=list)
+    # Grounded consult content by state (first match wins) and what the consultant
+    # says when no response matches. An actor with neither keeps free role-play.
+    responses: list[ActorResponse] = Field(default_factory=list)
+    fallback: str = ""
     # When this actor becomes present in the room, in case-clock seconds. ``None``
     # (the default) means present from the start; a value means the actor is "en
     # route" until the clock reaches it, then arrives (e.g. the husband at 300s).
@@ -384,6 +397,14 @@ class MedicationExpectation(StrictModel):
     expectation: Literal["preferred", "avoid", "dose_adjust"] = "preferred"
     dose_keywords: list[str] = Field(default_factory=list)
     note: str = ""
+    # Enforce only while the run is in one of these states (empty = always). On an
+    # ``avoid`` item, ``dose_keywords`` narrow the violation to the drug *with* one
+    # of these dose phrases ("1 mg iv"), matched as whole-token sequences.
+    states: list[str] = Field(default_factory=list)
+    # Live guardrail: the nurse withholds a matching order instead of executing it,
+    # voices ``note``, and re-parks the order awaiting a corrected dose. The debrief
+    # reads the intercept log. Only meaningful on ``avoid`` items.
+    intercept: bool = False
 
 
 class WorkupExpectation(StrictModel):
@@ -462,6 +483,17 @@ class SimulatedCase(StrictModel):
                         raise ValueError(
                             f"cue in state '{state.id}' requires unknown actor '{aid}'"
                         )
+
+        # State-scoped content must name real states.
+        for actor in self.actors:
+            for resp in actor.responses:
+                for sid in resp.states:
+                    if sid not in state_ids:
+                        raise ValueError(f"actor '{actor.id}' response names unknown state '{sid}'")
+        for item in self.medication_rubric:
+            for sid in item.states:
+                if sid not in state_ids:
+                    raise ValueError(f"medication_rubric '{item.id}' names unknown state '{sid}'")
 
         # Referential check for investigation result holders and state-scoped
         # results/images (a typo in a state key would silently show the default).

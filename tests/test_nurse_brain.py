@@ -160,11 +160,15 @@ def test_read_vitals_reports_only_the_vitals_asked_for():
     assert "respiratory_rate" not in brief and "oxygen_saturation" not in brief and "98" not in brief
 
 
-def test_read_vitals_generic_ask_reports_the_full_set():
+def test_read_vitals_generic_ask_asks_which_ones_but_an_explicit_all_reports_the_set():
+    """A bare "vitals?" gets a which-one back (the resident names what they want);
+    an explicit "all of them" / "full obs" reports the whole set."""
     from backend.nurse_brain import _outcome_brief
     vitals = {"heart_rate": 108, "respiratory_rate": 18, "oxygen_saturation": 98}
     brief = _outcome_brief(NurseIntent(op="read_vitals"), None, vitals, transcript="what are her obs?")
-    assert "respiratory_rate" in brief and "oxygen_saturation" in brief
+    assert "which" in brief.lower() and "108" not in brief
+    brief = _outcome_brief(NurseIntent(op="read_vitals"), None, vitals, transcript="give me all of them")
+    assert "108" in brief and "18" in brief and "98" in brief
 
 
 def test_dispatch_perform_exam_reveals_and_can_transition():

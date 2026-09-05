@@ -235,7 +235,31 @@
         "Before a laryngoscopic view exists: asks whether anyone has looked at the cords, and says to scope him and call back with what is seen.",
         "Once a supraglottic food bolus has been seen: Magill forceps under video laryngoscopy if it can be reached; otherwise induce, intubate and push it into a main bronchus for bronchoscopic retrieval.",
         "After intubation: will arrange rigid bronchoscopy in theatre or the unit."
-      ]
+      ],
+      "responses": [
+        {
+          "states": [
+            "fb_visualized"
+          ],
+          "content": "Two options, your call. If you can reach it, Magill forceps under the video laryngoscope and pull it out. If you can't, induce and intubate, push it down into a main bronchus, and we'll get it out at bronchoscopy. Either way keep suction on and don't lose the view."
+        },
+        {
+          "states": [
+            "intubated_displaced",
+            "rosc",
+            "icu_disposition",
+            "bronch_disposition"
+          ],
+          "content": "Fine — leave it where it is, keep him ventilated. We'll do a rigid bronchoscopy and retrieve it; I'll come to the unit. Send him up with the tube secured."
+        },
+        {
+          "states": [
+            "recovery"
+          ],
+          "content": "Good. No procedure needed from us. Observe him a few hours, soft diet, and clinic in a couple of weeks given the radiated neck."
+        }
+      ],
+      "fallback": "Have you looked at the cords yet? I can't plan off a wheeze. Scope him and call me back with what you see."
     },
     {
       "id": "icu",
@@ -245,7 +269,17 @@
       "script": [
         "If called before the airway is secured: 'We're flat out up here. Diagnose and treat him first — call me when he's tubed.'",
         "Once intubated: accepts, asks for ventilator settings and a post-intubation gas."
-      ]
+      ],
+      "responses": [
+        {
+          "states": [
+            "intubated_displaced",
+            "rosc"
+          ],
+          "content": "Okay, we'll take him. What are you ventilating him on — mode, tidal volume, PEEP? Send a post-intubation gas and we'll get a bed ready."
+        }
+      ],
+      "fallback": "We're flat out up here. Diagnose and treat him first — call me when he's tubed."
     },
     {
       "id": "anaesthesia",
@@ -254,7 +288,9 @@
       "persona": "Anaesthetist reached in theatre. Cannot come down for several minutes and says so; never arrives and offers no management.",
       "script": [
         "'We're mid-case. Someone can come down in a few minutes. Until then you'll have to manage the airway yourself.'"
-      ]
+      ],
+      "responses": [],
+      "fallback": "We're mid-case. Someone can come down in a few minutes. Until then you'll have to manage the airway yourself."
     }
   ],
   "investigations": [
@@ -1996,6 +2032,45 @@
         "one in a thousand"
       ],
       "note": "Anaphylaxis with a pulse is treated with 0.5 mg (0.3-0.5 mg) of 1 mg/mL epinephrine IM — never the 1 mg IV arrest dose."
+    },
+    {
+      "id": "iv_epi_perfusing",
+      "label": "Did not order the arrest dose of epinephrine while he had a pulse",
+      "drugs": [
+        "epinephrine",
+        "adrenaline"
+      ],
+      "expectation": "avoid",
+      "dose_keywords": [
+        "1 mg iv",
+        "1 mg intravenous",
+        "1 milligram iv",
+        "one milligram iv",
+        "1 mg push",
+        "1 mg iv push",
+        "1 mg io",
+        "arrest dose",
+        "cardiac arrest dose",
+        "code dose"
+      ],
+      "states": [
+        "baseline",
+        "checkpoint2",
+        "deteriorating",
+        "anaphylaxis_1",
+        "anaphylaxis_2",
+        "fb_suspected",
+        "thrusts_failed",
+        "vl_aborted",
+        "fb_visualized",
+        "recovery",
+        "intubated_displaced",
+        "bronch_disposition",
+        "rosc",
+        "icu_disposition"
+      ],
+      "intercept": true,
+      "note": "That's the arrest dose. With a pulse it's 0.5 milligrams IM of the one-in-a-thousand. Want me to draw that up?"
     }
   ],
   "workup_rubric": [
