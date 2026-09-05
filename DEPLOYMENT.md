@@ -301,7 +301,7 @@ curl -sS -o /dev/null -w "%{http_code} tls=%{ssl_verify_result}\n" https://cases
 | TLS | Caddy + Let's Encrypt, auto-renew |
 | DNS | grey-cloud A-record via CF token (zone `51adf893a05adb718f2e715492b4d884`) |
 | Deploy method | rsync from local `main` + build on droplet |
-| Deploy commit | `ac4eb89` on `main` (2026-09-05 — audio hardening + client telemetry; previously c22c508 push-to-talk) |
+| Deploy commit | `447f870` on `main` (2026-09-05 — Phase 2 room grounding; previously ac4eb89 audio hardening + client telemetry) |
 
 Related: repo `deploy/README.md` (older tunnel-oriented runbook), `Dockerfile`,
 `docker-compose.prod.yml`, and the auto-memory `deployment-status.md`.
