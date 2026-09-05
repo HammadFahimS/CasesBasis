@@ -1647,6 +1647,11 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   /* ---------------- VOICE I/O (STT / TTS / VAD) ---------------- */
   let stream=null, recorder=null, chunks=[], audioCtx=null, analyser=null, micSource=null, vadRaf=0;
   let listening=false, capturing=false;
+  // Realtime STT (Scribe v2) — stream mic PCM to /ws/stt while the resident talks,
+  // so the transcript is ready ~when they stop. MediaRecorder still runs in parallel
+  // as an automatic fallback if the socket is down or returns nothing.
+  let sttWs=null, sttPcmNode=null, sttStreaming=false, sttActive=false;
+  let sttFinalText='', sttFinalResolve=null;
   let curAudio=null, playResolve=null, curAbortCtrl=null, curPCMGain=null;
   let audioMuted=false;   // Audio toggle: when true, TTS is silenced (transcript still updates)
   let voiced=false, voiceStart=0, silenceAt=0, vadGate=false;
@@ -1667,6 +1672,52 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   function normTokens(t){ return (t||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean); }
   function rememberSpoken(text){ const toks=normTokens(text); if (!toks.length) return; recentSpoken.push(toks); if (recentSpoken.length>3) recentSpoken.shift(); }
   function looksLikeEcho(said){ const toks=normTokens(said); if (toks.length<2) return false; const set=new Set(toks); for (const prev of recentSpoken){ if (prev.length<2) continue; const pset=new Set(prev); let hit=0; for (const w of set) if (pset.has(w)) hit++; if (hit/Math.min(set.size,pset.size)>=0.6) return true; } return false; }
+
+  // ---- Realtime STT over WebSocket (Scribe v2) ----
+  function sttConnect(){
+    if (VOICE_BACKEND !== 'models') return;
+    if (sttWs && (sttWs.readyState === 0 || sttWs.readyState === 1)) return;
+    try {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const q = SESSION_ID ? `?session_id=${encodeURIComponent(SESSION_ID)}` : '';
+      const ws = new WebSocket(`${proto}://${location.host}/ws/stt${q}`);
+      ws.binaryType = 'arraybuffer';
+      ws.onclose = () => { if (sttWs === ws){ sttWs = null; sttStreaming = false; } };
+      ws.onerror = () => {};
+      ws.onmessage = (ev) => {
+        let m; try { m = JSON.parse(ev.data); } catch(e){ return; }
+        if (m.partial){ if (sttStreaming && m.text) micInput.placeholder = m.text.slice(-60); }
+        else if (m.final){
+          sttFinalText = (sttFinalText ? sttFinalText + ' ' : '') + (m.text || '');
+          if (sttFinalResolve){ const r = sttFinalResolve; sttFinalResolve = null; r(sttFinalText.trim()); }
+        }
+      };
+      sttWs = ws;
+    } catch(e){ sttWs = null; }
+  }
+  function floatTo16kPCM(f32, inRate){
+    // Downsample (linear) to 16 kHz mono int16 — Scribe realtime input format.
+    const clamp = s => s < 0 ? Math.max(-1, s) * 0x8000 : Math.min(1, s) * 0x7FFF;
+    if (inRate === 16000){ const out = new Int16Array(f32.length); for (let i=0;i<f32.length;i++) out[i]=clamp(f32[i]); return out; }
+    const ratio = inRate / 16000, outLen = Math.floor(f32.length / ratio), out = new Int16Array(outLen);
+    for (let i=0;i<outLen;i++){ const idx=i*ratio, i0=Math.floor(idx), i1=Math.min(i0+1,f32.length-1), frac=idx-i0; out[i]=clamp(f32[i0]*(1-frac)+f32[i1]*frac); }
+    return out;
+  }
+  function sttBegin(){
+    // Returns true if this utterance will be transcribed via realtime; false → fall back to blob.
+    if (VOICE_BACKEND !== 'models'){ return false; }
+    if (!sttWs || sttWs.readyState !== 1){ sttConnect(); return false; }
+    sttFinalText=''; sttFinalResolve=null; sttStreaming=true; return true;
+  }
+  function sttCommit(){ if (sttStreaming){ sttStreaming=false; try { sttWs.send(JSON.stringify({t:'commit'})); } catch(e){} } }
+  function sttAwaitFinal(timeoutMs){
+    return new Promise(resolve => {
+      if (sttFinalText){ resolve(sttFinalText.trim()); return; }
+      let done=false;
+      sttFinalResolve = (txt)=>{ if (done) return; done=true; resolve((txt||'').trim()); };
+      setTimeout(()=>{ if (done) return; done=true; sttFinalResolve=null; resolve((sttFinalText||'').trim()); }, timeoutMs);
+    });
+  }
 
   async function stt(blob){
     const url = SESSION_ID ? `/api/voice/stt?session_id=${encodeURIComponent(SESSION_ID)}` : '/api/voice/stt';
@@ -1760,8 +1811,12 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     else if (voiced){ if (!silenceAt) silenceAt=now; else if (now-silenceAt>SILENCE_MS){ voiced=false; onVoiceEnd((silenceAt-voiceStart)>=MIN_SPEECH_MS); } }
     vadRaf=requestAnimationFrame(vadTick);
   }
-  function onVoiceStart(){ stopAudio(); if (processing) return; if (!capturing) startCapture(); }
-  function onVoiceEnd(longEnough){ if (capturing){ capturing=false; try { recorder.stop(); } catch(e){} } if (!longEnough){ chunks=[]; } }
+  function onVoiceStart(){ stopAudio(); if (processing) return; if (!capturing){ sttActive = sttBegin(); startCapture(); } }
+  function onVoiceEnd(longEnough){
+    if (capturing){ capturing=false; try { recorder.stop(); } catch(e){} }
+    if (!longEnough){ chunks=[]; sttStreaming=false; sttActive=false; return; }
+    sttCommit();  // realtime: finalise the transcript; stays sttActive so processUtterance awaits it
+  }
   function startCapture(){
     chunks=[];
     const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
@@ -1771,9 +1826,17 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     recorder.start(); capturing=true; setMic('rec'); setState('listening');
   }
   async function processUtterance(blob){
-    if (blob.size < 1500){ if (listening) setMic('listen'); return; }
+    const wantRealtime = sttActive; sttActive=false;
+    if (blob.size < 1500 && !wantRealtime){ if (listening) setMic('listen'); return; }
     processing=true; setMic('busy'); setState('thinking');
-    let said=''; try { said = await stt(blob); } catch(e){ roomHint((e&&e.message)||'transcription failed'); processing=false; if (!capturing) setMic(listening?'listen':'off'); setState(listening?'listening':'idle'); return; }
+    let said='';
+    // Prefer the realtime committed transcript (ready ~when the resident stopped talking);
+    // fall back to the blocking blob upload if the socket returned nothing.
+    if (wantRealtime){ said = await sttAwaitFinal(1600); }
+    if (!said){
+      if (blob.size < 1500){ processing=false; if (listening) setMic('listen'); setState(listening?'listening':'idle'); return; }
+      try { said = await stt(blob); } catch(e){ roomHint((e&&e.message)||'transcription failed'); processing=false; if (!capturing) setMic(listening?'listen':'off'); setState(listening?'listening':'idle'); return; }
+    }
     if (!said){ processing=false; if (listening) setMic('listen'); setState(listening?'listening':'idle'); return; }
     if (looksLikeEcho(said)){ processing=false; if (!capturing) setMic(listening?'listen':'off'); setState(listening?'listening':'idle'); return; }
     await handleSaid(said);
@@ -1807,7 +1870,24 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     try { if (!stream) stream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } }); }
     catch(e){ roomHint('microphone permission needed'); return; }
     audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)(); if (audioCtx.state==='suspended') await audioCtx.resume();
-    if (!analyser){ analyser=audioCtx.createAnalyser(); analyser.fftSize=512; micSource=audioCtx.createMediaStreamSource(stream); const hp=audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=250; hp.Q.value=0.7; micSource.connect(hp); hp.connect(analyser); }
+    if (!analyser){
+      analyser=audioCtx.createAnalyser(); analyser.fftSize=512; micSource=audioCtx.createMediaStreamSource(stream);
+      const hp=audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=250; hp.Q.value=0.7; micSource.connect(hp); hp.connect(analyser);
+      if (VOICE_BACKEND==='models' && audioCtx.createScriptProcessor){
+        // Tap post-highpass PCM and stream it to /ws/stt while an utterance is live.
+        try {
+          sttPcmNode = audioCtx.createScriptProcessor(4096, 1, 1);
+          const sink = audioCtx.createGain(); sink.gain.value = 0;  // silent — no echo, keeps node running
+          hp.connect(sttPcmNode); sttPcmNode.connect(sink); sink.connect(audioCtx.destination);
+          sttPcmNode.onaudioprocess = (e) => {
+            if (!sttStreaming || !sttWs || sttWs.readyState !== 1) return;
+            const pcm = floatTo16kPCM(e.inputBuffer.getChannelData(0), audioCtx.sampleRate);
+            try { sttWs.send(pcm.buffer); } catch(err){}
+          };
+        } catch(err){ sttPcmNode=null; }
+      }
+    }
+    if (VOICE_BACKEND==='models') sttConnect();
     listening=true; voiced=false; silenceAt=0; setMic('listen'); setState('listening');
     if (!await playHandoff()) return; vadRaf=requestAnimationFrame(vadTick);
   }
@@ -1837,7 +1917,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     handleSaid(said).finally(()=>{ recoSuspend=false; if (listening){ try { recognition.start(); } catch(e){} setMic('listen'); } });
   }
   async function startListening(){ if (VOICE_BACKEND==='native') return startNative(); return startServer(); }
-  function stopListening(){ listening=false; recoSuspend=false; if (vadRaf){ cancelAnimationFrame(vadRaf); vadRaf=0; } if (recognition){ try { recognition.stop(); } catch(e){} } if (capturing){ capturing=false; try { recorder.stop(); } catch(e){} chunks=[]; } stopAudio(); clearSpeaking(); setMic('off'); setState('idle'); }
+  function stopListening(){ listening=false; recoSuspend=false; sttStreaming=false; sttActive=false; if (vadRaf){ cancelAnimationFrame(vadRaf); vadRaf=0; } if (recognition){ try { recognition.stop(); } catch(e){} } if (capturing){ capturing=false; try { recorder.stop(); } catch(e){} chunks=[]; } stopAudio(); clearSpeaking(); setMic('off'); setState('idle'); }
 
   // The case begins explicitly via the green "Start case" button (or the first
   // mic tap). Once started, the button goes inactive and the mic toggles talking.
