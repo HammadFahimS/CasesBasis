@@ -99,14 +99,21 @@ def _patient_instruction(engine) -> str:
         return ("You are unconscious or sedated and cannot speak. Do not reply with "
                 "words — respond with silence (output an empty string).")
     sev = severity(engine)
+    # Never ask for broken or trailing-off words: the model complies literally
+    # ("Food all ergies") and the TTS reads the fragments as nonsense (2026-09-05
+    # playtest). Effort is conveyed by brevity — few words, every one whole.
     if sev >= 0.7:
         return ("You are drowsy and barely able to breathe. Reply in at most four "
-                "words, mumbled. Every breath is a visible effort — do not form full "
-                "sentences. You may trail off mid-word or not answer at all.")
+                "words, and every word must be a whole, real word — for example "
+                "'Steak. At dinner.' or 'Can't get air.' Never break a word into "
+                "pieces, never write half a word, never fake gasping with dots or "
+                "dashes. You may answer with a single word, or not at all (an empty "
+                "reply) — but never with a fragment of a word.")
     if sev >= 0.4:
         return ("You are noticeably more breathless and frightened than when the "
-                "doctor arrived. Limit replies to short phrases and convey effort "
-                "with each word.")
+                "doctor arrived. Keep replies to short phrases of whole words — "
+                "convey the effort through brevity, never by breaking or cutting "
+                "off a word.")
     return ("Speak as your current condition describes: if you are short of breath, "
             "keep to short sentences and pause to breathe; if you are comfortable, "
             "speak normally. Answer only what you are asked.")

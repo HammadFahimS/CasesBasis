@@ -34,7 +34,7 @@ from pathlib import Path
 
 import yaml
 
-from backend import consult_voice, nurse_brain, patient_voice
+from backend import actor_voice, consult_voice, nurse_brain, patient_voice
 from backend.actor_voice import actor_speaker
 from backend.nurse_brain import NurseTurn, run_action, run_turn
 from backend.voice_session import VoiceSession, start_session
@@ -70,6 +70,7 @@ def install_stubs(monkeypatch, stub: StubLLM) -> None:
     """Point every LLM seam at the stub (nurse, patient/bystander, consult)."""
     monkeypatch.setattr(nurse_brain, "_complete", stub.nurse_complete)
     monkeypatch.setattr(patient_voice, "_complete", stub.voice_complete)
+    monkeypatch.setattr(actor_voice, "_complete", stub.voice_complete)
     monkeypatch.setattr(consult_voice, "_complete", stub.voice_complete)
 
 
@@ -182,6 +183,7 @@ def _intent_json(intent: dict) -> str:
         "target": intent.get("target"),
         "action_text": intent.get("action_text", ""),
         "clarify": bool(intent.get("clarify", False)),
+        "addressee": intent.get("addressee"),
     })
 
 
@@ -249,7 +251,10 @@ def check_turn(tr: TurnRun, expect: dict) -> list[str]:
         cmp("state", t.state_id, expect["state"])
     if "reveals" in expect:
         got = (t.revealed or "")
-        if expect["reveals"].lower() not in got.lower():
+        if expect["reveals"] is None:              # `reveals: null` — nothing grounded
+            if got:
+                fails.append(f"[{tr.say!r}] reveals: expected nothing, got {got!r}")
+        elif expect["reveals"].lower() not in got.lower():
             fails.append(f"[{tr.say!r}] reveals: {expect['reveals']!r} not in {got!r}")
     if "card_kind" in expect:
         cmp("card_kind", (t.diagnostic or {}).get("kind"), expect["card_kind"])

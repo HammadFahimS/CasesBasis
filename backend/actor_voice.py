@@ -129,6 +129,45 @@ def voice_history(session, provider: str | None, content: str, transcript: str,
                      already_asked=already_asked, emotion=emotion), speaker
 
 
+_CHAT_NOTE = (
+    "\n\nThe resident is NOT asking you for new information — this is conversation: a "
+    "thank-you, a dismissal, a check-in, or a repeat of something you already told "
+    "them. Reply in character in ONE short sentence. If they are thanking or releasing "
+    "you, acknowledge and sign off. If they re-ask something you already said, give a "
+    "one-line reminder in passing — never re-deliver the whole account, and never say "
+    "'as I already told you'. Add no facts beyond what you already said."
+)
+
+
+def _chat_fallback(speaker: str, actor, told: list[str]) -> str:
+    if told:
+        first = re.split(r"(?<=[.!?])\s+", told[0].strip())[0]
+        return _clean_for_speech(f"Like I said, doctor — {first[:1].lower()}{first[1:]}")
+    from backend.agents import refuse
+    return refuse(speaker, actor)
+
+
+def voice_chat(session, actor, speaker: str, transcript: str, told: list[str]) -> str:
+    """A present bystander whose story is already told answers in character — a
+    thanks, a dismissal, a re-ask — from what they have already said. Never
+    re-delivers the handover (the 2026-09-05 EMS loop). Fails soft."""
+    from backend.emotional_state import for_speaker
+    emotion = for_speaker(speaker, session.engine).instruction
+    emotion_note = f"\n\nHow you feel right now: {emotion}" if emotion else ""
+    known = ("\n".join(f"- {t}" for t in told) if told
+             else "(you have not been asked anything yet)")
+    user = (
+        f"{_persona(actor, speaker)}{emotion_note}\n\n"
+        f"What you have already told the resident:\n{known}\n\n"
+        f"The resident said: \"{transcript}\"{_CHAT_NOTE}\n\nYou:"
+    )
+    try:
+        return _clean_for_speech(_complete(VOICE_SYSTEM, user))
+    except Exception as exc:
+        logger.warning("actor chat failed (%s): %s", speaker, exc)
+        return _chat_fallback(speaker, actor, told)
+
+
 CUE_SYSTEM = (
     "You are a person at the bedside in an emergency-department simulation. You are "
     "given a stage direction describing a prompt you should give the resident right "
