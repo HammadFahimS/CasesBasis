@@ -301,7 +301,7 @@ curl -sS -o /dev/null -w "%{http_code} tls=%{ssl_verify_result}\n" https://cases
 | TLS | Caddy + Let's Encrypt, auto-renew |
 | DNS | grey-cloud A-record via CF token (zone `51adf893a05adb718f2e715492b4d884`) |
 | Deploy method | rsync from local `main` + build on droplet |
-| Deploy commit | `944674e` on `main` (2026-09-05 — foreign-body airway gold case + generic engine/nurse/consult mechanisms) |
+| Deploy commit | `c22c508` on `main` (2026-09-05 — push-to-talk voice input; previously 944674e foreign-body airway gold case) |
 
 Related: repo `deploy/README.md` (older tunnel-oriented runbook), `Dockerfile`,
 `docker-compose.prod.yml`, and the auto-memory `deployment-status.md`.
