@@ -80,12 +80,25 @@ def build_together_client() -> Any:
 
 def build_cerebras_client() -> Any:
     try:
+        import httpx
         from openai import OpenAI
     except ImportError as exc:
         raise RuntimeError("The openai package is not installed. Run: pip install openai") from exc
+    # A dedicated http client with a 5-minute keepalive so the TLS connection to
+    # Cerebras stays warm between voice turns. The OpenAI SDK's default pool uses
+    # httpx's 5 s keepalive_expiry, which drops the connection during the gap
+    # while the resident talks/listens — making the *first* LLM call of the next
+    # turn pay a full cold handshake (~1.8 s measured, vs ~150 ms warm).
+    http_client = httpx.Client(
+        limits=httpx.Limits(
+            max_keepalive_connections=4, max_connections=8, keepalive_expiry=300.0
+        ),
+        timeout=httpx.Timeout(60.0, connect=10.0),
+    )
     client = OpenAI(
         api_key=os.environ["CEREBRAS_API_KEY"],
         base_url=CEREBRAS_BASE_URL,
+        http_client=http_client,
     )
     return CerebrasClient(client)
 

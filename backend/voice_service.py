@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from typing import Any
 
@@ -28,9 +29,37 @@ logger = logging.getLogger(__name__)
 
 # ── ElevenLabs — the sole voice provider (TTS + STT) ─────────────────────────
 ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1"
+ELEVENLABS_WS_BASE = "wss://api.elevenlabs.io/v1"
+
+# A single, connection-pooled client shared by every STT and TTS call. Without
+# this, each `httpx.post`/`httpx.stream` opened a *fresh* TLS connection to
+# ElevenLabs — ~100–300 ms of handshake baked into every hop, every turn. The
+# real killer is httpx's default ``keepalive_expiry`` of only 5 s: any gap while
+# the resident is talking or listening dropped the connection, so the next turn
+# paid the handshake again. A 5-minute keepalive keeps the connection warm
+# across normal between-turn idle. The client is thread-safe (pool-locked), so
+# it is safe to share across the worker's request threads.
+_EL_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
+_EL_LIMITS = httpx.Limits(
+    max_keepalive_connections=8, max_connections=16, keepalive_expiry=300.0
+)
+_client: httpx.Client | None = None
+_client_lock = threading.Lock()
+
+
+def _http() -> httpx.Client:
+    """The shared, warm-connection ElevenLabs client (built once, lazily)."""
+    global _client
+    if _client is None:
+        with _client_lock:
+            if _client is None:
+                _client = httpx.Client(timeout=_EL_TIMEOUT, limits=_EL_LIMITS)
+    return _client
+
 EL_TTS_MODEL = "eleven_flash_v2_5"   # ~75 ms, low-latency; all live chatty turns
 EL_TTS_MODEL_V3 = "eleven_v3"        # expressive + audio tags; reserved for set-pieces
-EL_STT_MODEL = "scribe_v1"           # ElevenLabs Scribe — speech-to-text
+EL_STT_MODEL = "scribe_v1"           # ElevenLabs Scribe — blocking speech-to-text
+EL_STT_REALTIME_MODEL = "scribe_v2_realtime"  # Scribe v2 — streaming STT over WebSocket
 
 # Nurse voice: Rachel — calm, clear American female. Override via env.
 _EL_NURSE_DEFAULT = "21m00Tcm4TlvDq8ikWAM"
@@ -79,12 +108,11 @@ def transcribe(audio: bytes, content_type: str = "audio/webm",
         if attempt:
             time.sleep(1.0)
         try:
-            resp = httpx.post(
+            resp = _http().post(
                 f"{ELEVENLABS_BASE_URL}/speech-to-text",
                 headers={"xi-api-key": key},
                 files={"file": (f"audio.{ext}", audio, content_type)},
                 data={"model_id": EL_STT_MODEL, "language_code": "en", "tag_audio_events": "false"},
-                timeout=60.0,
             )
             resp.raise_for_status()
             return (resp.json().get("text") or "").strip()
@@ -98,6 +126,82 @@ def transcribe(audio: bytes, content_type: str = "audio/webm",
             last_exc = exc
             logger.warning("Scribe STT attempt %d/2 request error: %s", attempt + 1, exc)
     raise last_exc  # type: ignore[misc]
+
+
+# ElevenLabs rejects the *whole* realtime connection with `invalid_request` if any
+# single keyterm exceeds this — not just the offending term. The case vocabulary
+# (`routers.voice._stt_prompt`) was written as a Whisper prompt and happily contains
+# phrases like "Negative inspiratory force" (26 chars), so it must be normalised
+# before it goes on the wire.
+_KEYTERM_MAX_CHARS = 20
+_KEYTERM_STOPWORDS = {"with", "and", "the", "of", "for", "a", "an", "on", "to"}
+
+
+def _normalize_keyterms(raw: list[str] | None, limit: int = 32) -> list[str]:
+    """Coerce case vocabulary into keyterms ElevenLabs will accept.
+
+    A term within the limit is kept whole. An over-long phrase is split into its
+    words and the distinctive ones kept — "Negative inspiratory force" becomes
+    "Negative", "inspiratory", "force", which still biases recognition toward the
+    clinical vocabulary that matters. Stopwords and duplicates are dropped so the
+    budget goes on real terms.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for term in raw or []:
+        term = (term or "").strip()
+        if not term:
+            continue
+        parts = [term] if len(term) <= _KEYTERM_MAX_CHARS else term.split()
+        for part in parts:
+            part = part.strip(" ()[]{},.;:").strip()
+            key = part.lower()
+            if not part or len(part) > _KEYTERM_MAX_CHARS:
+                continue
+            if key in _KEYTERM_STOPWORDS or key in seen:
+                continue
+            seen.add(key)
+            out.append(part)
+            if len(out) >= limit:
+                return out
+    return out
+
+
+async def open_realtime_stt(keyterms: list[str] | None = None) -> Any:
+    """Open a Scribe v2 Realtime STT WebSocket to ElevenLabs and return the
+    connected client. The caller relays audio and reads transcripts.
+
+    Contract we set up here:
+      * ``pcm_16000`` mono 16-bit input (the browser resamples to 16 kHz)
+      * ``commit_strategy=manual`` — *we* decide when an utterance ends (our
+        client-side VAD already does turn-taking), so ElevenLabs only finalises
+        a transcript when we send a chunk with ``commit: true``.
+      * ``keyterms`` — the case's clinical vocabulary, biasing recognition of
+        drug/test/actor names (the old blocking path could not do this). Passed
+        through :func:`_normalize_keyterms`, because one over-long term rejects
+        the whole connection.
+
+    Raises if the API key is missing or the socket cannot be opened; the caller
+    falls back to the blocking :func:`transcribe` path in that case."""
+    import urllib.parse
+
+    import websockets  # declared dep (also pulled by uvicorn[standard])
+
+    key = _elevenlabs_key()
+    if not key:
+        raise RuntimeError("ELEVENLABS_API_KEY is not set — realtime STT requires ElevenLabs")
+    params: list[tuple[str, str]] = [
+        ("model_id", EL_STT_REALTIME_MODEL),
+        ("audio_format", "pcm_16000"),
+        ("language_code", "en"),
+        ("commit_strategy", "manual"),
+    ]
+    for kt in _normalize_keyterms(keyterms):
+        params.append(("keyterms", kt))
+    url = f"{ELEVENLABS_WS_BASE}/speech-to-text/realtime?{urllib.parse.urlencode(params)}"
+    return await websockets.connect(
+        url, additional_headers={"xi-api-key": key}, max_size=None, open_timeout=10
+    )
 
 
 def _el_tts_request(
@@ -133,7 +237,7 @@ def _el_tts_request(
     # NB: ElevenLabs reads output_format from the QUERY STRING. Putting it in the
     # JSON body is silently ignored and the API defaults to MP3 — which, on the
     # PCM path, the browser decodes as raw samples (loud static).
-    resp = httpx.post(
+    resp = _http().post(
         f"{ELEVENLABS_BASE_URL}/text-to-speech/{voice_id}",
         params={"output_format": output_format},
         headers={
@@ -141,7 +245,6 @@ def _el_tts_request(
             "Content-Type": "application/json",
         },
         json=body,
-        timeout=60.0,
     )
     resp.raise_for_status()
     return resp.content
@@ -176,7 +279,7 @@ def _el_tts_stream(
     if locators:
         body["pronunciation_dictionary_locators"] = locators
     # output_format MUST be a query parameter (ignored in the JSON body → MP3).
-    with httpx.stream(
+    with _http().stream(
         "POST",
         f"{ELEVENLABS_BASE_URL}/text-to-speech/{voice_id}/stream",
         params={"output_format": "pcm_16000"},
@@ -185,7 +288,6 @@ def _el_tts_stream(
             "Content-Type": "application/json",
         },
         json=body,
-        timeout=60.0,
     ) as resp:
         resp.raise_for_status()
         yield from resp.iter_bytes(chunk_size=4096)

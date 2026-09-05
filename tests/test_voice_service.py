@@ -236,3 +236,76 @@ def test_is_unclear_request_gating():
     assert routing._is_unclear_request(I(addressee="patient"), "how are you feeling today friend") is False
     # non-chitchat speech-acts are routed above, never treated as unclear here
     assert routing._is_unclear_request(I(op="order_medication"), "give five of morphine now please") is False
+
+
+# ── realtime STT keyterms ────────────────────────────────────────────────────
+#
+# Regression guard for a live bug: ElevenLabs rejects the *entire* realtime
+# connection with `invalid_request` when any single keyterm exceeds 20
+# characters. The case vocabulary comes from `_stt_prompt`, which was written as
+# a Whisper prompt and contains phrases like "Negative inspiratory force" (26).
+# Because the browser silently falls back to the blocking upload, the streaming
+# path failed on every session while the room looked perfectly healthy.
+
+def test_keyterms_within_limit_pass_through_whole():
+    assert voice_service._normalize_keyterms(["CBC", "ECG", "CT head"]) == ["CBC", "ECG", "CT head"]
+
+
+def test_no_keyterm_exceeds_the_api_limit():
+    """The property that actually matters — nothing over 20 chars reaches the wire."""
+    raw = [
+        "Myasthenia Gravis with Myasthenic Crisis",
+        "Negative inspiratory force",
+        "Bedside vital capacity",
+        "Respiratory Therapist",
+    ]
+    out = voice_service._normalize_keyterms(raw)
+    assert out, "an over-long phrase must yield usable terms, not be dropped wholesale"
+    assert all(len(t) <= voice_service._KEYTERM_MAX_CHARS for t in out)
+
+
+def test_long_phrases_are_split_keeping_distinctive_words():
+    out = voice_service._normalize_keyterms(["Negative inspiratory force"])
+    assert "inspiratory" in out and "Negative" in out and "force" in out
+
+
+def test_stopwords_are_dropped_from_split_phrases():
+    out = voice_service._normalize_keyterms(["Myasthenia Gravis with Myasthenic Crisis"])
+    assert "with" not in [t.lower() for t in out]
+    assert "Myasthenic" in out and "Gravis" in out
+
+
+def test_keyterms_are_deduplicated_case_insensitively():
+    out = voice_service._normalize_keyterms(["ECG", "ecg", "CT head", "CT chest"])
+    assert out.count("ECG") == 1 and "ecg" not in out
+    # "CT" appears in both phrases but each is short enough to stay whole.
+    assert "CT head" in out and "CT chest" in out
+
+
+def test_punctuation_is_stripped_from_split_words():
+    out = voice_service._normalize_keyterms(["Severe bulbar weakness, dysphagia (marked)"])
+    assert all(t == t.strip(" ()[]{},.;:") for t in out), out
+    assert "dysphagia" in out and "marked" in out
+
+
+def test_keyterms_are_capped_to_the_limit():
+    assert len(voice_service._normalize_keyterms([f"term{i}" for i in range(80)], limit=32)) == 32
+
+
+def test_empty_and_blank_keyterms_are_ignored():
+    assert voice_service._normalize_keyterms(["", "   ", None]) == []
+    assert voice_service._normalize_keyterms(None) == []
+
+
+def test_real_case_vocabulary_is_accepted():
+    """The exact 18-term list from myasthenic_crisis that broke the connection."""
+    raw = [
+        "Myasthenia Gravis with Myasthenic Crisis", "Patient (EK)", "EMS", "Husband",
+        "Nurse", "Respiratory Therapist", "Neurology consultant", "ICU consultant",
+        "Venous blood gas", "CBC", "electrolytes", "renal function", "ECG",
+        "Chest X-ray", "Bedside vital capacity", "Negative inspiratory force",
+        "CT head", "CT chest",
+    ]
+    out = voice_service._normalize_keyterms(raw)
+    assert all(len(t) <= voice_service._KEYTERM_MAX_CHARS for t in out)
+    assert len(out) <= 32

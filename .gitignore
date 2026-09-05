@@ -29,3 +29,6 @@ graphify-out/
 casesbasis.db
 *.db-wal
 *.db-shm
+
+# Latency bench: generated audio fixtures (results/ IS committed — it is the history)
+bench/fixtures/

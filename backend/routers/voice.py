@@ -251,6 +251,124 @@ async def ws_voice(websocket: WebSocket, session_id: str) -> None:
         bus.unsubscribe(session_id, queue)
 
 
+@router.websocket("/ws/stt")
+async def ws_stt(websocket: WebSocket) -> None:
+    """Streaming STT proxy: browser mic PCM → ElevenLabs Scribe v2 Realtime.
+
+    The browser streams raw 16 kHz mono PCM (binary frames) while the resident
+    talks, then sends a text control ``{"t":"commit"}`` at end-of-speech. We relay
+    audio to ElevenLabs' realtime socket and stream transcripts back as
+    ``{"partial": true, "text": …}`` (interim) and ``{"final": true, "text": …}``
+    (committed). The ElevenLabs API key stays server-side — the browser only ever
+    talks to us. Auth is the same signed cookie as the REST routes."""
+    import asyncio
+    import base64
+    import contextlib
+    import json
+
+    from backend.voice_service import open_realtime_stt
+
+    resident_id = get_current_resident_id(websocket)
+    if resident_id is None:
+        await websocket.close(code=4401)  # unauthenticated
+        return
+    await websocket.accept()
+
+    # Case vocabulary → keyterms bias (best-effort; a missing session never breaks STT).
+    keyterms: list[str] = []
+    session_id = websocket.query_params.get("session_id", "").strip()
+    if session_id:
+        try:
+            from backend.voice_session import get_session
+            session = await asyncio.to_thread(get_session, session_id, resident_id)
+            keyterms = [t.strip() for t in _stt_prompt(session.case).split(",") if t.strip()][:32]
+        except Exception:
+            pass
+
+    try:
+        upstream = await open_realtime_stt(keyterms)
+    except Exception as exc:  # key missing / connect failed → client falls back to blocking STT
+        logger.warning("realtime STT upstream connect failed: %s", exc)
+        with contextlib.suppress(Exception):
+            await websocket.close(code=1011)
+        return
+
+    async def pump_up() -> None:
+        """Browser → ElevenLabs: wrap PCM frames as input_audio_chunk; handle commit."""
+        while True:
+            msg = await websocket.receive()
+            if msg.get("type") == "websocket.disconnect":
+                return
+            audio = msg.get("bytes")
+            if audio is not None:
+                await upstream.send(json.dumps({
+                    "message_type": "input_audio_chunk",
+                    "audio_base_64": base64.b64encode(audio).decode("ascii"),
+                }))
+                continue
+            text = msg.get("text")
+            if text is None:
+                continue
+            try:
+                ctrl = json.loads(text)
+            except (ValueError, TypeError):
+                continue
+            if ctrl.get("t") == "commit":
+                await upstream.send(json.dumps({
+                    "message_type": "input_audio_chunk", "audio_base_64": "", "commit": True,
+                }))
+            elif ctrl.get("t") == "bye":
+                return
+
+    # Upstream rejections arrive as a normal message, then the socket closes — and the
+    # browser quietly falls back to the blocking upload. That fallback is the right
+    # behaviour but it hides the fault: a bad keyterm once made every realtime session
+    # fail while the room looked healthy. Log these loudly so the next contract change
+    # shows up in the logs instead of as unexplained latency.
+    _UPSTREAM_ERRORS = {
+        "error", "auth_error", "invalid_request", "input_error", "rate_limited",
+        "quota_exceeded", "unaccepted_terms", "chunk_size_exceeded",
+        "queue_overflow", "resource_exhausted", "transcriber_error",
+        "session_time_limit_exceeded",
+    }
+
+    async def pump_down() -> None:
+        """ElevenLabs → browser: forward partial and committed transcripts."""
+        async for raw in upstream:
+            try:
+                data = json.loads(raw)
+            except (ValueError, TypeError):
+                continue
+            mt = data.get("message_type")
+            if mt == "partial_transcript":
+                await websocket.send_json({"partial": True, "text": data.get("text", "")})
+            elif mt in ("committed_transcript", "committed_transcript_with_timestamps",
+                        "final_transcript", "final_transcript_with_timestamps"):
+                await websocket.send_json({"final": True, "text": data.get("text", "")})
+            elif mt in _UPSTREAM_ERRORS:
+                logger.error("realtime STT upstream %s: %s", mt, data.get("error") or data)
+                return
+            elif mt == "warning":
+                logger.warning("realtime STT upstream warning: %s", data)
+
+    up = asyncio.create_task(pump_up())
+    down = asyncio.create_task(pump_down())
+    try:
+        _done, pending = await asyncio.wait({up, down}, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        for task in (up, down):
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await task
+        with contextlib.suppress(Exception):
+            await upstream.close()
+        with contextlib.suppress(Exception):
+            await websocket.close()
+
+
 def _stt_prompt(case: Any) -> str:
     """Build a Whisper prompt from the case's vocabulary.
 
