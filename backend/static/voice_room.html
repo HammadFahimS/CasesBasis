@@ -2193,6 +2193,7 @@
     const cap = card.summary ? `<div class="rep">${escapeHtml(card.summary)}</div>` : '';
     if (card.kind === 'ecg' && vp && vp.svg) return `<div class="dr-img">${vp.svg}</div>${cap}`;
     if (card.kind === 'cxr' && vp && vp.data) return `<img alt="Chest X-ray" src="data:image/${vp.format||'jpeg'};base64,${vp.data}">${cap}`;
+    if (vp && vp.image) return `<img alt="${escapeHtml(vp.caption || card.title || '')}" src="${vp.image}">${cap}`;
     // A lab shows its values, not an "all normal" sentence — the prose result only
     // appears when there's no value table (e.g. a plain text report).
     return tbl ? tbl : (cap || '<div class="rep">No result.</div>');
@@ -2349,6 +2350,7 @@
     const vp = card.visual_payload || {};
     if (card.kind === 'ecg' && vp.svg) lbStage.innerHTML = vp.svg;
     else if (card.kind === 'cxr' && vp.data) lbStage.innerHTML = `<img alt="Chest X-ray" src="data:image/${vp.format||'jpeg'};base64,${vp.data}">`;
+    else if (vp.image) lbStage.innerHTML = `<img alt="${escapeHtml(vp.caption || card.title || '')}" src="${vp.image}">`;
     else return;
     lbStage.classList.toggle('ecg', card.kind === 'ecg');  // wide box for the 12-lead
     lbCap.textContent = card.summary || '';
@@ -2821,7 +2823,9 @@
   async function startSession(){
     const params = new URLSearchParams(location.search);
     const resumeId = params.get('session') || params.get('resume');   // resume a parked run
-    const id = params.get('case') || 'myasthenic_crisis';
+    const id = params.get('case');
+    // No case and nothing to resume → back to the launcher, which lists the cases.
+    if (!id && !resumeId){ location.href = '/simulator/voice-room'; return; }
     let data;
     try {
       const res = resumeId

@@ -162,6 +162,15 @@ class ExamFinding(StrictModel):
     note: str = ""
 
 
+class ActorResponse(StrictModel):
+    """State-scoped grounded content for a consultant: what they actually tell the
+    resident while the run is in one of ``states`` (empty = any state). The LLM only
+    phrases it in character and may add no facts of its own."""
+
+    states: list[str] = Field(default_factory=list)
+    content: str
+
+
 class ActorRole(StrictModel):
     """A character the LLM can role-play (patient, EMS, family, consultant)."""
 
@@ -170,6 +179,10 @@ class ActorRole(StrictModel):
     voice: str = ""
     persona: str = ""
     script: list[str] = Field(default_factory=list)
+    # Grounded consult content by state (first match wins) and what the consultant
+    # says when no response matches. An actor with neither keeps free role-play.
+    responses: list[ActorResponse] = Field(default_factory=list)
+    fallback: str = ""
     # When this actor becomes present in the room, in case-clock seconds. ``None``
     # (the default) means present from the start; a value means the actor is "en
     # route" until the clock reaches it, then arrives (e.g. the husband at 300s).
@@ -210,7 +223,12 @@ class InvestigationDef(StrictModel):
     # case and surfaced only at debrief, so teaching value is kept without giving
     # the diagnosis away live (e.g. "type-2 respiratory failure").
     interpretation: str = ""
+    # An authored picture for this study (a laryngoscope view, a film, a strip),
+    # as a path under ``cases/`` served by the resident-only asset route. The
+    # state-scoped twin mirrors ``result_by_state`` so the same study can show a
+    # view in one state and nothing in another (an aborted attempt has no view).
     image_ref: str | None = None
+    image_ref_by_state: dict[str, str] = Field(default_factory=dict)
     available_after_seconds: int | None = None
     # Turn-around time *relative to when the test is ordered* (vs the absolute-clock
     # ``available_after_seconds``). When set, ordering the test schedules a deferred
@@ -224,6 +242,14 @@ class InvestigationDef(StrictModel):
     # Diagnosis/finding hint that drives the real ECG/CXR image generators
     # (e.g. "sinus tachycardia", "normal chest"). Falls back to the result text.
     visual_dx: str | None = None
+
+    def result_for(self, state_id: str) -> str:
+        """The raw result as seen from ``state_id`` (state-specific text wins)."""
+        return self.result_by_state.get(state_id, self.result)
+
+    def image_for(self, state_id: str) -> str | None:
+        """The authored image for this study in ``state_id``, if any."""
+        return self.image_ref_by_state.get(state_id, self.image_ref)
 
 
 # --------------------------------------------------------------------------- #
@@ -245,6 +271,20 @@ class VitalsCheck(StrictModel):
         return self
 
 
+class ActionRequirement(StrictModel):
+    """One *all-of* clause on a transition: at least ``count`` of the actions
+    taken in the current state must contain one of the ``any`` stems. A list of
+    these on ``Transition.requires`` reads as "each of these clauses, in any
+    order" — e.g. [{any: [cpr]}, {any: [tube]}, {any: [epinephrine], count: 2}]."""
+
+    any: list[str] = Field(min_length=1)
+    count: int = Field(default=1, ge=1)
+    # Which actions are counted: those taken in the current state (default) or
+    # anywhere in the run so far — for a plan that may have been voiced in the
+    # same breath as the action that entered this state ("ketamine, then scope").
+    scope: Literal["state", "run"] = "state"
+
+
 class Transition(StrictModel):
     """An edge to another state.
 
@@ -258,12 +298,21 @@ class Transition(StrictModel):
 
     ``critical_error`` marks paths taken by mistake (e.g. wrong paralytic →
     arrest), which the evaluator can score against.
+
+    ``requires`` adds *all-of* semantics on top of the *any-of* ``keywords``:
+      * ``action``  — fires when the action matches **and** every requirement is
+        met by the actions taken so far in this state. With no ``keywords`` the
+        requirements alone are the trigger (the action that completes them fires).
+      * ``inaction``— fires at ``after_seconds`` while the requirements are still
+        unmet (with no ``requires`` the legacy rule applies: no keyworded action).
+    Cases that omit it behave exactly as before.
     """
 
     to_state: str
     description: str
     kind: Literal["action", "time", "vitals", "inaction", "manual"] = "action"
     keywords: list[str] = Field(default_factory=list)
+    requires: list[ActionRequirement] = Field(default_factory=list)
     after_seconds: int | None = None
     vitals_check: VitalsCheck | None = None
     patient_effect: str = ""
@@ -348,6 +397,14 @@ class MedicationExpectation(StrictModel):
     expectation: Literal["preferred", "avoid", "dose_adjust"] = "preferred"
     dose_keywords: list[str] = Field(default_factory=list)
     note: str = ""
+    # Enforce only while the run is in one of these states (empty = always). On an
+    # ``avoid`` item, ``dose_keywords`` narrow the violation to the drug *with* one
+    # of these dose phrases ("1 mg iv"), matched as whole-token sequences.
+    states: list[str] = Field(default_factory=list)
+    # Live guardrail: the nurse withholds a matching order instead of executing it,
+    # voices ``note``, and re-parks the order awaiting a corrected dose. The debrief
+    # reads the intercept log. Only meaningful on ``avoid`` items.
+    intercept: bool = False
 
 
 class WorkupExpectation(StrictModel):
@@ -359,13 +416,15 @@ class WorkupExpectation(StrictModel):
       examined / ordered.
     * ``avoid``    — a low-value or harmful test to skip; *met* if none was ordered.
 
-    ``targets`` are exam **system names** (``kind="exam"``) or investigation **ids**
-    (``kind="investigation"``); they are checked against real case content at load.
+    ``targets`` are exam **system names** (``kind="exam"``), investigation **ids**
+    (``kind="investigation"``) or state **ids** (``kind="state"`` — met if any target
+    state was visited, so an outcome such as "relieved the airway" is creditable);
+    they are checked against real case content at load.
     """
 
     id: str
     label: str
-    kind: Literal["exam", "investigation"]
+    kind: Literal["exam", "investigation", "state"]
     targets: list[str] = Field(default_factory=list)
     expectation: Literal["expected", "avoid"] = "expected"
     note: str = ""
@@ -427,20 +486,37 @@ class SimulatedCase(StrictModel):
                             f"cue in state '{state.id}' requires unknown actor '{aid}'"
                         )
 
-        # Referential check for investigation result holders.
+        # State-scoped content must name real states.
+        for actor in self.actors:
+            for resp in actor.responses:
+                for sid in resp.states:
+                    if sid not in state_ids:
+                        raise ValueError(f"actor '{actor.id}' response names unknown state '{sid}'")
+        for item in self.medication_rubric:
+            for sid in item.states:
+                if sid not in state_ids:
+                    raise ValueError(f"medication_rubric '{item.id}' names unknown state '{sid}'")
+
+        # Referential check for investigation result holders and state-scoped
+        # results/images (a typo in a state key would silently show the default).
         for inv in self.investigations:
             if inv.result_actor_id and inv.result_actor_id not in actor_ids:
                 raise ValueError(
                     f"investigation '{inv.id}' names unknown result_actor_id "
                     f"'{inv.result_actor_id}'"
                 )
+            for key in (*inv.result_by_state, *inv.image_ref_by_state):
+                if key not in state_ids:
+                    raise ValueError(
+                        f"investigation '{inv.id}' keys a result/image on unknown state '{key}'"
+                    )
 
         # Referential check for the workup rubric: targets must name real content
         # so a scored expectation can never silently miss because of a typo.
         exam_systems = {e.system for e in self.exam}
         inv_ids = {i.id for i in self.investigations}
         for item in self.workup_rubric:
-            pool = exam_systems if item.kind == "exam" else inv_ids
+            pool = {"exam": exam_systems, "investigation": inv_ids, "state": state_ids}[item.kind]
             for target in item.targets:
                 if target not in pool:
                     raise ValueError(

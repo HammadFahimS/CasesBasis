@@ -77,6 +77,9 @@ class RunState:
     revealed_history: list[str] = field(default_factory=list)
     ordered_investigations: list[str] = field(default_factory=list)
     actions_this_state: list[str] = field(default_factory=list)
+    # Every normalised action text in the run, across states (for run-scoped
+    # transition requirements). Never cleared.
+    actions: list[str] = field(default_factory=list)
     applied_modifiers: list[str] = field(default_factory=list)
     vitals_override: dict[str, object] = field(default_factory=dict)
     visited_states: list[str] = field(default_factory=list)
@@ -320,10 +323,12 @@ class SimulationEngine:
             )
         if inv_id not in self.run.ordered_investigations:
             self.run.ordered_investigations.append(inv_id)
-        result = inv.result_by_state.get(self.run.current_state_id, inv.result)
         self._log("order", inv_id)
         step = self._after_action(inv.name)
-        step.revealed = result
+        # Resolve the result in the state the order *leads to*, so a study whose
+        # own transition reveals something reads the post-transition text — the
+        # same moment a deferred result resolves at (due_deferred).
+        step.revealed = inv.result_for(self.run.current_state_id)
         return step
 
     def _schedule_deferred(self, inv: InvestigationDef, fire_at: int) -> None:
@@ -351,7 +356,7 @@ class SimulationEngine:
                 continue
             if inv.id not in self.run.ordered_investigations:
                 self.run.ordered_investigations.append(inv.id)
-            revealed = inv.result_by_state.get(self.run.current_state_id, inv.result)
+            revealed = inv.result_for(self.run.current_state_id)
             self._log("result", inv.id)
             out.append({"actor_id": ev.get("actor_id", "nurse"), "inv": inv, "revealed": revealed})
         self.run.deferred_events = remaining
@@ -470,7 +475,9 @@ class SimulationEngine:
                 getattr(self._actor(aid), "available_after_seconds", None) is not None
                 for aid in cue.requires_present
             )
-            if not arrival_gated and self.elapsed_in_state < self.CUE_AFTER_SECONDS:
+            # An authored ``after_seconds`` sets the linger; otherwise the default.
+            wait = cue.after_seconds if cue.after_seconds is not None else self.CUE_AFTER_SECONDS
+            if not arrival_gated and self.elapsed_in_state < wait:
                 continue
             self.run.fired_cues.append(key)
             self._log("cue", cue.text)
@@ -492,13 +499,30 @@ class SimulationEngine:
         norm = text.strip().lower()
         if norm:
             self.run.actions_this_state.append(norm)
+            self.run.actions.append(norm)
             self._apply_action_modifiers(norm)
         for tr in self.state.transitions:
             if tr.kind != "action":
                 continue
-            if self._action_matches(norm, tr):
+            if self._action_fires(norm, tr):
                 return self._fire(tr)
         return self._result()
+
+    def _action_fires(self, norm_text: str, tr: Transition) -> bool:
+        """An action transition fires when its requirements (all-of) are met and,
+        if it names keywords/a description, the current action matches them."""
+        if tr.requires:
+            if not self._requirements_met(tr):
+                return False
+            if not tr.keywords:
+                return True  # completing the requirements is the trigger
+        return self._action_matches(norm_text, tr)
+
+    def _requirements_met(self, tr: Transition) -> bool:
+        def hits(req) -> int:
+            pool = self.run.actions if req.scope == "run" else self.run.actions_this_state
+            return sum(any(stem.lower() in act for stem in req.any) for act in pool)
+        return all(hits(req) >= req.count for req in tr.requires)
 
     def _action_matches(self, norm_text: str, tr: Transition) -> bool:
         if any(kw.lower() in norm_text for kw in tr.keywords):
@@ -513,7 +537,9 @@ class SimulationEngine:
             if tr.kind == "time" and self.elapsed_in_state >= (tr.after_seconds or 0):
                 return tr
             if tr.kind == "inaction" and self.elapsed_in_state >= (tr.after_seconds or 0):
-                if not self._any_action_taken(tr.keywords):
+                idle = (not self._requirements_met(tr)) if tr.requires \
+                    else (not self._any_action_taken(tr.keywords))
+                if idle:
                     return tr
             if tr.kind == "vitals" and tr.vitals_check is not None:
                 value = getattr(vitals, tr.vitals_check.param, None)
@@ -581,6 +607,11 @@ class SimulationEngine:
             self.run.visited_states.append(state_id)
         if state.is_terminal:
             self.run.ended = True
+
+    def log_event(self, kind: str, detail: str) -> None:
+        """Record a protocol event on the run log (e.g. an intercepted order) so
+        the debrief can read it with its state and time."""
+        self._log(kind, detail)
 
     def _log(self, kind: str, detail: str) -> None:
         self.run.log.append(

@@ -2257,7 +2257,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
       ['Address someone', 'Name who you mean — “Nurse, …”, “Husband, …”, “Paramedic, …” — to direct a question. Unaddressed bedside talk goes to the patient.'],
       ['Order & examine', 'Say “order a chest X-ray”, “examine her chest”, “give 5 of…”, or use Add Investigation / Call Consultant / Add Participant.'],
       ['Vitals', 'Ask for what you need (“what’s her sat?”) — only that value shows. Patient Monitor reveals the full set.'],
-      ['Diagnose', 'State your working diagnosis whenever you like (“I think this is a myasthenic crisis”); it’s recorded for the debrief.'],
+      ['Diagnose', 'State your working diagnosis whenever you like (“I think this is …”); it’s recorded for the debrief.'],
       ['Controls', 'Pause freezes the clock. Audio mutes the voices (transcript stays). End Scenario finishes and opens your debrief.'],
       ['Esc', 'Closes any open panel or dialog.'],
     ];
@@ -2465,11 +2465,13 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
 
   async function startSession(){
     const cfg = window.SIM_CONFIG;
+    // No case and nothing to resume → back to the launcher, which lists the cases.
+    if (!cfg.caseId && !cfg.sessionId){ location.href = '/simulator/voice-room'; return; }
     let data;
     try {
       const res = cfg.sessionId
         ? await fetch('/api/voice/resume', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ session_id: cfg.sessionId }) })
-        : await fetch('/api/voice/session', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ case_id: cfg.caseId || 'myasthenic_crisis' }) });
+        : await fetch('/api/voice/session', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ case_id: cfg.caseId }) });
       if (res.status === 401){ location.href='/'; return; }
       if (!res.ok){ if (cfg.sessionId) { location.href='/home'; return; } roomHint('could not start the case'); return; }
       data = await res.json();

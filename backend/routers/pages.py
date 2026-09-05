@@ -12,12 +12,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+
+from backend.sim_diagnostics import CASE_ASSET_PREFIX
+from backend.web_deps import require_resident
 
 router = APIRouter()
 
 _STATIC = Path(__file__).parent.parent / "static"
+# Authored case assets (images a study can show the resident) live beside the
+# case JSON under ``cases/``. Only media is served — the JSON there holds the
+# hidden diagnosis and must never be reachable through this route.
+_CASES_DIR = _STATIC.parent.parent / "cases"
+_ASSET_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".mp3", ".wav"}
 
 
 def _serve_with_chrome(filename: str) -> str:
@@ -46,6 +54,20 @@ def _inject_drawer(html: str) -> str:
 def body_image() -> FileResponse:
     img_path = _STATIC.parent.parent / "generatedimageofbody.png"
     return FileResponse(str(img_path), media_type="image/png")
+
+
+@router.get(f"{CASE_ASSET_PREFIX}/{{path:path}}")
+def case_asset(path: str, request: Request) -> FileResponse:
+    """Serve one authored case asset to a signed-in resident (see
+    ``InvestigationDef.image_ref``). Path-traversal safe: the resolved file must sit
+    under ``cases/`` and carry a media suffix."""
+    require_resident(request)
+    root = _CASES_DIR.resolve()
+    target = (root / path).resolve()
+    if root not in target.parents or target.suffix.lower() not in _ASSET_SUFFIXES \
+            or not target.is_file():
+        raise HTTPException(status_code=404, detail="asset not found")
+    return FileResponse(str(target), headers={"Cache-Control": "private, max-age=604800"})
 
 
 @router.get("/static/favicon.svg")

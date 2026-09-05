@@ -32,6 +32,15 @@ _lab_value_cache: dict[tuple, list[dict]] = {}
 # the case didn't author one.
 _GENERATABLE = ("lab", "bedside")
 
+# URL prefix of the resident-only route that serves authored case assets
+# (``InvestigationDef.image_ref``, a path under ``cases/``). The route lives in
+# backend.routers.pages and uses this same constant.
+CASE_ASSET_PREFIX = "/cases/assets"
+
+
+def asset_url(ref: str) -> str:
+    return f"{CASE_ASSET_PREFIX}/{ref.lstrip('/')}"
+
 
 def _ecg():
     global _ecg_service
@@ -99,11 +108,15 @@ def build_investigation_card(
     vitals: VitalSigns,
     patient: PatientProfile,
     authored: str,
+    state_id: str | None = None,
 ) -> dict:
     """A drawer card for one ordered investigation.
 
     ``authored`` is the engine's revealed result text (kept as the clinical
-    content); a real ECG/CXR image is attached when one can be generated."""
+    content). An authored image (``image_ref`` / ``image_ref_by_state`` resolved
+    for ``state_id``) is attached as a URL payload; otherwise a real ECG/CXR image
+    is attached when one can be generated."""
+    image = inv.image_for(state_id) if state_id is not None else inv.image_ref
     card: dict = {
         "kind": "report",
         "id": inv.id,
@@ -111,9 +124,16 @@ def build_investigation_card(
         "category": inv.category,
         "summary": authored,
         # Structured result lines for a proper lab table (authored or generated).
-        "values": _structured_values(inv, authored, patient),
+        # A study whose result is a picture never gets a generated value table.
+        "values": [] if image else _structured_values(inv, authored, patient),
         "visual_payload": None,
     }
+    if image:
+        card.update(
+            kind="image",
+            visual_payload={"type": "image", "image": asset_url(image), "caption": inv.name},
+        )
+        return card
     try:
         if inv.category == "ecg":
             payload = _ecg().build_visual_payload(

@@ -32,11 +32,12 @@ _ASK_BACK_PROMPT = "Whom should I direct that to?"
 
 # ── Diagnostics boundary (C4) ─────────────────────────────────────────────────
 
-def _announce_study(inv) -> str:
+def _announce_study(inv, image: str | None = None) -> str:
     """A deterministic 'it's ready, go read it' line for a visual study — never the
-    interpretation. Templated off the study type so the LLM can't leak a read."""
+    interpretation. Templated off the study type so the LLM can't leak a read.
+    ``image`` is the authored picture resolved for the current state, if any."""
     name = (inv.name or "study").strip()
-    has_image = bool(getattr(inv, "image_ref", None) or getattr(inv, "visual_dx", None)) \
+    has_image = bool(image or getattr(inv, "image_ref", None) or getattr(inv, "visual_dx", None)) \
         or inv.category == "ecg"
     if inv.category == "ecg":
         return f"{name} is recorded — the tracing's up on the monitor for you to read."
@@ -166,14 +167,18 @@ def fire_deferred(session) -> list[dict]:
     from backend.patient_voice import _clean_for_speech
     from backend.sim_diagnostics import build_investigation_card
     out: list[dict] = []
+    state_id = engine.run.current_state_id
     for item in due:
         inv = item["inv"]
         revealed = item["revealed"] or ""
         actor = next((a for a in engine.case.actors if a.id == item.get("actor_id")), None)
         speaker = actor_speaker(actor) if actor else "nurse"
-        line = _clean_for_speech(f"{inv.name} is back — {revealed}.")
+        image = inv.image_for(state_id)
+        # A result that is a picture is announced, never described (C4).
+        line = _announce_study(inv, image) if image \
+            else _clean_for_speech(f"{inv.name} is back — {revealed}.")
         card = build_investigation_card(
-            inv, engine.current_vitals(), engine.case.patient, revealed
+            inv, engine.current_vitals(), engine.case.patient, revealed, state_id=state_id
         )
         session.history.append({"role": speaker, "text": line})
         session.cards.append(card)
@@ -221,6 +226,19 @@ def voice_reply(
 
     if intent.op == "order_investigation" and result is not None:
         inv = next((i for i in engine.case.investigations if i.id == intent.target), None)
+        # A study that resolves to an authored picture (a scope view, a film) is
+        # announce-only, whatever its category: the image is what the resident
+        # reads (C4). The study's result holder voices the announce — the RT for a
+        # bedside procedure — so the "view's up" lands in the right voice.
+        image = inv.image_for(engine.run.current_state_id) if inv is not None else None
+        if image and result.revealed:
+            from backend.actor_voice import actor_speaker
+            holder = next((a for a in engine.case.actors if a.id == inv.result_actor_id), None)
+            speaker = actor_speaker(holder) if holder else "nurse"
+            reply = _announce_study(inv, image)
+            logger.info("turn: op=%s target=%s speaker=%s (announce-only, image)",
+                        intent.op, intent.target, speaker)
+            return reply, speaker
         # Bedside measurements (VC/NIF) are owned by the RT, never the nurse — whether
         # the value is in hand now (``revealed``) OR the order has a turn-around and the
         # RT is acknowledging it (``message`` from the deferred-result path: "on it,

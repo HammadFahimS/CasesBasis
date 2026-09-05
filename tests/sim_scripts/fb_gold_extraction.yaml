@@ -1,0 +1,62 @@
+# GOLD (foreign body) — history by 2:00, the counter-clue exams, a *planned* scope,
+# the GlideScope image as the reveal (RT announces only that the view is up), then
+# Magill extraction. The case ends in recovery with the diagnosis named.
+case: foreign_body_airway
+name: fb_gold_extraction
+turns:
+  - say: "EMS, what happened?"
+    intent: { op: ask_history, target: ems_handover }
+    expect: { speaker: ems, op: ask_history, reveals: "restaurant", state: baseline }
+
+  - say: "What were you doing when this started?"
+    intent: { op: ask_history, target: onset_while_eating }
+    expect: { speaker: patient, op: ask_history, reveals: "eating", state: baseline }
+
+  # Second clause of the 2:00 gate (background) → checkpoint reached.
+  - say: "Any medical problems? Allergies?"
+    intent: { op: ask_history, target: past_history_allergy }
+    expect: { speaker: patient, op: ask_history, reveals: "allergy", state: checkpoint2, transitioned: true }
+
+  - say: "Look at his skin for me."
+    intent: { op: perform_exam, target: Dermatological }
+    expect: { speaker: nurse, op: perform_exam, reveals: "No urticaria" }
+
+  - say: "Check his mouth and neck."
+    intent: { op: perform_exam, target: "ENT/Head & Neck" }
+    expect: { speaker: nurse, op: perform_exam, reveals: "No lip or tongue swelling" }
+
+  - say: "Listen to his chest."
+    intent: { op: perform_exam, target: Respiratory }
+    expect: { speaker: nurse, op: perform_exam, reveals: "wheeze" }
+
+  # The airway plan: a dissociative dose, stated WITH the dose so it administers.
+  - say: "Ketamine, one mig per kig, and get suction and the Magills ready."
+    intent: { op: order_medication, target: ketamine, action_text: "1 mg/kg" }
+    expect: { speaker: nurse, op: order_medication, state: checkpoint2, transitioned: false }
+
+  # The planned scope wins (ketamine is in the run). The RT says only that the view
+  # is up; the card carries the GlideScope image; nobody names what is seen.
+  - say: "RT, take a look with the GlideScope."
+    intent: { op: order_investigation, target: video_laryngoscopy }
+    expect:
+      speaker: rt
+      op: order_investigation
+      state: fb_visualized
+      transitioned: true
+      card_kind: image
+      reply_lacks: ["steak", "bolus", "foreign body", "food"]
+
+  - say: "That's a food bolus sitting above the cords — foreign body airway obstruction."
+    intent: { op: diagnose, action_text: "foreign body airway obstruction from a food bolus" }
+    expect: { speaker: nurse, op: diagnose, state: fb_visualized }
+
+  - say: "Magill forceps — I'm taking it out under the scope."
+    intent: { op: perform_action, action_text: "remove it with Magill forceps" }
+    expect: { speaker: nurse, op: perform_action, state: recovery, transitioned: true, ended: true }
+
+final:
+  reached_state: recovery
+  working_dx_contains: "foreign body"
+  critical_error: false
+  ended: true
+  min_score: 90

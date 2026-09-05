@@ -70,8 +70,8 @@ def _persona(case) -> str:
     if known:
         bits.append(
             "Facts about your illness — when the doctor asks about a symptom or timeline, "
-            "give them a real answer drawn from these facts (broken into short breathless "
-            "fragments). Do NOT volunteer everything at once or dump the list; answer what "
+            "give them a real answer drawn from these facts (in the register your condition "
+            "dictates). Do NOT volunteer everything at once or dump the list; answer what "
             "is asked. But when asked 'how are you feeling' or 'tell me what's wrong', "
             "share the most prominent fact (your breathing, your weakness) — not 'I don't "
             "know'. Facts: " + " ".join(known)
@@ -83,7 +83,7 @@ def _persona(case) -> str:
 # States in which the patient is sedated/unresponsive and cannot speak.
 # The patient's live emotional model now lives in backend.emotional_state (Phase 5),
 # generalised across the cast. These thin shims preserve the call sites here.
-from backend.emotional_state import SILENT_STATES as _SILENT_STATES
+from backend.emotional_state import is_silent as _is_silent
 from backend.emotional_state import for_speaker as _emotion_for
 
 
@@ -120,7 +120,7 @@ def patient_reply(session: VoiceSession, transcript: str) -> str:
         f"Doctor: {transcript}\nYou:"
     )
     # Sedated/unresponsive states: don't burn an LLM call on silence.
-    if session.engine.run.current_state_id in _SILENT_STATES:
+    if _is_silent(session.engine):
         return ""
     try:
         reply = _clean_for_speech(_complete(PATIENT_SYSTEM, user))

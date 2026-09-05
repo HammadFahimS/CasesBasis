@@ -40,3 +40,7 @@ CasesBasis-design.html
 generatedimageofbody.png
 testing_groq.py
 environment.yml
+
+# Case source documents and the original PNG are not served; the JPEG beside them is.
+cases/**/*.docx
+cases/**/*.png

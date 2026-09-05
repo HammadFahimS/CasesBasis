@@ -251,6 +251,13 @@ def check_turn(tr: TurnRun, expect: dict) -> list[str]:
         got = (t.revealed or "")
         if expect["reveals"].lower() not in got.lower():
             fails.append(f"[{tr.say!r}] reveals: {expect['reveals']!r} not in {got!r}")
+    if "card_kind" in expect:
+        cmp("card_kind", (t.diagnostic or {}).get("kind"), expect["card_kind"])
+    if "reply_lacks" in expect:            # a phrase that must NOT be voiced (C4 leaks)
+        for phrase in ([expect["reply_lacks"]] if isinstance(expect["reply_lacks"], str)
+                       else expect["reply_lacks"]):
+            if phrase.lower() in (t.reply or "").lower():
+                fails.append(f"[{tr.say!r}] reply leaks {phrase!r}: {t.reply!r}")
     return fails
 
 
@@ -271,6 +278,8 @@ def check_final(run: ConversationRun, final: dict) -> list[str]:
         had = bool(engine.run.critical_errors)
         if had != final["critical_error"]:
             fails.append(f"final critical_error: got {had}, want {final['critical_error']}")
+    if "ended" in final and engine.run.ended != final["ended"]:
+        fails.append(f"final ended: got {engine.run.ended}, want {final['ended']}")
 
     criteria = sim_scoring.score_run(run.session)
     score = sim_scoring.overall_score(criteria)

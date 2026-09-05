@@ -52,6 +52,58 @@ class Med:
         return "med-" + re.sub(r"[^a-z0-9]+", "-", self.drug.lower()).strip("-")
 
 
+_ROUTE_RE = re.compile(
+    r"\b(iv|im|io|po|sc|sl|pr|subcut(?:aneous)?|intramuscular(?:ly)?|intravenous(?:ly)?|"
+    r"intraosseous|nebuli[sz]ed|neb|inhaled|topical)\b",
+    re.IGNORECASE,
+)
+
+
+def extract_route(*texts: str) -> str | None:
+    """The route word in an order ("IM", "IV"), if one was stated."""
+    for text in texts:
+        match = _ROUTE_RE.search(text or "")
+        if match:
+            return match.group(1).lower()
+    return None
+
+
+def _tokens(text: str) -> list[str]:
+    # numbers keep their decimals so "0.1 mg" never reads as "1 mg"
+    return re.findall(r"\d+(?:\.\d+)?|[a-z]+", (text or "").lower())
+
+
+def dose_phrase_matches(text: str, phrases: list[str]) -> bool:
+    """Whether any dose phrase appears in ``text`` as a whole-token sequence —
+    "1 mg iv" matches "epinephrine 1 mg IV push" but not "0.1 mg IV"."""
+    toks = _tokens(text)
+    for phrase in phrases:
+        want = _tokens(phrase)
+        n = len(want)
+        if n and any(toks[i:i + n] == want for i in range(len(toks) - n + 1)):
+            return True
+    return False
+
+
+def intercept_item(case, med: "Med", state_id: str):
+    """The medication-rubric item that says the nurse must withhold this order
+    in this state, or None. An ``avoid`` item with ``intercept`` applies when the
+    drug matches, the state is in scope, and (if it names dose phrases) one of them
+    is in the order."""
+    text = f"{med.drug} {med.detail} {med.dose or ''}".lower()
+    for item in getattr(case, "medication_rubric", None) or []:
+        if not getattr(item, "intercept", False) or item.expectation != "avoid":
+            continue
+        if item.states and state_id not in item.states:
+            continue
+        if not any(d.lower() in text for d in item.drugs if d):
+            continue
+        if item.dose_keywords and not dose_phrase_matches(text, item.dose_keywords):
+            continue
+        return item
+    return None
+
+
 def _extract_dose(*texts: str) -> str | None:
     for text in texts:
         if not text:

@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 
 from backend.actors import kind_for_word
 from backend.constitution import constitution
-from backend.medication import needs_dose_confirm, parse_med
+from backend.medication import extract_route, intercept_item, needs_dose_confirm, parse_med
 from backend.sim_diagnostics import (
     build_exam_card,
     build_investigation_card,
@@ -93,7 +93,10 @@ INTERPRET_SYSTEM = (
     "lead rather than reciting the vitals or the story unprompted. "
     "ask_history to elicit history from the patient/"
     "EMS/family (pick the closest history id). order_investigation for tests/labs/"
-    "imaging (pick the closest investigation id). perform_exam to physically "
+    "imaging (pick the closest investigation id) — but a generic bundle request that "
+    "names no specific test ('send labs', 'get bloodwork', 'order everything', 'the "
+    "usual') is order_investigation with target null and clarify:true, so the nurse "
+    "can ask which tests are wanted. perform_exam to physically "
     "examine the patient — set target to the closest body-system name for a "
     "FOCUSED exam of one region (e.g. 'examine her chest', 'check her reflexes'), "
     "or to \"all\" for a WHOLE-BODY / systematic / head-to-toe physical exam or "
@@ -351,8 +354,12 @@ def _execute_pending(engine: SimulationEngine, pending: dict, transcript: str,
     engine.run.pending_action = None
     if pending["op"] == "order_medication":
         dose = pending.get("dose") or _extract_dose(transcript, intent.action_text)
-        text = pending["target"] + (f" {dose}" if dose else "")
-        return engine.act(LearnerAction(kind="medicate", text=text))
+        detail = f"{intent.action_text} {transcript}".strip()
+        med = parse_med(pending["target"], detail)
+        med.dose = dose
+        if _intercept(engine, med):
+            return None
+        return engine.act(LearnerAction(kind="medicate", text=_med_action_text(med)))
     if pending["op"] == "perform_action":
         return engine.act(LearnerAction(kind="intervene", text=pending.get("action_text") or ""))
     return None
@@ -414,8 +421,9 @@ def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> 
                 "action_text": med.detail, "label": med.drug, "status": "awaiting_info",
             }
             return None
-        text = med.drug + (f" {med.dose}" if med.dose else "")
-        return engine.act(LearnerAction(kind="medicate", text=text))
+        if _intercept(engine, med):
+            return None
+        return engine.act(LearnerAction(kind="medicate", text=_med_action_text(med)))
     if intent.op == "diagnose":
         return engine.diagnose(intent.action_text or transcript)
     if intent.op == "perform_action":
@@ -430,6 +438,39 @@ def dispatch(intent: NurseIntent, engine: SimulationEngine, transcript: str) -> 
             return None
         return engine.act(LearnerAction(kind="intervene", text=action_text))
     return None  # read_vitals / chitchat / confirm/cancel with nothing pending
+
+
+def _med_action_text(med) -> str:
+    """The action text the engine sees for a drug order: drug, dose and route
+    ("epinephrine 0.5 mg im"), so transitions and the debrief can key on any."""
+    route = extract_route(med.detail)
+    return " ".join(x for x in (med.drug, med.dose, route) if x)
+
+
+def _intercept(engine: SimulationEngine, med) -> bool:
+    """The case's live medication guardrail: if a rubric item says this order must
+    be withheld in this state, log the intercept, re-park the order awaiting a
+    corrected dose, and report True. The nurse voices the item's note."""
+    item = intercept_item(engine.case, med, engine.run.current_state_id)
+    if item is None:
+        return False
+    engine.log_event("intercept", item.id)
+    engine.run.pending_action = {
+        "op": "order_medication", "target": med.drug, "dose": None,
+        "action_text": "", "label": med.drug, "status": "awaiting_info",
+        "intercepted": item.id,
+    }
+    return True
+
+
+def _intercepted_this_turn(engine: SimulationEngine | None):
+    """The rubric item whose intercept was the last thing logged, else None."""
+    if engine is None or not engine.run.log:
+        return None
+    last = engine.run.log[-1]
+    if last.get("kind") != "intercept":
+        return None
+    return next((i for i in engine.case.medication_rubric if i.id == last.get("detail")), None)
 
 
 def _med_dose(transcript: str, action_text: str) -> str | None:
@@ -450,6 +491,17 @@ _VITAL_ASK_PATTERNS: list[tuple[re.Pattern, list[str]]] = [
     (re.compile(r"\b(glucose|blood sugar|sugar|bsl|cbg)\b", re.I), ["glucose"]),
     (re.compile(r"\bpain\b", re.I), ["pain"]),
 ]
+
+
+_ALL_VITALS_RE = re.compile(
+    r"\b(all|everything|full set|whole set|complete set|the lot|every vital|all of them|"
+    r"full obs|full vitals|monitor)\b", re.I)
+
+
+def _asks_for_all_vitals(transcript: str) -> bool:
+    """An explicit request for the whole set ("all of them", "full obs", "put him on
+    the monitor") — as opposed to a generic "vitals?", which gets a which-one."""
+    return bool(_ALL_VITALS_RE.search(transcript or ""))
 
 
 def _requested_vital_keys(transcript: str, available: dict) -> list[str] | None:
@@ -474,11 +526,23 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict,
     """The factual nugget speak() must report — the engine's real output."""
     # Clarification guard: interpreter flagged ambiguous/uncertain match
     if intent.clarify and intent.op in _CLARIFY_ASK_OPS:
+        if intent.op == "order_investigation" and not intent.target:
+            return ("The resident asked for tests without naming any — nothing has been "
+                    "sent. Ask them: 'Which specific tests would you like?' Do not "
+                    "suggest a panel or send anything.")
         label = intent.target or intent.action_text or "that"
         return (
             f"You were uncertain what the resident meant. Ask them to clarify: "
             f"'Did you mean {label}? Please say it again so I can confirm.'"
         )
+
+    # A withheld order (the case's live medication guardrail): the nurse says why
+    # and asks for the corrected dose. Nothing was given and nothing advanced.
+    item = _intercepted_this_turn(engine)
+    if item is not None and result is None:
+        return (f"You are WITHHOLDING the order — do not give it. Tell the resident "
+                f"plainly: {item.note or item.label}. Then ask them for the dose they "
+                f"want instead.")
 
     # ── turn-spanning confirmation protocol (S3) ──────────────────────────────
     pending = engine.run.pending_action if engine is not None else None
@@ -511,7 +575,12 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict,
                         "patient. Tell them briefly it's not available on the monitor.")
             return ("The resident asked for specific vitals — report ONLY these and nothing "
                     "else: " + json.dumps(keep))
-        return "Current vitals: " + json.dumps(keep)
+        if _asks_for_all_vitals(transcript):
+            return "Current vitals: " + json.dumps(keep)
+        # A generic "show me the vitals" → have the resident name which ones.
+        return ("The resident asked for the vitals without naming which. Report NONE yet — "
+                "ask them which they want (heart rate, blood pressure, sats, respiratory "
+                "rate, temperature), in one short question.")
     if intent.op == "order_medication":
         med = parse_med(intent.target, intent.action_text)
         if needs_dose_confirm(med) and not med.dose:
@@ -690,6 +759,8 @@ def _build_card(intent: NurseIntent, engine: SimulationEngine, result: StepResul
         med = parse_med(intent.target, intent.action_text)
         confirm = needs_dose_confirm(med)
         status = "confirm" if (confirm and not med.dose) else "given"
+        if _intercepted_this_turn(engine) is not None:
+            status = "held"
         return build_order_card(
             med.drug, med.dose, med.detail,
             status=status, confirm_required=confirm, card_id=med.slug,
@@ -700,7 +771,8 @@ def _build_card(intent: NurseIntent, engine: SimulationEngine, result: StepResul
         inv = next((i for i in engine.case.investigations if i.id == intent.target), None)
         if inv is not None:
             return build_investigation_card(
-                inv, engine.current_vitals(), engine.case.patient, result.revealed
+                inv, engine.current_vitals(), engine.case.patient, result.revealed,
+                state_id=engine.run.current_state_id,
             )
     if intent.op == "perform_exam":
         # Focused exam → the named system; full exam (no target) → "Physical".
@@ -875,12 +947,21 @@ def _patient_routed_turn(
     patient_beats = [
         h for h in engine.case.history if provider_speaker(h.provider) == "patient"
     ]
-    # Symptom-directed → ground to the next unrevealed patient beat (engine reveal).
-    if patient_beats and (set(transcript.lower().split()) & _SYMPTOM_WORDS):
+    # The interpreter already mapped the words onto a beat the patient holds (it
+    # sees the case's history menu) → honour it. A case with several patient beats
+    # (onset, past history, medications) depends on this; the heuristics below are
+    # the fallback for a beat the interpreter missed.
+    if intent.op == "ask_history" and any(h.id == intent.target for h in patient_beats):
+        return _resolve_turn(session, intent, transcript, clock)
+    words = set(re.findall(r"[a-z]+", transcript.lower()))
+    if patient_beats:
         unrevealed = [h for h in patient_beats
                       if h.id not in engine.run.revealed_history]
-        if unrevealed:
-            grounded = NurseIntent(op="ask_history", target=unrevealed[0].id)
+        # A beat whose own label words appear in the question ("medications?",
+        # "allergies?") wins; otherwise symptom talk grounds to the next unrevealed.
+        named = next((h for h in unrevealed if _beat_words(h) & words), None)
+        if named is not None or (unrevealed and words & _SYMPTOM_WORDS):
+            grounded = NurseIntent(op="ask_history", target=(named or unrevealed[0]).id)
             return _resolve_turn(session, grounded, transcript, clock)
 
     # Free roleplay — patient_reply records the exchange on the patient channel.
@@ -1007,6 +1088,16 @@ def _action_label(session: VoiceSession, op: str, target: str | None) -> str:
         actor = find_consultant(case, target)
         return f"Call {actor.role if actor else target}."
     return target or op
+
+
+def _beat_words(beat) -> set[str]:
+    """The distinctive words of a history beat's id/label (5+ letters, minus role
+    words) — enough to recognise "any allergies?" as the allergy beat."""
+    tokens = set(re.findall(r"[a-z]+", f"{beat.id} {beat.label}".lower()))
+    return {t for t in tokens if len(t) >= 5 and t not in _BEAT_STOPWORDS}
+
+
+_BEAT_STOPWORDS = frozenset({"patient", "history", "collateral", "symptoms", "symptom"})
 
 
 _SYMPTOM_WORDS = frozenset({

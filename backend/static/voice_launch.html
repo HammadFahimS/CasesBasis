@@ -125,6 +125,7 @@
   /* start row */
   .foot { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:26px; }
   .foot-note { font-size:11px; color:var(--ink-500); line-height:1.5; max-width:340px; }
+  .start:disabled { opacity:.45; cursor:not-allowed; }
   .start {
     display:inline-flex; align-items:center; gap:10px; cursor:pointer;
     font-size:14px; font-weight:700; letter-spacing:0.02em; color:#04181c;
@@ -229,6 +230,9 @@
     <div class="case-sub" id="caseSub">Choose your speech mode and interface, then step into the room.</div>
   </div>
 
+  <div class="sec-label" id="caseLabel" hidden>Case</div>
+  <div class="opts" id="caseOpts" hidden></div>
+
   <div class="sec-label">Speech models</div>
   <div class="opts" id="speechOpts">
     <button type="button" class="opt sel" data-speech="native">
@@ -280,8 +284,9 @@
 <script>
 (function(){
   const qs = new URLSearchParams(location.search);
-  const caseId = qs.get('case');
+  let caseId = qs.get('case');
   const sessionId = qs.get('session');
+  const startBtn = document.getElementById('startBtn');
 
   // ── state ──
   let ui = 'functional';      // default per product spec
@@ -336,14 +341,43 @@
       }
     }).catch(()=>{});
   } else if (sessionId) {
-    document.getElementById('caseEyebrow') && null;
     document.querySelector('.case-eyebrow').textContent = "You're about to resume";
     document.getElementById('caseTitle').textContent = 'Live session';
     document.getElementById('caseSub').textContent = 'Session ' + sessionId;
+  } else {
+    // ── no case named: the case library is the first step of the chooser ──
+    const label = document.getElementById('caseLabel');
+    const list = document.getElementById('caseOpts');
+    label.hidden = false; list.hidden = false;
+    startBtn.disabled = true;
+    document.querySelector('.case-eyebrow').textContent = 'Choose a case';
+    document.getElementById('caseTitle').textContent = 'Case library';
+    document.getElementById('caseSub').textContent = 'Pick the scenario, then your speech mode and interface.';
+    const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    fetch('/api/simulated-cases').then(r => r.ok ? r.json() : null).then(j => {
+      const cases = (j && j.cases) || [];
+      if (!cases.length){ list.innerHTML = '<div class="foot-note">No cases in the library yet.</div>'; return; }
+      list.innerHTML = cases.map(c =>
+        '<button type="button" class="opt" data-case="' + esc(c.id) + '">' +
+          '<span class="check"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 4.5"/></svg></span>' +
+          '<span class="ott">' + esc(c.title || c.id) + (c.is_gold ? ' <span class="otag free">Gold</span>' : '') + '</span>' +
+          '<span class="osub">' + esc([c.specialty, c.difficulty, c.state_count ? c.state_count + ' states' : ''].filter(Boolean).join(' · ')) + '</span>' +
+        '</button>').join('');
+      list.querySelectorAll('.opt').forEach(o => o.addEventListener('click', () => {
+        caseId = o.dataset.case;
+        list.querySelectorAll('.opt').forEach(x => x.classList.toggle('sel', x === o));
+        const c = cases.find(x => x.id === caseId) || {};
+        document.querySelector('.case-eyebrow').textContent = "You're about to start";
+        document.getElementById('caseTitle').textContent = c.title || 'Live case';
+        document.getElementById('caseSub').textContent = c.summary || '';
+        startBtn.disabled = false;
+      }));
+    }).catch(() => { list.innerHTML = '<div class="foot-note">Could not load the case library.</div>'; });
   }
 
   // ── launch ──
-  document.getElementById('startBtn').addEventListener('click', () => {
+  startBtn.addEventListener('click', () => {
+    if (!caseId && !sessionId) return;     // nothing chosen yet
     const p = new URLSearchParams();
     p.set('ui', ui);
     p.set('speech', speech);

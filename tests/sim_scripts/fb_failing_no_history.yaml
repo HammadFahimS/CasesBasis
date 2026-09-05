@@ -1,0 +1,27 @@
+# FAILING (foreign body) — the resident never takes the history and never acts.
+# The 2:00 gate fails him into the deteriorating-but-perfusing rescue window; the
+# window closes into hypoxic PEA; sixty seconds of no resuscitation step is death,
+# a terminal state: the case ends.
+case: foreign_body_airway
+name: fb_failing_no_history
+turns:
+  - tick: 130
+  - say: "What are his vitals?"
+    intent: { op: read_vitals }
+    expect: { speaker: nurse, op: read_vitals, state: deteriorating }
+
+  - tick: 80
+  - say: "Vitals?"
+    intent: { op: read_vitals }
+    expect: { speaker: nurse, op: read_vitals, state: pea_arrest }
+
+  - tick: 60
+  - say: "What's happening?"
+    intent: { op: read_vitals }
+    expect: { speaker: nurse, op: read_vitals, state: death, ended: true }
+
+final:
+  reached_state: death
+  critical_error: true
+  ended: true
+  max_score: 10
