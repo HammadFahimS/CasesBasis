@@ -49,14 +49,17 @@ def _git_branch() -> str:
 
 
 def _git_dirty() -> bool:
-    """True when the tree has uncommitted changes.
+    """True when *tracked* files differ from HEAD.
 
-    Recorded because a benchmark taken on a dirty tree cannot be reproduced from
-    its SHA, and a comparison against it is only as trustworthy as your memory.
+    Recorded because a benchmark taken on a modified tree cannot be reproduced
+    from its SHA. Untracked files are excluded deliberately: scratch notes and
+    result files would otherwise flag every run, and a warning that fires
+    constantly is a warning nobody reads.
     """
     try:
         out = subprocess.run(
-            ["git", "status", "--porcelain"], capture_output=True, text=True, timeout=5
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            capture_output=True, text=True, timeout=5,
         )
         return bool(out.stdout.strip())
     except Exception:

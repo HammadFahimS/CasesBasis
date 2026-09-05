@@ -186,3 +186,47 @@ def test_probe_result_carries_skip_reason():
     from bench.probes import ProbeResult
     d = ProbeResult("x", "network", skipped="no key").to_dict()
     assert d["skipped"] == "no key" and d["stats"]["n"] == 0
+
+
+# ── cross-probe mapping ──────────────────────────────────────────────────────
+
+def test_map_compares_a_retired_probe_against_its_replacement():
+    """Streaming STT retires stt_blocking rather than speeding it up. Without a
+    mapping the two sides read as GONE/NEW and the real comparison never happens."""
+    before = _run("baseline", {"stt_blocking": [520.0 + i for i in range(20)]})
+    after = _run("streaming", {"stt_realtime": [110.0 + i for i in range(20)]})
+    (v,) = compare(before, after, rename={"stt_blocking": "stt_realtime"})
+    assert v.probe == "stt_blocking→stt_realtime"
+    assert v.label == "IMPROVED"
+    assert v.delta_ms < -350
+    assert "cross-probe" in v.note
+
+
+def test_map_is_ignored_when_either_side_is_absent():
+    before = _run("baseline", {"stt_blocking": [520.0, 530.0]})
+    after = _run("streaming", {"stt_blocking": [520.0, 530.0]})
+    labels = {v.probe: v.label for v in compare(before, after, rename={"stt_blocking": "nope"})}
+    assert "stt_blocking" in labels and "stt_blocking→nope" not in labels
+
+
+def test_mapped_replacement_is_not_also_reported_as_new():
+    before = _run("baseline", {"stt_blocking": [520.0] * 10, "tts_ttfb": [150.0] * 10})
+    after = _run("streaming", {"stt_realtime": [110.0] * 10, "tts_ttfb": [150.0] * 10})
+    names = [v.probe for v in compare(before, after, rename={"stt_blocking": "stt_realtime"})]
+    assert names.count("stt_realtime") == 0, "the replacement must not double-report as NEW"
+    assert "stt_blocking→stt_realtime" in names and "tts_ttfb" in names
+
+
+def test_a_retired_probe_still_gets_its_own_row_when_still_measured():
+    """stt_blocking survives as the fallback path. Mapping it to stt_realtime must
+    not make its own before/after comparison vanish — or, worse, report it as NEW."""
+    before = _run("baseline", {"stt_blocking": [520.0 + i for i in range(10)]})
+    after = _run("streaming", {
+        "stt_blocking": [521.0 + i for i in range(10)],
+        "stt_realtime": [110.0 + i for i in range(10)],
+    })
+    labels = {v.probe: v.label for v in compare(before, after,
+                                                rename={"stt_blocking": "stt_realtime"})}
+    assert labels["stt_blocking→stt_realtime"] == "IMPROVED"
+    assert labels["stt_blocking"] == "NOISE", "the surviving fallback keeps its own row"
+    assert "NEW" not in labels.values()

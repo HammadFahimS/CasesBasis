@@ -33,12 +33,43 @@ def _samples(run: dict[str, Any]) -> dict[str, list[float]]:
     }
 
 
-def compare(before: dict, after: dict, min_effect_ms: float = 5.0) -> list:
+def compare(
+    before: dict, after: dict, min_effect_ms: float = 5.0,
+    rename: dict[str, str] | None = None,
+) -> list:
+    """Diff two runs probe-by-probe.
+
+    ``rename`` maps an old probe name to a new one, for the case where a change
+    *replaces* a leg rather than speeding it up — streaming STT retires
+    ``stt_blocking`` in favour of ``stt_realtime``. Without it both sides show up
+    as GONE/NEW and the comparison that actually matters never gets made.
+    """
     from bench.stats import Verdict
 
     b, a = _samples(before), _samples(after)
+    rename = rename or {}
     verdicts = []
+    paired_new: set[str] = set()
+    paired_old: set[str] = set()
+
+    for old, new in rename.items():
+        if old in b and new in a:
+            v = judge(new, b[old], a[new], min_effect_ms=min_effect_ms)
+            v.probe = f"{old}→{new}"
+            v.note = (v.note + "; " if v.note else "") + "cross-probe"
+            verdicts.append(v)
+            paired_new.add(new)
+            paired_old.add(old)
+
     for name in sorted(set(b) | set(a)):
+        if name in paired_new:
+            continue
+        # A mapped probe that survives on both sides keeps its own row — a retired
+        # leg is often still the fallback (stt_blocking backs up stt_realtime) and
+        # its own drift is worth seeing. One that is genuinely gone does not: the
+        # cross-probe row already accounts for it, and a GONE line would just be noise.
+        if name in paired_old and name not in a:
+            continue
         if name not in b:
             verdicts.append(Verdict(name, 0, 0, 0, 0, 0, 0, "NEW", "not in baseline"))
         elif name not in a:
@@ -56,11 +87,21 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--min-effect-ms", type=float, default=5.0,
                     help="ignore shifts smaller than this (default 5)")
     ap.add_argument("--json", action="store_true", help="emit JSON instead of a table")
+    ap.add_argument("--map", action="append", default=[], metavar="OLD=NEW",
+                    help="compare a retired probe against its replacement, e.g. "
+                         "--map stt_blocking=stt_realtime (repeatable)")
     args = ap.parse_args(argv)
+
+    rename: dict[str, str] = {}
+    for pair in args.map:
+        if "=" not in pair:
+            ap.error(f"--map expects OLD=NEW, got {pair!r}")
+        old, new = pair.split("=", 1)
+        rename[old.strip()] = new.strip()
 
     before = json.loads(args.before.read_text(encoding="utf-8"))
     after = json.loads(args.after.read_text(encoding="utf-8"))
-    verdicts = compare(before, after, args.min_effect_ms)
+    verdicts = compare(before, after, args.min_effect_ms, rename)
 
     if args.json:
         print(json.dumps([v.to_dict() for v in verdicts], indent=2))
