@@ -159,3 +159,22 @@ def test_bundle_request_orders_nothing_and_asks_which_tests():
     assert dispatch(intent, e, "send some bloods") is None
     assert e.run.ordered_investigations == []
     assert "Which specific tests" in _outcome_brief(intent, None, {}, engine=e, transcript="send some bloods")
+
+
+# ── workup item kind "state" ─────────────────────────────────────────────────
+def test_state_workup_item_credits_a_visited_outcome():
+    doc = _case().model_dump()
+    doc["workup_rubric"] = [{"id": "relieved", "label": "Relieved the airway", "kind": "state",
+                             "targets": ["seen"]}]
+    s = _session(SimulatedCase.model_validate(doc))
+    assert next(c for c in sim_scoring.score_run(s) if c.id == "workup-relieved").met is False
+    s.engine.goto("seen")
+    assert next(c for c in sim_scoring.score_run(s) if c.id == "workup-relieved").met is True
+
+
+def test_state_workup_item_targets_must_be_states():
+    import pytest
+    doc = _case().model_dump()
+    doc["workup_rubric"] = [{"id": "x", "label": "x", "kind": "state", "targets": ["Dermatological"]}]
+    with pytest.raises(ValueError, match="unknown"):
+        SimulatedCase.model_validate(doc)

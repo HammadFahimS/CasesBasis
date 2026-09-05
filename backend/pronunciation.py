@@ -66,6 +66,13 @@ RULES: list[dict[str, str]] = [
     {"string_to_replace": "neostigmine",   "type": "alias", "alias": "nee-oh-STIG-meen"},
     {"string_to_replace": "edrophonium",   "type": "alias", "alias": "ed-roe-FOH-nee-um"},
     {"string_to_replace": "rocuronium",    "type": "alias", "alias": "roe-cure-OH-nee-um"},
+    # ── airway / foreign body ──
+    {"string_to_replace": "Magill",        "type": "alias", "alias": "muh-GILL"},
+    {"string_to_replace": "laryngoscopy",  "type": "alias", "alias": "lar-in-GOSS-kuh-pee"},
+    {"string_to_replace": "laryngoscope",  "type": "alias", "alias": "luh-RING-guh-scope"},
+    {"string_to_replace": "GlideScope",    "type": "alias", "alias": "GLIDE-scope"},
+    {"string_to_replace": "amlodipine",    "type": "alias", "alias": "am-LOE-dih-peen"},
+    {"string_to_replace": "atorvastatin",  "type": "alias", "alias": "a-TOR-va-stat-in"},
     {"string_to_replace": "suxamethonium", "type": "alias", "alias": "sux-ah-meh-THOH-nee-um"},
     {"string_to_replace": "succinylcholine","type": "alias","alias": "sux-in-ill-KOH-leen"},
     # ── abx / gi / other ──

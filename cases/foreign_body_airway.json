@@ -2029,7 +2029,11 @@
         "300 microgram",
         "1:1000",
         "1 in 1000",
-        "one in a thousand"
+        "one in a thousand",
+        "0.5 milligram",
+        "0.3 milligram",
+        "milligrams im",
+        "milligram im"
       ],
       "note": "Anaphylaxis with a pulse is treated with 0.5 mg (0.3-0.5 mg) of 1 mg/mL epinephrine IM — never the 1 mg IV arrest dose."
     },
@@ -2113,6 +2117,18 @@
       ],
       "expectation": "expected",
       "note": "The object sits above the cords and is only seen with direct or video laryngoscopy — the diagnostic reveal."
+    },
+    {
+      "id": "airway_relieved",
+      "label": "Relieved or secured the airway",
+      "kind": "state",
+      "targets": [
+        "recovery",
+        "bronch_disposition",
+        "icu_disposition"
+      ],
+      "expectation": "expected",
+      "note": "The case is only won when the obstruction is relieved (Magill extraction) or bypassed (intubation with distal displacement, or a secured airway after ROSC)."
     }
   ],
   "debrief": {

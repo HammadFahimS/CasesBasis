@@ -170,11 +170,14 @@ def _score_workup(session) -> list[Criterion]:
     rubric = getattr(session.case, "workup_rubric", None) or []
     if not rubric:
         return []
-    examined = _examined_systems(session)
-    ordered = set(session.engine.run.ordered_investigations)
+    pools = {
+        "exam": _examined_systems(session),
+        "investigation": set(session.engine.run.ordered_investigations),
+        "state": set(session.engine.run.visited_states),
+    }
     out: list[Criterion] = []
     for item in rubric:
-        pool = examined if item.kind == "exam" else ordered
+        pool = pools[item.kind]
         did = any(t in pool for t in item.targets)
         if item.expectation == "avoid":
             out.append(Criterion(

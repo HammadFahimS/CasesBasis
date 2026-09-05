@@ -416,13 +416,15 @@ class WorkupExpectation(StrictModel):
       examined / ordered.
     * ``avoid``    — a low-value or harmful test to skip; *met* if none was ordered.
 
-    ``targets`` are exam **system names** (``kind="exam"``) or investigation **ids**
-    (``kind="investigation"``); they are checked against real case content at load.
+    ``targets`` are exam **system names** (``kind="exam"``), investigation **ids**
+    (``kind="investigation"``) or state **ids** (``kind="state"`` — met if any target
+    state was visited, so an outcome such as "relieved the airway" is creditable);
+    they are checked against real case content at load.
     """
 
     id: str
     label: str
-    kind: Literal["exam", "investigation"]
+    kind: Literal["exam", "investigation", "state"]
     targets: list[str] = Field(default_factory=list)
     expectation: Literal["expected", "avoid"] = "expected"
     note: str = ""
@@ -514,7 +516,7 @@ class SimulatedCase(StrictModel):
         exam_systems = {e.system for e in self.exam}
         inv_ids = {i.id for i in self.investigations}
         for item in self.workup_rubric:
-            pool = exam_systems if item.kind == "exam" else inv_ids
+            pool = {"exam": exam_systems, "investigation": inv_ids, "state": state_ids}[item.kind]
             for target in item.targets:
                 if target not in pool:
                     raise ValueError(

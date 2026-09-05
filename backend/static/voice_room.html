@@ -2823,7 +2823,9 @@
   async function startSession(){
     const params = new URLSearchParams(location.search);
     const resumeId = params.get('session') || params.get('resume');   // resume a parked run
-    const id = params.get('case') || 'myasthenic_crisis';
+    const id = params.get('case');
+    // No case and nothing to resume → back to the launcher, which lists the cases.
+    if (!id && !resumeId){ location.href = '/simulator/voice-room'; return; }
     let data;
     try {
       const res = resumeId
