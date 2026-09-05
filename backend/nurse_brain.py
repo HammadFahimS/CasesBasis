@@ -661,6 +661,11 @@ def _outcome_brief(intent: NurseIntent, result: StepResult | None, vitals: dict,
                     "else: " + json.dumps(keep))
         if _asks_for_all_vitals(transcript):
             return "Current vitals: " + json.dumps(keep)
+        # "Is he deteriorating?" / "is he stable?" — the interpreter often files a
+        # condition question as read_vitals with nothing named; it wants the trend,
+        # not a "which vital?" back.
+        if engine is not None and _asks_about_condition(transcript):
+            return _condition_brief(engine, vitals)
         # A generic "show me the vitals" → have the resident name which ones.
         return ("The resident asked for the vitals without naming which. Report NONE yet — "
                 "ask them which they want (heart rate, blood pressure, sats, respiratory "

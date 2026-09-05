@@ -84,6 +84,24 @@ def test_condition_brief_says_unchanged_at_baseline():
     assert '"oxygen_saturation": 97' in brief
 
 
+def test_condition_question_filed_as_read_vitals_gets_the_trend_not_which_one():
+    """gemma files 'is he stable?' as read_vitals with no vital named (live probe,
+    2026-09-05); that must not become 'which vitals would you like?'."""
+    eng = _fb_engine("deteriorating")
+    vitals = eng.current_vitals().model_dump(exclude_none=True)
+    brief = _outcome_brief(NurseIntent(op="read_vitals"), None, vitals,
+                           engine=eng, transcript="Is he stable?")
+    assert "sats down from 97 to 84" in brief
+    assert "ask them which they want" not in brief
+    # a bare vitals ask still gets the which-one question; a named vital is reported alone
+    generic = _outcome_brief(NurseIntent(op="read_vitals"), None, vitals,
+                             engine=eng, transcript="What are his vitals?")
+    assert "ask them which they want" in generic
+    named = _outcome_brief(NurseIntent(op="read_vitals", target="sats"), None, vitals,
+                           engine=eng, transcript="Are his sats dropping?")
+    assert "report ONLY these" in named and '"oxygen_saturation": 84' in named
+
+
 def test_open_prompt_still_gets_the_invite_not_the_vitals():
     eng = _fb_engine("deteriorating")
     vitals = eng.current_vitals().model_dump(exclude_none=True)
