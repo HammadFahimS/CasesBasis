@@ -1656,7 +1656,14 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   let audioMuted=false;   // Audio toggle: when true, TTS is silenced (transcript still updates)
   let voiced=false, voiceStart=0, silenceAt=0, vadGate=false;
   let SPEECH_THRESH=0.020;   // VAD trigger level — adjustable via Settings (models backend)
-  const SILENCE_MS=750, MIN_SPEECH_MS=280, GATE_TAIL_MS=280;
+  // SILENCE_MS is how long the room waits in silence before deciding the resident
+  // has finished. It is now the single largest item in the perceived-latency budget:
+  // once streaming STT dropped the transcript tail to ~143 ms (see bench/), this
+  // constant became bigger than the whole LLM turn. Dropped 750 -> 450 to test how
+  // the room feels; the trade is mid-sentence cutoffs when someone pauses to think,
+  // which in a clinical sim is a real failure, not a cosmetic one. Raise it back if
+  // the room starts interrupting.
+  const SILENCE_MS=450, MIN_SPEECH_MS=280, GATE_TAIL_MS=280;
   let recentSpoken=[];
   let _voices=[]; function loadVoices(){ try { _voices = window.speechSynthesis ? speechSynthesis.getVoices() : []; } catch(e){ _voices=[]; } }
   if (window.speechSynthesis){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
