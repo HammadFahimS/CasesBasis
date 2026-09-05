@@ -271,7 +271,7 @@ def test_run_turn_grounds_reply_in_engine(db_path, monkeypatch):
     # Stub the image generator so the turn stays offline (real ECG = an LLM call).
     monkeypatch.setattr(
         nurse_brain, "build_investigation_card",
-        lambda inv, vitals, patient, authored: {
+        lambda inv, vitals, patient, authored, **kw: {
             "kind": "ecg", "id": inv.id, "title": inv.name,
             "summary": authored, "visual_payload": {"type": "svg", "svg": "<svg/>"},
         },

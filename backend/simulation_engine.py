@@ -320,10 +320,12 @@ class SimulationEngine:
             )
         if inv_id not in self.run.ordered_investigations:
             self.run.ordered_investigations.append(inv_id)
-        result = inv.result_by_state.get(self.run.current_state_id, inv.result)
         self._log("order", inv_id)
         step = self._after_action(inv.name)
-        step.revealed = result
+        # Resolve the result in the state the order *leads to*, so a study whose
+        # own transition reveals something reads the post-transition text — the
+        # same moment a deferred result resolves at (due_deferred).
+        step.revealed = inv.result_for(self.run.current_state_id)
         return step
 
     def _schedule_deferred(self, inv: InvestigationDef, fire_at: int) -> None:
@@ -351,7 +353,7 @@ class SimulationEngine:
                 continue
             if inv.id not in self.run.ordered_investigations:
                 self.run.ordered_investigations.append(inv.id)
-            revealed = inv.result_by_state.get(self.run.current_state_id, inv.result)
+            revealed = inv.result_for(self.run.current_state_id)
             self._log("result", inv.id)
             out.append({"actor_id": ev.get("actor_id", "nurse"), "inv": inv, "revealed": revealed})
         self.run.deferred_events = remaining
@@ -496,9 +498,26 @@ class SimulationEngine:
         for tr in self.state.transitions:
             if tr.kind != "action":
                 continue
-            if self._action_matches(norm, tr):
+            if self._action_fires(norm, tr):
                 return self._fire(tr)
         return self._result()
+
+    def _action_fires(self, norm_text: str, tr: Transition) -> bool:
+        """An action transition fires when its requirements (all-of) are met and,
+        if it names keywords/a description, the current action matches them."""
+        if tr.requires:
+            if not self._requirements_met(tr):
+                return False
+            if not tr.keywords:
+                return True  # completing the requirements is the trigger
+        return self._action_matches(norm_text, tr)
+
+    def _requirements_met(self, tr: Transition) -> bool:
+        acts = self.run.actions_this_state
+        return all(
+            sum(any(stem.lower() in act for stem in req.any) for act in acts) >= req.count
+            for req in tr.requires
+        )
 
     def _action_matches(self, norm_text: str, tr: Transition) -> bool:
         if any(kw.lower() in norm_text for kw in tr.keywords):
@@ -513,7 +532,9 @@ class SimulationEngine:
             if tr.kind == "time" and self.elapsed_in_state >= (tr.after_seconds or 0):
                 return tr
             if tr.kind == "inaction" and self.elapsed_in_state >= (tr.after_seconds or 0):
-                if not self._any_action_taken(tr.keywords):
+                idle = (not self._requirements_met(tr)) if tr.requires \
+                    else (not self._any_action_taken(tr.keywords))
+                if idle:
                     return tr
             if tr.kind == "vitals" and tr.vitals_check is not None:
                 value = getattr(vitals, tr.vitals_check.param, None)

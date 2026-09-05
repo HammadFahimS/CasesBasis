@@ -700,7 +700,8 @@ def _build_card(intent: NurseIntent, engine: SimulationEngine, result: StepResul
         inv = next((i for i in engine.case.investigations if i.id == intent.target), None)
         if inv is not None:
             return build_investigation_card(
-                inv, engine.current_vitals(), engine.case.patient, result.revealed
+                inv, engine.current_vitals(), engine.case.patient, result.revealed,
+                state_id=engine.run.current_state_id,
             )
     if intent.op == "perform_exam":
         # Focused exam → the named system; full exam (no target) → "Physical".

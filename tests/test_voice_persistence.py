@@ -32,7 +32,7 @@ def test_round_trip_rehydrates_engine_transcript_and_cards(env, monkeypatch):
     _stub_llm(monkeypatch)
     monkeypatch.setattr(
         nurse_brain, "build_investigation_card",
-        lambda inv, vitals, patient, authored: {
+        lambda inv, vitals, patient, authored, **kw: {
             "kind": "ecg", "id": inv.id, "title": inv.name, "category": "ecg",
             "summary": authored, "visual_payload": {"type": "svg", "svg": "<svg/>"},
         },
