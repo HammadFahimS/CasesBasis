@@ -266,6 +266,10 @@ class ActionRequirement(StrictModel):
 
     any: list[str] = Field(min_length=1)
     count: int = Field(default=1, ge=1)
+    # Which actions are counted: those taken in the current state (default) or
+    # anywhere in the run so far — for a plan that may have been voiced in the
+    # same breath as the action that entered this state ("ketamine, then scope").
+    scope: Literal["state", "run"] = "state"
 
 
 class Transition(StrictModel):

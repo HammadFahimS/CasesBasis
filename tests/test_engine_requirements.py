@@ -129,7 +129,7 @@ def test_requires_survive_snapshot_roundtrip():
 
 def test_schema_rejects_empty_requirement():
     with pytest.raises(ValueError):
-        _case(states=[{
+        _case(investigations=[], states=[{
             "id": "a", "name": "A", "vitals": {},
             "transitions": [{"to_state": "a", "description": "x", "requires": [{"any": []}]}],
         }])
@@ -222,3 +222,40 @@ def test_asset_route_serves_media_under_cases_to_a_resident(tmp_path, monkeypatc
         with pytest.raises(HTTPException) as exc:
             pages.case_asset(bad, _signed_in())
         assert exc.value.status_code == 404
+
+
+# ── cue timing ───────────────────────────────────────────────────────────────
+def test_cue_after_seconds_overrides_the_default_linger():
+    case = _case(investigations=[], states=[{
+        "id": "a", "name": "A", "vitals": {},
+        "cues": [{"text": "early nudge", "actor_id": "nurse", "after_seconds": 20},
+                 {"text": "late nudge", "actor_id": "nurse"}],
+    }])
+    e = SimulationEngine(case)
+    e.tick(19)
+    assert e.due_cues() == []
+    e.tick(1)
+    assert e.due_cues()[0]["text"] == "early nudge"
+    assert e.due_cues() == []                      # the default one still waits 75 s
+    e.tick(55)
+    assert e.due_cues()[0]["text"] == "late nudge"
+
+
+def test_run_scoped_requirement_remembers_a_plan_voiced_before_the_state():
+    case = _case()
+    # make the planned-scope requirement run-scoped
+    b = next(s for s in case.states if s.id == "b")
+    doc = case.model_dump()
+    for st in doc["states"]:
+        if st["id"] == "b":
+            st["transitions"][0]["requires"][0]["scope"] = "run"
+    e = SimulationEngine(SimulatedCase.model_validate(doc))
+    e.act(LearnerAction(kind="medicate", text="ketamine 100 mg"))   # in state a
+    e.goto("b")                                                     # per-state list cleared
+    e.act(LearnerAction(kind="intervene", text="laryngoscopy now"))
+    assert e.state.id == "seen"
+
+    f = SimulationEngine(SimulatedCase.model_validate(doc))
+    f.goto("b")
+    f.act(LearnerAction(kind="intervene", text="laryngoscopy now"))
+    assert f.state.id == "c"                        # no plan anywhere → bare attempt

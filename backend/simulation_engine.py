@@ -77,6 +77,9 @@ class RunState:
     revealed_history: list[str] = field(default_factory=list)
     ordered_investigations: list[str] = field(default_factory=list)
     actions_this_state: list[str] = field(default_factory=list)
+    # Every normalised action text in the run, across states (for run-scoped
+    # transition requirements). Never cleared.
+    actions: list[str] = field(default_factory=list)
     applied_modifiers: list[str] = field(default_factory=list)
     vitals_override: dict[str, object] = field(default_factory=dict)
     visited_states: list[str] = field(default_factory=list)
@@ -472,7 +475,9 @@ class SimulationEngine:
                 getattr(self._actor(aid), "available_after_seconds", None) is not None
                 for aid in cue.requires_present
             )
-            if not arrival_gated and self.elapsed_in_state < self.CUE_AFTER_SECONDS:
+            # An authored ``after_seconds`` sets the linger; otherwise the default.
+            wait = cue.after_seconds if cue.after_seconds is not None else self.CUE_AFTER_SECONDS
+            if not arrival_gated and self.elapsed_in_state < wait:
                 continue
             self.run.fired_cues.append(key)
             self._log("cue", cue.text)
@@ -494,6 +499,7 @@ class SimulationEngine:
         norm = text.strip().lower()
         if norm:
             self.run.actions_this_state.append(norm)
+            self.run.actions.append(norm)
             self._apply_action_modifiers(norm)
         for tr in self.state.transitions:
             if tr.kind != "action":
@@ -513,11 +519,10 @@ class SimulationEngine:
         return self._action_matches(norm_text, tr)
 
     def _requirements_met(self, tr: Transition) -> bool:
-        acts = self.run.actions_this_state
-        return all(
-            sum(any(stem.lower() in act for stem in req.any) for act in acts) >= req.count
-            for req in tr.requires
-        )
+        def hits(req) -> int:
+            pool = self.run.actions if req.scope == "run" else self.run.actions_this_state
+            return sum(any(stem.lower() in act for stem in req.any) for act in pool)
+        return all(hits(req) >= req.count for req in tr.requires)
 
     def _action_matches(self, norm_text: str, tr: Transition) -> bool:
         if any(kw.lower() in norm_text for kw in tr.keywords):
