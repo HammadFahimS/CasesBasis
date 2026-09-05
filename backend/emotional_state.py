@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Patient states where the patient is sedated / arrested and does not speak.
-SILENT_STATES = {"post_intubation", "pea_arrest", "icu_admission"}
+# Non-perfusing rhythms: the patient is pulseless and cannot speak.
+_ARRESTED_RHYTHMS = ("pea", "asystole", "vf", "fibrillation", "pulseless")
 
 
 @dataclass(frozen=True)
@@ -30,68 +30,86 @@ class EmotionalState:
     stability: float | None   # ElevenLabs stability override (None = use voice default)
 
 
-def severity(engine) -> float:
-    """0 (stable) … 1 (peri-arrest) from the patient's current acuity (vitals + state).
+def _vitals(engine):
+    try:
+        return engine.current_vitals()
+    except Exception:
+        return None
 
-    Drives how much the *reactive* characters (patient, family) escalate. Reads
-    SpO₂ and the state id — fail-soft to 0 if a field is missing."""
-    sid = engine.run.current_state_id
+
+def _gcs_number(vitals) -> int | None:
+    raw = str(getattr(vitals, "gcs", "") or "").strip()
+    return int(raw) if raw.isdigit() else None
+
+
+def is_silent(engine) -> bool:
+    """The patient cannot speak: intubated/sedated, pulseless, or GCS ≤ 8. Read
+    from the vitals the current state carries, so any case's arrest, intubation or
+    death state is silent without naming it in code."""
+    v = _vitals(engine)
+    if v is None:
+        return False
+    gcs = str(v.gcs or "").lower()
+    rhythm = str(v.rhythm or "").lower()
+    if "intubat" in gcs or "sedat" in gcs or "ventilat" in gcs:
+        return True
+    if any(r in rhythm for r in _ARRESTED_RHYTHMS):
+        return True
+    n = _gcs_number(v)
+    return n is not None and n <= 8
+
+
+def severity(engine) -> float:
+    """0 (stable) … 1 (peri-arrest) from the patient's current acuity — SpO₂ bands,
+    a depressed GCS, a non-perfusing rhythm. Drives how much the
+    *reactive* characters (patient, family) escalate. Fail-soft to 0."""
     sev = 0.0
-    try:
-        spo2 = getattr(engine.current_vitals(), "oxygen_saturation", None)
-    except Exception:
-        spo2 = None
-    if spo2 is not None:
-        if spo2 < 85:
+    v = _vitals(engine)
+    if v is not None:
+        spo2 = v.oxygen_saturation
+        if spo2 is not None:
+            if spo2 < 85:
+                sev = max(sev, 0.9)
+            elif spo2 < 90:
+                sev = max(sev, 0.7)
+            elif spo2 < 94:
+                sev = max(sev, 0.4)
+        n = _gcs_number(v)
+        if n is not None and n <= 8:
             sev = max(sev, 0.9)
-        elif spo2 < 90:
+        elif n is not None and n <= 12:
             sev = max(sev, 0.7)
-        elif spo2 < 94:
-            sev = max(sev, 0.4)
-    if "intubation" in sid and "post" not in sid:
-        sev = max(sev, 0.9)
-    try:
-        if engine.state.is_terminal:
-            sev = max(sev, 0.5)
-    except Exception:
-        pass
+        if any(r in str(v.rhythm or "").lower() for r in _ARRESTED_RHYTHMS):
+            sev = 1.0
     return sev
 
 
 def _patient_stability(engine) -> float:
-    """Lower stability = more vocal affect. Calm at baseline, near-zero at failure."""
-    sid = engine.run.current_state_id
-    if sid in SILENT_STATES:
+    """Lower stability = more vocal affect: 0.30 when calm, 0.15 peri-arrest."""
+    if is_silent(engine):
         return 0.30
-    if "intubation" in sid and "post" not in sid:
-        return 0.15
-    elapsed = engine.elapsed_in_state
-    if elapsed > 180:
-        return 0.20
-    if elapsed > 60:
-        return 0.25
-    return 0.30
+    return round(0.30 - 0.15 * severity(engine), 2)
 
 
 def _patient_instruction(engine) -> str:
-    sid = engine.run.current_state_id
-    if sid in SILENT_STATES:
-        return ("You are sedated and cannot speak. Do not reply with words — "
-                "respond with silence (output an empty string).")
-    elapsed = engine.elapsed_in_state
-    if "intubation" in sid and "post" not in sid:
-        return ("You are exhausted and barely able to breathe. Reply in at most "
-                "four words. Every breath is a visible effort — do not form full "
-                "sentences. You may trail off mid-word.")
-    if elapsed > 180:
-        return ("Your breathing has worsened over the last few minutes. Keep each "
-                "reply to one very short phrase (≤6 words). Show increasing "
-                "exhaustion and breathlessness.")
-    if elapsed > 60:
-        return ("You are noticeably more breathless than when the doctor arrived. "
-                "Limit replies to short sentences and convey effort with each word.")
-    return ("You are breathless and anxious but can still speak in short sentences. "
-            "You cannot complete full sentences without pausing to breathe.")
+    """How the patient speaks this turn, from acuity. The authored ``patient_status``
+    (already in the patient prompt) carries the case-specific picture; this only
+    sets the register — silent, drowsy, distressed, or as the status describes."""
+    if is_silent(engine):
+        return ("You are unconscious or sedated and cannot speak. Do not reply with "
+                "words — respond with silence (output an empty string).")
+    sev = severity(engine)
+    if sev >= 0.7:
+        return ("You are drowsy and barely able to breathe. Reply in at most four "
+                "words, mumbled. Every breath is a visible effort — do not form full "
+                "sentences. You may trail off mid-word or not answer at all.")
+    if sev >= 0.4:
+        return ("You are noticeably more breathless and frightened than when the "
+                "doctor arrived. Limit replies to short phrases and convey effort "
+                "with each word.")
+    return ("Speak as your current condition describes: if you are short of breath, "
+            "keep to short sentences and pause to breathe; if you are comfortable, "
+            "speak normally. Answer only what you are asked.")
 
 
 def _family_state(engine) -> EmotionalState:
@@ -128,7 +146,10 @@ _STEADY: dict[str, str] = {
 def for_speaker(speaker: str, engine) -> EmotionalState:
     """The live EmotionalState for who is speaking this turn."""
     if speaker == "patient":
-        return EmotionalState("breathless", _patient_instruction(engine), _patient_stability(engine))
+        sev = severity(engine)
+        label = "silent" if is_silent(engine) else \
+            "drowsy" if sev >= 0.7 else "breathless" if sev >= 0.4 else "steady"
+        return EmotionalState(label, _patient_instruction(engine), _patient_stability(engine))
     if speaker == "family":
         return _family_state(engine)
     return EmotionalState("steady", _STEADY.get(speaker, ""), None)
