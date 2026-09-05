@@ -1645,7 +1645,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   function clearAddrChips(){ if (addrBar) addrBar.style.display = 'none'; }
 
   /* ---------------- VOICE I/O (STT / TTS / VAD) ---------------- */
-  let stream=null, recorder=null, chunks=[], audioCtx=null, analyser=null, micSource=null, vadRaf=0;
+  let stream=null, recorder=null, chunks=[], audioCtx=null, analyser=null, micSource=null;
   let listening=false, capturing=false;
   // Realtime STT (Scribe v2) — stream mic PCM to /ws/stt while the resident talks,
   // so the transcript is ready ~when they stop. MediaRecorder still runs in parallel
@@ -1654,17 +1654,14 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   let sttFinalText='', sttFinalResolve=null;
   let curAudio=null, playResolve=null, curAbortCtrl=null, curPCMGain=null;
   let audioMuted=false;   // Audio toggle: when true, TTS is silenced (transcript still updates)
-  let voiced=false, voiceStart=0, silenceAt=0, vadGate=false;
-  let SPEECH_THRESH=0.020;   // VAD trigger level — adjustable via Settings (models backend)
-  // SILENCE_MS is how long the room waits in silence before deciding the resident
-  // has finished. It is now the single largest item in the perceived-latency budget:
-  // once streaming STT dropped the transcript tail to ~143 ms (see bench/), this
-  // constant became bigger than the whole LLM turn. Dropped 750 -> 450 to test how
-  // the room feels; the trade is mid-sentence cutoffs when someone pauses to think,
-  // which in a clinical sim is a real failure, not a cosmetic one. Raise it back if
-  // the room starts interrupting.
-  const SILENCE_MS=450, MIN_SPEECH_MS=280, GATE_TAIL_MS=280;
-  let recentSpoken=[];
+  // Push-to-talk: the resident holds Space (or the orb) while speaking and releases
+  // to send. There is no VAD end-pointing any more — the 450 ms silence gate cut
+  // thinking pauses mid-sentence ("Let's give him 0.5 IM…") and every wrongly split
+  // order cost a whole clarification round. Release is the commit point, so the
+  // utterance boundary is exactly what the resident meant, and the silence wait
+  // drops out of the latency budget altogether.
+  let ptt=false, pttAt=0, pttDrop=false;
+  const PTT_MIN_MS=200;   // shorter than this is a tap, not an utterance
   let _voices=[]; function loadVoices(){ try { _voices = window.speechSynthesis ? speechSynthesis.getVoices() : []; } catch(e){ _voices=[]; } }
   if (window.speechSynthesis){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
   function pickVoice(speaker){
@@ -1675,10 +1672,6 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     if (speaker==='consult'){ const male=pool.filter(v=>/male|man|daniel|alex|fred|tom|rishi|oliver/i.test(v.name)&&!/female|woman/i.test(v.name)); return male[0]||pool[Math.min(1,pool.length-1)]; }
     return base[0];
   }
-  function gateVad(on){ vadGate=on; voiced=false; silenceAt=0; }
-  function normTokens(t){ return (t||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean); }
-  function rememberSpoken(text){ const toks=normTokens(text); if (!toks.length) return; recentSpoken.push(toks); if (recentSpoken.length>3) recentSpoken.shift(); }
-  function looksLikeEcho(said){ const toks=normTokens(said); if (toks.length<2) return false; const set=new Set(toks); for (const prev of recentSpoken){ if (prev.length<2) continue; const pset=new Set(prev); let hit=0; for (const w of set) if (pset.has(w)) hit++; if (hit/Math.min(set.size,pset.size)>=0.6) return true; } return false; }
 
   // ---- Realtime STT over WebSocket (Scribe v2) ----
   function sttConnect(){
@@ -1689,7 +1682,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
       const q = SESSION_ID ? `?session_id=${encodeURIComponent(SESSION_ID)}` : '';
       const ws = new WebSocket(`${proto}://${location.host}/ws/stt${q}`);
       ws.binaryType = 'arraybuffer';
-      ws.onclose = () => { if (sttWs === ws){ sttWs = null; sttStreaming = false; } };
+      ws.onclose = () => { if (sttWs === ws){ sttWs = null; sttStreaming = false; if (listening && !ended) setTimeout(sttConnect, 500); } };
       ws.onerror = () => {};
       ws.onmessage = (ev) => {
         let m; try { m = JSON.parse(ev.data); } catch(e){ return; }
@@ -1753,12 +1746,11 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     speakChain = speakChain.then(run, run); return speakChain;
   }
   async function _playTTSNow(text, speaker, stability){
-    setState('responding'); rememberSpoken(text);
+    setState('responding');
     // Muted: no audio, but hold the "speaking" beat so the bubble/transcript stay
     // readable (roughly speech-paced), then let the caller clear it.
     if (audioMuted){ await new Promise(r => setTimeout(r, Math.min(3500, 350 + (text||'').length * 38))); return; }
     if (VOICE_BACKEND === 'native') return speakNative(text, speaker);
-    gateVad(true);
     const body = { text, speaker }; if (stability != null) body.stability = stability;
     if (VOICE_TIER === 'extreme') body.tier = 'extreme';
     if (VOICE_EXPRESSIVE) body.expressive = true;
@@ -1773,7 +1765,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
         await new Promise(resolve => { playResolve=resolve; const done=()=>{ URL.revokeObjectURL(url); if (curAudio===audio) curAudio=null; if (playResolve){ playResolve=null; resolve(); } }; audio.onended=done; audio.onerror=done; audio.play().catch(done); });
       }
     } catch(e){ if (e.name!=='AbortError') throw e; }
-    finally { curAbortCtrl=null; setTimeout(()=>gateVad(false), GATE_TAIL_MS); }
+    finally { curAbortCtrl=null; }
   }
   async function _playPCMStream(res){
     const SAMPLE_RATE=16000; const ctx = audioCtx || new (window.AudioContext||window.webkitAudioContext)(); audioCtx=ctx;
@@ -1808,29 +1800,39 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     });
   }
 
-  // ---- VAD loop ----
-  function rmsLevel(){ const buf=new Uint8Array(analyser.fftSize); analyser.getByteTimeDomainData(buf); let sum=0; for (let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; } return Math.sqrt(sum/buf.length); }
-  function vadTick(){
-    if (!listening) return;
-    if (vadGate){ vadRaf=requestAnimationFrame(vadTick); return; }
-    const level=rmsLevel(), now=performance.now();
-    if (level>SPEECH_THRESH){ if (!voiced){ voiced=true; voiceStart=now; onVoiceStart(); } silenceAt=0; }
-    else if (voiced){ if (!silenceAt) silenceAt=now; else if (now-silenceAt>SILENCE_MS){ voiced=false; onVoiceEnd((silenceAt-voiceStart)>=MIN_SPEECH_MS); } }
-    vadRaf=requestAnimationFrame(vadTick);
+  // ---- Push-to-talk ----
+  function pttDown(){
+    if (!listening || ptt || paused) return;
+    ptt=true; pttAt=performance.now();
+    stopAudio();                                   // barge-in: the resident is talking over the room
+    if (VOICE_BACKEND==='native'){ if (!processing){ try { recognition.start(); } catch(e){} setMic('rec'); setState('listening'); } return; }
+    if (processing) return;                        // the last turn is still working; capture starts when it clears
+    if (!sttWs || sttWs.readyState!==1) sttConnect();
+    if (!capturing){ sttActive = sttBegin(); startCapture(); }
   }
-  function onVoiceStart(){ stopAudio(); if (processing) return; if (!capturing){ sttActive = sttBegin(); startCapture(); } }
-  function onVoiceEnd(longEnough){
-    if (capturing){ capturing=false; try { recorder.stop(); } catch(e){} }
-    if (!longEnough){ chunks=[]; sttStreaming=false; sttActive=false; return; }
+  function pttUp(){
+    if (!ptt) return;
+    ptt=false;
+    const held = performance.now()-pttAt;
+    if (VOICE_BACKEND==='native'){ try { recognition.stop(); } catch(e){} return; }
+    if (!capturing) return;
+    capturing=false;
+    pttDrop = held < PTT_MIN_MS;                   // a tap, not an utterance: the blob is discarded in onstop
+    if (pttDrop){ sttStreaming=false; sttActive=false; }
+    try { recorder.stop(); } catch(e){}
+    if (pttDrop){ roomHint('hold Space or the orb while you talk'); return; }
     sttCommit();  // realtime: finalise the transcript; stays sttActive so processUtterance awaits it
+  }
+  function pttResume(){   // a press held through the previous turn starts capturing once it clears
+    if (ptt && listening && !processing && !capturing && VOICE_BACKEND!=='native'){ pttAt=performance.now(); sttActive = sttBegin(); startCapture(); }
   }
   function startCapture(){
     chunks=[];
     const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
     recorder = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined);
     recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-    recorder.onstop = () => { const parts=chunks; chunks=[]; if (parts.length) processUtterance(new Blob(parts, { type: parts[0].type || 'audio/webm' })); };
-    recorder.start(); capturing=true; setMic('rec'); setState('listening');
+    recorder.onstop = () => { const parts=chunks; chunks=[]; if (parts.length && !pttDrop) processUtterance(new Blob(parts, { type: parts[0].type || 'audio/webm' })); };
+    pttDrop=false; recorder.start(); capturing=true; setMic('rec'); setState('listening');
   }
   async function processUtterance(blob){
     const wantRealtime = sttActive; sttActive=false;
@@ -1845,16 +1847,16 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
       try { said = await stt(blob); } catch(e){ roomHint((e&&e.message)||'transcription failed'); processing=false; if (!capturing) setMic(listening?'listen':'off'); setState(listening?'listening':'idle'); return; }
     }
     if (!said){ processing=false; if (listening) setMic('listen'); setState(listening?'listening':'idle'); return; }
-    if (looksLikeEcho(said)){ processing=false; if (!capturing) setMic(listening?'listen':'off'); setState(listening?'listening':'idle'); return; }
     await handleSaid(said);
     if (!capturing) setMic(listening?'listen':'off');
+    pttResume();
   }
 
   /* ---------------- MIC BUTTON (orb) + text input ---------------- */
   const micOrb = $('#micOrb'), micInput = $('#micInput');
   function setMic(mode){ // off | listen | rec | busy
     micOrb.classList.toggle('rec', mode==='rec' || mode==='listen');
-    micInput.placeholder = mode==='rec' ? 'Listening to you…' : mode==='busy' ? 'Working…' : mode==='listen' ? 'Live — tap the orb to stop' : 'Tap the orb to talk, or type a command…';
+    micInput.placeholder = mode==='rec' ? 'Listening — release to send' : mode==='busy' ? 'Working…' : mode==='listen' ? 'Hold Space or the orb to talk, or type a command…' : 'Tap the orb to begin, or type a command…';
   }
   let INTRO_TEXT='', introPlayed=false;
   async function playHandoff(){
@@ -1895,8 +1897,8 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
       }
     }
     if (VOICE_BACKEND==='models') sttConnect();
-    listening=true; voiced=false; silenceAt=0; setMic('listen'); setState('listening');
-    if (!await playHandoff()) return; vadRaf=requestAnimationFrame(vadTick);
+    listening=true; setMic('listen'); setState('listening');
+    await playHandoff();
   }
   let recognition=null, recoSuspend=false;
   function nativeSupported(){ return 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window; }
@@ -1904,27 +1906,23 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     if (!nativeSupported()){ roomHint('this browser has no dictation — refresh and pick Speech models'); return; }
     const SR = window.SpeechRecognition||window.webkitSpeechRecognition; recognition=new SR();
     recognition.continuous=true; recognition.interimResults=true; recognition.lang='en-US';
-    recognition.onresult=onNativeResult; recognition.onerror=()=>{}; recognition.onend=()=>{ if (listening && !recoSuspend){ try { recognition.start(); } catch(e){} } };
+    // Push-to-talk: recognition runs only while the key/orb is held; release stops it
+    // and the final result (if any) reaches handleSaid. No auto-restart on end.
+    recognition.onresult=onNativeResult; recognition.onerror=()=>{}; recognition.onend=()=>{ if (listening && !processing && !capturing) setMic('listen'); };
     listening=true; setMic('listen'); setState('listening');
-    if (!await playHandoff()) return; try { recognition.start(); } catch(e){}
+    await playHandoff();
   }
   function onNativeResult(event){
     let finalText='', interim='';
     for (let i=event.resultIndex;i<event.results.length;i++){ const r=event.results[i]; if (r.isFinal) finalText+=r[0].transcript; else interim+=r[0].transcript; }
-    // Barge-in guard: the mic picks up the nurse's own TTS while she speaks (the
-    // browser's echo-cancellation doesn't cover the Web-Speech recogniser), and a
-    // bare `if (interim) stopAudio()` let that echo abort her mid-sentence — the
-    // intermittent "text but no audio" dropout. Only cut her off for a REAL utterance:
-    // multi-word and not an echo of what she just said (recentSpoken/looksLikeEcho
-    // already power the server path). Not-speaking → stopAudio is a harmless no-op.
-    if (interim){ const t = interim.trim(); const words = t ? t.split(/\s+/).filter(Boolean).length : 0; if (words >= 2 && !looksLikeEcho(t)) stopAudio(); }
+    if (interim && ptt) micInput.placeholder = interim.trim().slice(-60);
     const said=finalText.trim(); if (!said) return;
     recoSuspend=true; try { recognition.stop(); } catch(e){}
     processing=true; setMic('busy'); setState('thinking');
-    handleSaid(said).finally(()=>{ recoSuspend=false; if (listening){ try { recognition.start(); } catch(e){} setMic('listen'); } });
+    handleSaid(said).finally(()=>{ recoSuspend=false; if (listening) setMic('listen'); });
   }
   async function startListening(){ if (VOICE_BACKEND==='native') return startNative(); return startServer(); }
-  function stopListening(){ listening=false; recoSuspend=false; sttStreaming=false; sttActive=false; if (vadRaf){ cancelAnimationFrame(vadRaf); vadRaf=0; } if (recognition){ try { recognition.stop(); } catch(e){} } if (capturing){ capturing=false; try { recorder.stop(); } catch(e){} chunks=[]; } stopAudio(); clearSpeaking(); setMic('off'); setState('idle'); }
+  function stopListening(){ listening=false; ptt=false; recoSuspend=false; sttStreaming=false; sttActive=false; if (recognition){ try { recognition.stop(); } catch(e){} } if (capturing){ capturing=false; try { recorder.stop(); } catch(e){} chunks=[]; } stopAudio(); clearSpeaking(); setMic('off'); setState('idle'); }
 
   // The case begins explicitly via the green "Start case" button (or the first
   // mic tap). Once started, the button goes inactive and the mic toggles talking.
@@ -1939,10 +1937,28 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   function beginCase(){ if (started || ended) return; markStarted(); startListening(); }
   startCaseBtn.addEventListener('click', beginCase);
 
-  micOrb.addEventListener('click', () => {
-    if (!started){ beginCase(); return; }      // first tap begins the case + handoff
-    if (listening) stopListening(); else startListening();
+  // The orb: first tap begins the case + handoff; once live, press and hold to talk.
+  // Space does the same from the keyboard (ignored while typing in a field). A
+  // focused button is blurred first so Space can't re-fire it (Pause, End…).
+  micOrb.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (!started){ beginCase(); return; }
+    if (!listening){ startListening(); return; }
+    try { micOrb.setPointerCapture(e.pointerId); } catch(err){}
+    pttDown();
   });
+  ['pointerup','pointercancel'].forEach(ev => micOrb.addEventListener(ev, pttUp));
+  function typingTarget(e){ const t=e.target; return !!(t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable)); }
+  document.addEventListener('keydown', e => {
+    if (e.code!=='Space' || e.repeat || typingTarget(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!started || !listening) return;
+    e.preventDefault();
+    if (document.activeElement && document.activeElement.tagName==='BUTTON') document.activeElement.blur();
+    pttDown();
+  });
+  document.addEventListener('keyup', e => { if (e.code!=='Space' || typingTarget(e)) return; if (ptt){ e.preventDefault(); pttUp(); } });
+  window.addEventListener('blur', pttUp);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pttUp(); });
   micInput.addEventListener('keydown', e => {
     if (e.key==='Enter' && micInput.value.trim()){ const t=micInput.value.trim(); micInput.value=''; markStarted(); if (!processing) handleSaid(t); }
   });
@@ -2253,7 +2269,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   /* ---------------- HELP ---------------- */
   function openHelp(){
     const rows = [
-      ['Talk or type', 'Tap the orb and speak naturally, or type into the command bar. The room replies out loud.'],
+      ['Talk or type', 'Hold Space (or press and hold the orb) while you speak and release to send. Or type into the command bar. The room replies out loud.'],
       ['Address someone', 'Name who you mean — “Nurse, …”, “Husband, …”, “Paramedic, …” — to direct a question. Unaddressed bedside talk goes to the patient.'],
       ['Order & examine', 'Say “order a chest X-ray”, “examine her chest”, “give 5 of…”, or use Add Investigation / Call Consultant / Add Participant.'],
       ['Vitals', 'Ask for what you need (“what’s her sat?”) — only that value shows. Patient Monitor reveals the full set.'],
@@ -2268,17 +2284,13 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   $('#helpBtn').addEventListener('click', openHelp);
 
   /* ---------------- SETTINGS ---------------- */
-  let vadSens = 'med';   // low | med | high  → SPEECH_THRESH
-  const VAD_LEVELS = { low: 0.030, med: 0.020, high: 0.012 };
   function openSettings(){
-    const isModels = (VOICE_BACKEND === 'models');
     const html =
       '<div class="st-row"><div class="lab"><b>Speech input</b><i>Switching reloads the room and resumes this case.</i></div>' +
         '<div class="st-seg" id="stSpeech"><button data-v="native" class="' + (VOICE_TIER==='native' ? 'on' : '') + '">Browser</button><button data-v="models" class="' + (VOICE_TIER==='models' ? 'on' : '') + '">Voice models</button><button data-v="extreme" class="' + (VOICE_TIER==='extreme' ? 'on' : '') + '">Extreme</button></div></div>' +
       '<div class="st-row"><div class="lab"><b>Room audio</b><i>Play the room’s voices aloud.</i></div>' +
         '<div class="st-switch ' + (audioMuted ? '' : 'on') + '" id="stAudioSw" role="switch" aria-checked="' + (!audioMuted) + '"></div></div>' +
-      '<div class="st-row"><div class="lab"><b>Mic sensitivity</b><i>' + (isModels ? 'How easily your voice triggers the recorder.' : 'Only applies with the Voice-models backend.') + '</i></div>' +
-        '<div class="st-seg" id="stVad"><button data-v="low" class="' + (vadSens==='low'?'on':'') + '">Low</button><button data-v="med" class="' + (vadSens==='med'?'on':'') + '">Med</button><button data-v="high" class="' + (vadSens==='high'?'on':'') + '">High</button></div></div>';
+      '<div class="st-row"><div class="lab"><b>Talking</b><i>Hold Space or the orb while you speak; release to send.</i></div></div>';
     openModal('Settings', 'Session settings', html);
 
     document.getElementById('stAudioSw').addEventListener('click', function(){ setAudioMuted(!audioMuted); this.setAttribute('aria-checked', String(!audioMuted)); });
@@ -2288,12 +2300,6 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
       const q = new URLSearchParams(location.search);
       q.set('speech', v); if (SESSION_ID) q.set('session', SESSION_ID);
       location.search = q.toString();   // reload in the new mode, resuming this session
-    });
-    document.getElementById('stVad').addEventListener('click', e => {
-      const b = e.target.closest('button'); if (!b) return;
-      vadSens = b.dataset.v; SPEECH_THRESH = VAD_LEVELS[vadSens] || 0.020;
-      document.querySelectorAll('#stVad button').forEach(x => x.classList.toggle('on', x === b));
-      roomHint('Mic sensitivity: ' + vadSens);
     });
   }
   $('#settingsBtn').addEventListener('click', openSettings);
@@ -2504,7 +2510,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
       (data.cards||[]).forEach(c => addCard(c));
       if ('pending' in data) applyPending(data.pending);
       markStarted();   // a resumed case is already underway
-      roomHint('resumed — tap the orb to continue');
+      roomHint('resumed — tap the orb, then hold Space to talk');
     } else {
       INTRO_TEXT = (data.intro||'').trim();
       if (INTRO_TEXT){

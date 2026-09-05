@@ -64,7 +64,8 @@ real 2 ms win as an achievement.
   deteriorates under the benchmark and later samples measure a different case.
 - **The session is in-memory.** One DB read for the case, no writes, no
   persistence, nothing left behind.
-- **This measures the server, not the browser.** VAD hangover, mic capture,
+- **This measures the server, not the browser.** Mic capture (push-to-talk: the
+  resident's key release is the utterance boundary, so there is no VAD hangover),
   Web Audio scheduling and the client's own round-trips are not in these
   numbers. Real end-to-end is worse than `turn_total + tts_ttfb`, and closing
   that gap needs instrumentation in `voice_room_functional.html`.

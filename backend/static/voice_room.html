@@ -1159,7 +1159,7 @@
 </div>
 
 <!-- Push-to-talk -->
-<button class="talk" id="talkBtn" title="Tap to start hands-free listening (or press Space). Just speak — say “Nurse, …” for orders, anything else talks to the patient.">
+<button class="talk" id="talkBtn" title="Tap to start, then hold Space (or hold this button) while you speak and release to send. Say “Nurse, …” for orders; anything else talks to the patient.">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="6" y="1.5" width="4" height="8.5" rx="2"/><path d="M3.5 7c0 2.6 2 4.5 4.5 4.5S12.5 9.6 12.5 7M8 11.5v3M5.5 14.5h5"/></svg>
   <span class="talk-label">Tap to start</span>
 </button>
@@ -1201,7 +1201,7 @@
 </div>
 
 <!-- Mic guidance (the manual state switcher was removed; the orb state is live) -->
-<div class="switcher-note">Tap the mic, then talk — address staff by name (“Nurse, …”, “Husband, …”, “RT, …”); anything else goes to the patient</div>
+<div class="switcher-note">Tap the mic to start, then hold Space while you talk — address staff by name (“Nurse, …”, “Husband, …”, “RT, …”); anything else goes to the patient</div>
 
 <!-- Unified Room log (right edge): every voice in the room, tagged by speaker -->
 <div class="transcript ch-room collapsed" id="trRoom">
@@ -2652,7 +2652,7 @@
       if (native){ recoSuspend = true; try { recognition.stop(); } catch(e){} }
       try { await playTTS(reply, speaker, data.affect_stability ?? null); } catch(e){}
       await deliverCues(data);              // room nudges after the reply
-      if (native && listening){ recoSuspend = false; try { recognition.start(); } catch(e){} }
+      if (native) recoSuspend = false;   // recognition only runs while Space is held
     }
     await deliverDeferred(data);            // scheduled results reporting back (+ panel card)
     if (pendingEnd){ pendingEnd = false; concludeCase(); }
@@ -2879,15 +2879,13 @@
   const talkBtn = document.getElementById('talkBtn');
   const talkLabel = talkBtn.querySelector('.talk-label');
   let stream = null, recorder = null, chunks = [];
-  let audioCtx = null, analyser = null, micSource = null, vadRaf = 0;
+  let audioCtx = null;
   let listening = false;     // hands-free mode engaged
   let capturing = false;     // recording the current utterance
   let processing = false;    // STT/LLM in flight (no audio yet)
   let curAudio = null, playResolve = null;          // playing TTS reply (for barge-in)
   let curAbortCtrl = null, curPCMGain = null;       // streaming PCM path: fetch abort + gain node
-  let voiced = false, voiceStart = 0, silenceAt = 0;
-  let vadGate = false;       // mute the VAD while a reply is speaking (half-duplex, kills self-capture)
-  let recentSpoken = [];     // last few things we spoke — to drop echo that leaks past the gate
+  let ptt = false, pttAt = 0, pttDrop = false;   // push-to-talk: held key/button, when it went down, tap-to-discard
 
   // Voice backend chosen at the start: 'native' (browser dictation + speech
   // synthesis, zero cost) or 'models' (Whisper STT + Cartesia TTS). Set once.
@@ -2926,42 +2924,10 @@
     return base[0];
   }
 
-  // VAD tuning (RMS on the mic's time-domain signal).
-  const SPEECH_THRESH = 0.020;   // above this counts as voice
-  const SILENCE_MS = 750;        // trailing silence that ends an utterance
-  const MIN_SPEECH_MS = 280;     // ignore shorter blips
-  const GATE_TAIL_MS = 280;      // keep the mic muted briefly after a reply so the room rings out
-
-  // Half-duplex gate: while a reply plays we stop listening, so the nurse/patient
-  // TTS coming out of the speakers can't trip the VAD and get transcribed back.
-  function gateVad(on){
-    vadGate = on;
-    voiced = false; silenceAt = 0;   // drop any half-formed utterance on either edge
-  }
-
-  // Echo guard: remember what we just spoke and drop a transcript that is mostly
-  // those same words — catches TTS that leaks past the gate's tail.
-  function normTokens(t){
-    return (t || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
-  }
-  function rememberSpoken(text){
-    const toks = normTokens(text);
-    if (!toks.length) return;
-    recentSpoken.push(toks);
-    if (recentSpoken.length > 3) recentSpoken.shift();
-  }
-  function looksLikeEcho(said){
-    const toks = normTokens(said);
-    if (toks.length < 2) return false;        // too short to judge — let it through
-    const set = new Set(toks);
-    for (const prev of recentSpoken){
-      if (prev.length < 2) continue;
-      const pset = new Set(prev);
-      let hit = 0; for (const w of set) if (pset.has(w)) hit++;
-      if (hit / Math.min(set.size, pset.size) >= 0.6) return true;   // mostly our own words
-    }
-    return false;
-  }
+  // Push-to-talk: the resident holds Space (or the mic button) while speaking and
+  // releases to send. No VAD end-pointing — a silence gate cut thinking pauses
+  // mid-sentence and every wrongly split order cost a clarification round.
+  const PTT_MIN_MS = 200;        // shorter than this is a tap, not an utterance
 
   function setMic(mode){ // off | listen | rec | busy
     talkBtn.classList.toggle('rec', mode==='rec');
@@ -2969,8 +2935,8 @@
     talkBtn.classList.toggle('live', mode==='listen' || mode==='rec');
     talkLabel.textContent =
       mode==='off'  ? 'Tap to start' :
-      mode==='rec'  ? 'Listening to you…' :
-      mode==='busy' ? 'Working…' : 'Live — tap to stop';
+      mode==='rec'  ? 'Listening — release to send' :
+      mode==='busy' ? 'Working…' : 'Hold Space to talk';
   }
 
   async function stt(blob){
@@ -3079,9 +3045,7 @@
 
   async function _playTTSNow(text, speaker, stabilityOverride){
     selectState('responding');
-    rememberSpoken(text);
     if (VOICE_BACKEND === 'native') return speakNative(text, speaker);
-    gateVad(true);
     speakRoster(speaker, true, text);
     showCaption(text, speaker);
     const body = { text, speaker };
@@ -3116,7 +3080,6 @@
       curAbortCtrl = null;
       clearSpeaking();
       hideCaption();
-      setTimeout(() => gateVad(false), GATE_TAIL_MS);
     }
   }
 
@@ -3212,37 +3175,28 @@
   }
 
   // ---- voice-activity detection loop ----
-  function rmsLevel(){
-    const buf = new Uint8Array(analyser.fftSize);
-    analyser.getByteTimeDomainData(buf);
-    let sum = 0;
-    for (let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum += v*v; }
-    return Math.sqrt(sum/buf.length);
-  }
-  function vadTick(){
-    if (!listening){ return; }
-    if (vadGate){ vadRaf = requestAnimationFrame(vadTick); return; }   // muted while the reply speaks
-    const level = rmsLevel(), now = performance.now();
-    if (level > SPEECH_THRESH){
-      if (!voiced){ voiced = true; voiceStart = now; onVoiceStart(); }
-      silenceAt = 0;
-    } else if (voiced){
-      if (!silenceAt) silenceAt = now;
-      else if (now - silenceAt > SILENCE_MS){
-        voiced = false;
-        onVoiceEnd((silenceAt - voiceStart) >= MIN_SPEECH_MS);   // speech length before silence
-      }
-    }
-    vadRaf = requestAnimationFrame(vadTick);
-  }
-  function onVoiceStart(){
-    stopAudio();                 // barge-in: cut off the reply the instant you speak
-    if (processing) return;      // mid-fetch — let it resolve; ignore this blip
+  // ---- Push-to-talk ----
+  function pttDown(){
+    if (!listening || ptt || clockPaused) return;
+    ptt = true; pttAt = performance.now();
+    stopAudio();                 // barge-in: the resident is talking over the room
+    if (VOICE_BACKEND === 'native'){ if (!processing){ try { recognition.start(); } catch(e){} setMic('rec'); selectState('listening'); } return; }
+    if (processing) return;      // the last turn is still working; capture starts when it clears
     if (!capturing) startCapture();
   }
-  function onVoiceEnd(longEnough){
-    if (capturing){ capturing = false; try { recorder.stop(); } catch(e){} }
-    if (!longEnough){ chunks = []; }   // too short — drop it
+  function pttUp(){
+    if (!ptt) return;
+    ptt = false;
+    const held = performance.now() - pttAt;
+    if (VOICE_BACKEND === 'native'){ try { recognition.stop(); } catch(e){} return; }
+    if (!capturing) return;
+    capturing = false;
+    pttDrop = held < PTT_MIN_MS;   // a tap, not an utterance: the blob is discarded in onstop
+    try { recorder.stop(); } catch(e){}
+    if (pttDrop) setNow(NURSE_CH, 'hold Space (or the mic) while you talk');
+  }
+  function pttResume(){        // a press held through the previous turn starts capturing once it clears
+    if (ptt && listening && !processing && !capturing && VOICE_BACKEND !== 'native'){ pttAt = performance.now(); startCapture(); }
   }
 
   function startCapture(){
@@ -3253,9 +3207,9 @@
     recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
     recorder.onstop = () => {
       const parts = chunks; chunks = [];
-      if (parts.length) processUtterance(new Blob(parts, { type: parts[0].type || 'audio/webm' }));
+      if (parts.length && !pttDrop) processUtterance(new Blob(parts, { type: parts[0].type || 'audio/webm' }));
     };
-    recorder.start();
+    pttDrop = false; recorder.start();
     capturing = true; setMic('rec'); selectState('listening');
   }
 
@@ -3273,17 +3227,12 @@
     }
     if (!said){ processing = false; if (listening) setMic('listen'); selectState(listening ? 'listening' : 'idle'); return; }
     await handleSaid(said);
+    pttResume();
   }
 
   // Shared by both backends: a recognised utterance → routed, grounded, spoken reply.
   async function handleSaid(said, _forcedAddr){
     if (clockPaused){                          // frozen: drop anything captured around a pause
-      processing = false;
-      if (!capturing) setMic(listening ? 'listen' : 'off');
-      selectState(listening ? 'listening' : 'idle');
-      return;
-    }
-    if (looksLikeEcho(said)){                 // our own TTS bled into the mic — ignore it
       processing = false;
       if (!capturing) setMic(listening ? 'listen' : 'off');
       selectState(listening ? 'listening' : 'idle');
@@ -3399,21 +3348,9 @@
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') await audioCtx.resume();
     _initAmbience(audioCtx);
-    if (!analyser){
-      analyser = audioCtx.createAnalyser(); analyser.fftSize = 512;
-      micSource = audioCtx.createMediaStreamSource(stream);
-      // High-pass filter on VAD path only — cuts sub-250 Hz mechanical noise
-      // (table bumps, footsteps, mic handling) so they don't trip the RMS gate.
-      // The MediaRecorder captures the raw stream; Whisper still gets full audio.
-      const vadHp = audioCtx.createBiquadFilter();
-      vadHp.type = 'highpass'; vadHp.frequency.value = 250; vadHp.Q.value = 0.7;
-      micSource.connect(vadHp);
-      vadHp.connect(analyser);
-    }
-    listening = true; voiced = false; silenceAt = 0;
+    listening = true;
     setMic('listen'); selectState('listening');
-    if (!await playHandoff()) return;
-    vadRaf = requestAnimationFrame(vadTick);
+    await playHandoff();
   }
 
   // ── native backend: browser SpeechRecognition (half-duplex, no AEC) ──
@@ -3428,10 +3365,11 @@
     recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'en-US';
     recognition.onresult = onNativeResult;
     recognition.onerror = () => {};   // 'no-speech'/'aborted' are routine; ignore
-    recognition.onend = () => { if (listening && !recoSuspend){ try { recognition.start(); } catch(e){} } };
+    // Push-to-talk: recognition runs only while Space/the mic is held; release stops
+    // it and the final result (if any) reaches handleSaid. No auto-restart on end.
+    recognition.onend = () => { if (listening && !processing) setMic('listen'); };
     listening = true; setMic('listen'); selectState('listening');
-    if (!await playHandoff()) return;
-    try { recognition.start(); } catch(e){}
+    await playHandoff();
   }
   function onNativeResult(event){
     let finalText = '', interim = '';
@@ -3439,12 +3377,7 @@
       const r = event.results[i];
       if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
     }
-    // Barge-in guard: the mic hears the nurse's own TTS while she speaks (browser
-    // echo-cancellation doesn't cover the Web-Speech recogniser), and a bare
-    // `if (interim) stopAudio()` let that echo abort her mid-sentence (the "text but
-    // no audio" dropout). Only cut her off for a REAL utterance — multi-word and not
-    // an echo of what she just said. Not-speaking → stopAudio is a harmless no-op.
-    if (interim){ const t = interim.trim(); const words = t ? t.split(/\s+/).filter(Boolean).length : 0; if (words >= 2 && !looksLikeEcho(t)){ stopAudio(); setNow(NURSE_CH, interim); } }   // show live partial
+    if (interim && ptt) setNow(NURSE_CH, interim);   // show the live partial while held
     const said = finalText.trim();
     if (!said) return;
     // half-duplex: stop listening while we think + speak, so the reply isn't
@@ -3454,7 +3387,7 @@
     processing = true; setMic('busy'); selectState('thinking');
     handleSaid(said).finally(() => {
       recoSuspend = false;
-      if (listening){ try { recognition.start(); } catch(e){} setMic('listen'); }
+      if (listening) setMic('listen');
     });
   }
 
@@ -3463,8 +3396,7 @@
     return startServer();
   }
   function stopListening(){
-    listening = false; recoSuspend = false;
-    if (vadRaf){ cancelAnimationFrame(vadRaf); vadRaf = 0; }
+    listening = false; ptt = false; recoSuspend = false;
     if (recognition){ try { recognition.stop(); } catch(e){} }
     if (capturing){ capturing = false; try { recorder.stop(); } catch(e){} chunks = []; }
     stopAudio();
@@ -3485,16 +3417,33 @@
   voiceModal.addEventListener('click', e => { if (e.target === voiceModal) closeVoiceModal(); });
 
   function onBegin(){
-    if (listening){ stopListening(); return; }
+    if (listening) return;
     if (!VOICE_BACKEND){ openVoiceModal(); return; }   // first run → pick a mode
     startListening();
   }
 
+  // Mic button: tap to start; once live, press and hold to talk. Space does the
+  // same from the keyboard (ignored while typing in a field). A focused button is
+  // blurred first so Space can't re-fire it.
   setMic('off');
-  talkBtn.addEventListener('click', onBegin);
-  document.addEventListener('keydown', e => {
-    if (e.code==='Space' && !e.repeat && e.target===document.body){ e.preventDefault(); onBegin(); }
+  talkBtn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (!listening){ onBegin(); return; }
+    try { talkBtn.setPointerCapture(e.pointerId); } catch(err){}
+    pttDown();
   });
+  ['pointerup','pointercancel'].forEach(ev => talkBtn.addEventListener(ev, pttUp));
+  function typingTarget(e){ const t = e.target; return !!(t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable)); }
+  document.addEventListener('keydown', e => {
+    if (e.code!=='Space' || e.repeat || typingTarget(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+    e.preventDefault();
+    if (!listening){ if (e.target===document.body) onBegin(); return; }
+    if (document.activeElement && document.activeElement.tagName==='BUTTON') document.activeElement.blur();
+    pttDown();
+  });
+  document.addEventListener('keyup', e => { if (e.code!=='Space' || typingTarget(e)) return; if (ptt){ e.preventDefault(); pttUp(); } });
+  window.addEventListener('blur', pttUp);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pttUp(); });
 })();
 </script>
 
