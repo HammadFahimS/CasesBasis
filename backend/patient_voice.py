@@ -38,6 +38,60 @@ def _clean_for_speech(text: str) -> str:
     return text.strip()
 
 
+_WORD_RE = re.compile(r"[A-Za-z']+")
+# Inflections a truncated word must NOT be "completed" with: "swallow" is a whole
+# word even when only "swallowing" is in the case vocabulary.
+_INFLECTIONS = frozenset({
+    "s", "es", "ed", "ing", "ly", "er", "ers", "est", "ness", "less", "ful", "y",
+    "ies", "ier", "iest", "ment", "able", "ible", "ion", "ions", "ive", "al",
+})
+
+
+def _case_vocab(case) -> frozenset[str]:
+    """Every word the patient's own prompt already contains — the persona, the
+    authored facts, the status lines, the constitution. The only words a mend may
+    produce, so it can restore a word the model broke but never invent one."""
+    text = " ".join([PATIENT_SYSTEM, _persona(case)]
+                    + [(s.patient_status or "") for s in case.states])
+    return frozenset(w.lower() for w in _WORD_RE.findall(text))
+
+
+def _mend_split_words(text: str, vocab: frozenset[str]) -> str:
+    """Re-join a word the model broke in two and finish one it cut off at the end.
+
+    A patient told to sound breathless sometimes renders the effort as word
+    fragments — ``Food all ergies``, ``No just blood press`` — which the TTS reads
+    as nonsense. Two bounded repairs, both limited to words already in the
+    patient's prompt: two adjacent tokens that concatenate to a known word (when at
+    least one of them is not a word on its own) are joined; a final token that is
+    not a known word but is the unique prefix of one (by more than an inflection)
+    is completed. Anything else is left exactly as written."""
+    if not vocab or not text:
+        return text
+    parts = re.findall(r"[A-Za-z']+|[^A-Za-z'\s]+|\s+", text)
+    i = 0
+    while i + 2 < len(parts):
+        a, gap, b = parts[i], parts[i + 1], parts[i + 2]
+        if (a[:1].isalpha() and gap.isspace() and b[:1].isalpha()
+                and min(len(a), len(b)) >= 2 and len(a) + len(b) >= 6
+                and (a.lower() + b.lower()) in vocab
+                and (a.lower() not in vocab or b.lower() not in vocab)):
+            parts[i:i + 3] = [a + b.lower()]
+            continue
+        i += 1
+    last = next((k for k in range(len(parts) - 1, -1, -1) if parts[k][:1].isalpha()), None)
+    if last is not None:
+        t = parts[last]
+        low = t.lower()
+        if len(t) >= 4 and low not in vocab:
+            cands = [w for w in vocab
+                     if w.startswith(low) and len(w) >= len(low) + 2
+                     and w[len(low):] not in _INFLECTIONS]
+            if len(cands) == 1:
+                parts[last] = t + cands[0][len(low):]
+    return "".join(parts)
+
+
 def _complete(system_prompt: str, user_prompt: str) -> str:
     """The patient/bystander LLM seam (monkeypatched in tests). Reused by
     :mod:`backend.actor_voice`; delegates to the shared interactive runtime."""
@@ -123,7 +177,8 @@ def patient_reply(session: VoiceSession, transcript: str) -> str:
     if _is_silent(session.engine):
         return ""
     try:
-        reply = _clean_for_speech(_complete(PATIENT_SYSTEM, user))
+        reply = _mend_split_words(_clean_for_speech(_complete(PATIENT_SYSTEM, user)),
+                                  _case_vocab(case))
     except Exception as exc:
         logger.warning("patient reply failed: %s", exc)
         reply = "I'm sorry, I can't really talk right now."
