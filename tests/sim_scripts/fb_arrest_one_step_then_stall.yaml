@@ -1,0 +1,21 @@
+# EDGE (foreign body) — pins the death-timer semantics: ONE resuscitation step in
+# PEA disarms the "no step taken" timer for good. A resident who starts compressions
+# and then stalls stays in PEA (no ROSC without the airway and two doses, no death).
+case: foreign_body_airway
+name: fb_arrest_one_step_then_stall
+turns:
+  - tick: 130
+  - tick: 80
+  - say: "Start compressions."
+    intent: { op: perform_action, action_text: "start compressions" }
+    expect: { speaker: nurse, op: perform_action, state: pea_arrest, transitioned: false }
+
+  - tick: 120
+  - say: "How is he?"
+    intent: { op: read_vitals }
+    expect: { speaker: nurse, op: read_vitals, state: pea_arrest, ended: false }
+
+final:
+  reached_state: pea_arrest
+  critical_error: true
+  ended: false

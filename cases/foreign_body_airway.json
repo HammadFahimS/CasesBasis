@@ -3,7 +3,16 @@
   "schema_version": 1,
   "meta": {
     "title": "Occult Upper-Airway Foreign Body Mimicking Anaphylaxis",
-    "keywords": ["Upper-airway foreign body", "Foreign body airway obstruction", "Choking", "Food bolus", "Anaphylaxis mimic", "Video laryngoscopy", "Magill forceps", "Hypoxic PEA arrest"],
+    "keywords": [
+      "Upper-airway foreign body",
+      "Foreign body airway obstruction",
+      "Choking",
+      "Food bolus",
+      "Anaphylaxis mimic",
+      "Video laryngoscopy",
+      "Magill forceps",
+      "Hypoxic PEA arrest"
+    ],
     "summary": "55M brought by EMS from a restaurant with sudden-onset dyspnoea and audible wheeze. Every monitor number is normal at the door. Prior neck cancer treated with chemoradiotherapy, a food allergy without an auto-injector, hypertension and dyslipidaemia set a trap: the hidden truth is a piece of steak lodged immediately above the vocal cords. The core history must be in hand by 2:00 or he starts to fail; repeated anaphylaxis treatment without airway reassessment ends in hypoxic PEA.",
     "specialty": "Emergency Medicine",
     "setting": "Emergency Department",
@@ -34,17 +43,32 @@
       "Reassess the diagnosis when treatment response is absent.",
       "Assign roles early for airway, medications, monitoring and CPR preparation."
     ],
-    "epas": ["Resuscitation of the critically ill patient", "Airway management", "Team leadership and communication"]
+    "epas": [
+      "Resuscitation of the critically ill patient",
+      "Airway management",
+      "Team leadership and communication"
+    ]
   },
   "patient": {
     "name": "JM",
     "age": 55,
     "gender": "male",
     "weight_kg": 82,
-    "allergies": ["Food allergy (exact trigger not specified); no epinephrine auto-injector"],
-    "medications": ["Amlodipine 5 mg PO daily", "Atorvastatin 20 mg PO daily"],
-    "past_medical_history": ["Neck cancer treated with radiotherapy and chemotherapy, now in remission", "Hypertension", "Dyslipidaemia"],
-    "social_history": ["Was out for dinner at a restaurant when this started"],
+    "allergies": [
+      "Food allergy (exact trigger not specified); no epinephrine auto-injector"
+    ],
+    "medications": [
+      "Amlodipine 5 mg PO daily",
+      "Atorvastatin 20 mg PO daily"
+    ],
+    "past_medical_history": [
+      "Neck cancer treated with radiotherapy and chemotherapy, now in remission",
+      "Hypertension",
+      "Dyslipidaemia"
+    ],
+    "social_history": [
+      "Was out for dinner at a restaurant when this started"
+    ],
     "persona": "55-year-old man, frightened and working hard to breathe. Speaks only in short sentences of three to six words and pauses for breath between them. Sitting bolt upright on the stretcher; will not lie flat. You do not know what is wrong — it came on all at once while you were eating dinner. If asked what you think it is, you wonder aloud whether it is your food allergy. You have never had anything like this before. If asked: a 'sort of neck cancer' a few years ago treated with chemo and radiotherapy, now in remission; a food allergy but no EpiPen with you; high blood pressure and cholesterol; amlodipine 5 mg and atorvastatin 20 mg once a day. Do not describe any sensation in the throat unless directly asked, and then only say it feels tight and hard to get air in. Never name a foreign body or say something is stuck."
   },
   "presentation": {
@@ -99,41 +123,67 @@
   "exam": [
     {
       "system": "General",
-      "findings": ["Alert and oriented x3, anxious", "Visible respiratory distress; speaks in short sentences", "Sitting upright, will not lie flat"],
+      "findings": [
+        "Alert and oriented x3, anxious",
+        "Visible respiratory distress; speaks in short sentences",
+        "Sitting upright, will not lie flat"
+      ],
       "abnormal": true,
       "note": "Distress is out of proportion to the monitor: every number on the screen is normal."
     },
     {
       "system": "Respiratory",
-      "findings": ["Audible wheeze at the bedside", "Wheeze on auscultation, loudest centrally; no focal crackles", "Increased work of breathing with accessory-muscle use", "Air entry present bilaterally"],
+      "findings": [
+        "Audible wheeze at the bedside",
+        "Wheeze on auscultation, loudest centrally; no focal crackles",
+        "Increased work of breathing with accessory-muscle use",
+        "Air entry present bilaterally"
+      ],
       "abnormal": true,
       "note": "The wheeze is loudest over the upper airway rather than the chest — a monophonic, transmitted quality."
     },
     {
       "system": "ENT/Head & Neck",
-      "findings": ["No lip or tongue swelling", "Oropharynx clear on routine inspection; no visible foreign body, no pooling of secretions", "No stridor at rest", "Post-radiotherapy skin changes over the anterior neck; no mass, no trauma"],
+      "findings": [
+        "No lip or tongue swelling",
+        "Oropharynx clear on routine inspection; no visible foreign body, no pooling of secretions",
+        "No stridor at rest",
+        "Post-radiotherapy skin changes over the anterior neck; no mass, no trauma"
+      ],
       "abnormal": false,
       "note": "Routine mouth and oropharyngeal inspection is unrevealing. Nothing below the tongue base can be seen without a laryngoscope."
     },
     {
       "system": "Dermatological",
-      "findings": ["No urticaria or hives", "No flushing, no rash", "No angio-oedema"],
+      "findings": [
+        "No urticaria or hives",
+        "No flushing, no rash",
+        "No angio-oedema"
+      ],
       "abnormal": false,
       "note": "The counter-clue: a patient this distressed from anaphylaxis would be expected to show skin signs."
     },
     {
       "system": "Cardiovascular",
-      "findings": ["Normal S1 and S2, regular rhythm, no murmur", "Warm peripheries, brisk capillary refill"],
+      "findings": [
+        "Normal S1 and S2, regular rhythm, no murmur",
+        "Warm peripheries, brisk capillary refill"
+      ],
       "abnormal": false
     },
     {
       "system": "Abdominal",
-      "findings": ["Soft, non-tender, no distension"],
+      "findings": [
+        "Soft, non-tender, no distension"
+      ],
       "abnormal": false
     },
     {
       "system": "Neurological",
-      "findings": ["Alert, GCS 15, no focal deficit", "Moving all four limbs, speech content normal though clipped by breathlessness"],
+      "findings": [
+        "Alert, GCS 15, no focal deficit",
+        "Moving all four limbs, speech content normal though clipped by breathlessness"
+      ],
       "abnormal": false
     }
   ],
@@ -214,10 +264,34 @@
       "category": "lab",
       "result": "WBC 7.8, Hb 146, Hct 0.43, platelets 244.",
       "values": [
-        { "name": "White cell count", "value": "7.8", "unit": "x10^9/L", "reference_range": "4.0-11.0", "flag": "normal" },
-        { "name": "Haemoglobin", "value": "146", "unit": "g/L", "reference_range": "130-170", "flag": "normal" },
-        { "name": "Haematocrit", "value": "0.43", "unit": "", "reference_range": "0.40-0.50", "flag": "normal" },
-        { "name": "Platelets", "value": "244", "unit": "x10^9/L", "reference_range": "150-400", "flag": "normal" }
+        {
+          "name": "White cell count",
+          "value": "7.8",
+          "unit": "x10^9/L",
+          "reference_range": "4.0-11.0",
+          "flag": "normal"
+        },
+        {
+          "name": "Haemoglobin",
+          "value": "146",
+          "unit": "g/L",
+          "reference_range": "130-170",
+          "flag": "normal"
+        },
+        {
+          "name": "Haematocrit",
+          "value": "0.43",
+          "unit": "",
+          "reference_range": "0.40-0.50",
+          "flag": "normal"
+        },
+        {
+          "name": "Platelets",
+          "value": "244",
+          "unit": "x10^9/L",
+          "reference_range": "150-400",
+          "flag": "normal"
+        }
       ],
       "interpretation": "Unremarkable. Nothing here explains the respiratory distress.",
       "available_after_seconds": 120
@@ -228,16 +302,76 @@
       "category": "lab",
       "result": "Na 139, K 4.1, Cl 103, HCO3 24, urea 5.3, creatinine 88, glucose 6.2, Ca 2.34, Mg 0.82, phosphate 1.12.",
       "values": [
-        { "name": "Sodium", "value": "139", "unit": "mmol/L", "reference_range": "135-145", "flag": "normal" },
-        { "name": "Potassium", "value": "4.1", "unit": "mmol/L", "reference_range": "3.5-5.3", "flag": "normal" },
-        { "name": "Chloride", "value": "103", "unit": "mmol/L", "reference_range": "98-107", "flag": "normal" },
-        { "name": "Bicarbonate", "value": "24", "unit": "mmol/L", "reference_range": "22-26", "flag": "normal" },
-        { "name": "Urea", "value": "5.3", "unit": "mmol/L", "reference_range": "2.5-7.8", "flag": "normal" },
-        { "name": "Creatinine", "value": "88", "unit": "umol/L", "reference_range": "60-110", "flag": "normal" },
-        { "name": "Glucose", "value": "6.2", "unit": "mmol/L", "reference_range": "3.9-7.8", "flag": "normal" },
-        { "name": "Calcium", "value": "2.34", "unit": "mmol/L", "reference_range": "2.15-2.55", "flag": "normal" },
-        { "name": "Magnesium", "value": "0.82", "unit": "mmol/L", "reference_range": "0.70-1.00", "flag": "normal" },
-        { "name": "Phosphate", "value": "1.12", "unit": "mmol/L", "reference_range": "0.80-1.45", "flag": "normal" }
+        {
+          "name": "Sodium",
+          "value": "139",
+          "unit": "mmol/L",
+          "reference_range": "135-145",
+          "flag": "normal"
+        },
+        {
+          "name": "Potassium",
+          "value": "4.1",
+          "unit": "mmol/L",
+          "reference_range": "3.5-5.3",
+          "flag": "normal"
+        },
+        {
+          "name": "Chloride",
+          "value": "103",
+          "unit": "mmol/L",
+          "reference_range": "98-107",
+          "flag": "normal"
+        },
+        {
+          "name": "Bicarbonate",
+          "value": "24",
+          "unit": "mmol/L",
+          "reference_range": "22-26",
+          "flag": "normal"
+        },
+        {
+          "name": "Urea",
+          "value": "5.3",
+          "unit": "mmol/L",
+          "reference_range": "2.5-7.8",
+          "flag": "normal"
+        },
+        {
+          "name": "Creatinine",
+          "value": "88",
+          "unit": "umol/L",
+          "reference_range": "60-110",
+          "flag": "normal"
+        },
+        {
+          "name": "Glucose",
+          "value": "6.2",
+          "unit": "mmol/L",
+          "reference_range": "3.9-7.8",
+          "flag": "normal"
+        },
+        {
+          "name": "Calcium",
+          "value": "2.34",
+          "unit": "mmol/L",
+          "reference_range": "2.15-2.55",
+          "flag": "normal"
+        },
+        {
+          "name": "Magnesium",
+          "value": "0.82",
+          "unit": "mmol/L",
+          "reference_range": "0.70-1.00",
+          "flag": "normal"
+        },
+        {
+          "name": "Phosphate",
+          "value": "1.12",
+          "unit": "mmol/L",
+          "reference_range": "0.80-1.45",
+          "flag": "normal"
+        }
       ],
       "interpretation": "Unremarkable.",
       "available_after_seconds": 120
@@ -253,10 +387,34 @@
         "death": "VBG: pH 7.08, pCO2 70 mmHg, HCO3 20 mmol/L."
       },
       "values": [
-        { "name": "pH", "value": "7.38", "unit": "", "reference_range": "7.35-7.45", "flag": "normal" },
-        { "name": "pCO2", "value": "43", "unit": "mmHg", "reference_range": "35-45", "flag": "normal" },
-        { "name": "HCO3", "value": "25", "unit": "mmol/L", "reference_range": "22-26", "flag": "normal" },
-        { "name": "Base excess", "value": "0", "unit": "mmol/L", "reference_range": "-2 to +2", "flag": "normal" }
+        {
+          "name": "pH",
+          "value": "7.38",
+          "unit": "",
+          "reference_range": "7.35-7.45",
+          "flag": "normal"
+        },
+        {
+          "name": "pCO2",
+          "value": "43",
+          "unit": "mmHg",
+          "reference_range": "35-45",
+          "flag": "normal"
+        },
+        {
+          "name": "HCO3",
+          "value": "25",
+          "unit": "mmol/L",
+          "reference_range": "22-26",
+          "flag": "normal"
+        },
+        {
+          "name": "Base excess",
+          "value": "0",
+          "unit": "mmol/L",
+          "reference_range": "-2 to +2",
+          "flag": "normal"
+        }
       ],
       "interpretation": "Normal while he is compensating. In the deteriorating state the gas shows hypercapnic respiratory acidosis from hypoventilation past a partial obstruction; peri-arrest it is a severe mixed respiratory and metabolic acidosis.",
       "available_after_seconds": 120
@@ -272,7 +430,13 @@
         "death": "Lactate 7.2 mmol/L."
       },
       "values": [
-        { "name": "Lactate", "value": "1.4", "unit": "mmol/L", "reference_range": "0.5-2.2", "flag": "normal" }
+        {
+          "name": "Lactate",
+          "value": "1.4",
+          "unit": "mmol/L",
+          "reference_range": "0.5-2.2",
+          "flag": "normal"
+        }
       ],
       "interpretation": "Normal at baseline; rises with hypoxia and hypoperfusion as he deteriorates, markedly elevated peri-arrest.",
       "available_after_seconds": 120
@@ -283,11 +447,41 @@
       "category": "lab",
       "result": "AST 24, ALT 27, ALP 82, total bilirubin 11, albumin 42.",
       "values": [
-        { "name": "AST", "value": "24", "unit": "U/L", "reference_range": "10-40", "flag": "normal" },
-        { "name": "ALT", "value": "27", "unit": "U/L", "reference_range": "7-56", "flag": "normal" },
-        { "name": "ALP", "value": "82", "unit": "U/L", "reference_range": "40-130", "flag": "normal" },
-        { "name": "Total bilirubin", "value": "11", "unit": "umol/L", "reference_range": "3-20", "flag": "normal" },
-        { "name": "Albumin", "value": "42", "unit": "g/L", "reference_range": "35-50", "flag": "normal" }
+        {
+          "name": "AST",
+          "value": "24",
+          "unit": "U/L",
+          "reference_range": "10-40",
+          "flag": "normal"
+        },
+        {
+          "name": "ALT",
+          "value": "27",
+          "unit": "U/L",
+          "reference_range": "7-56",
+          "flag": "normal"
+        },
+        {
+          "name": "ALP",
+          "value": "82",
+          "unit": "U/L",
+          "reference_range": "40-130",
+          "flag": "normal"
+        },
+        {
+          "name": "Total bilirubin",
+          "value": "11",
+          "unit": "umol/L",
+          "reference_range": "3-20",
+          "flag": "normal"
+        },
+        {
+          "name": "Albumin",
+          "value": "42",
+          "unit": "g/L",
+          "reference_range": "35-50",
+          "flag": "normal"
+        }
       ],
       "interpretation": "Unremarkable.",
       "available_after_seconds": 120
@@ -298,7 +492,13 @@
       "category": "lab",
       "result": "Lipase 31 U/L.",
       "values": [
-        { "name": "Lipase", "value": "31", "unit": "U/L", "reference_range": "13-60", "flag": "normal" }
+        {
+          "name": "Lipase",
+          "value": "31",
+          "unit": "U/L",
+          "reference_range": "13-60",
+          "flag": "normal"
+        }
       ],
       "interpretation": "Normal.",
       "available_after_seconds": 120
@@ -309,7 +509,13 @@
       "category": "lab",
       "result": "hs-troponin 6 ng/L (within reference range).",
       "values": [
-        { "name": "hs-Troponin T", "value": "6", "unit": "ng/L", "reference_range": "<14", "flag": "normal" }
+        {
+          "name": "hs-Troponin T",
+          "value": "6",
+          "unit": "ng/L",
+          "reference_range": "<14",
+          "flag": "normal"
+        }
       ],
       "interpretation": "Negative. A repeat without a new cardiac indication stays non-diagnostic.",
       "available_after_seconds": 120
@@ -320,7 +526,13 @@
       "category": "lab",
       "result": "CRP 2 mg/L.",
       "values": [
-        { "name": "CRP", "value": "2", "unit": "mg/L", "reference_range": "<5", "flag": "normal" }
+        {
+          "name": "CRP",
+          "value": "2",
+          "unit": "mg/L",
+          "reference_range": "<5",
+          "flag": "normal"
+        }
       ],
       "interpretation": "Normal; no inflammatory process.",
       "available_after_seconds": 120
@@ -396,7 +608,11 @@
           "description": "Ninety seconds in: he is tiring, the rate creeps up and the saturation slips.",
           "when": "on_time",
           "after_seconds": 90,
-          "set_vitals": { "respiratory_rate": 26, "oxygen_saturation": 95, "heart_rate": 98 }
+          "set_vitals": {
+            "respiratory_rate": 26,
+            "oxygen_saturation": 95,
+            "heart_rate": 98
+          }
         }
       ],
       "cues": [
@@ -405,7 +621,9 @@
           "actor_id": "nurse",
           "when": "no handover taken",
           "after_seconds": 45,
-          "requires_present": ["ems"]
+          "requires_present": [
+            "ems"
+          ]
         }
       ],
       "transitions": [
@@ -414,8 +632,18 @@
           "description": "Core history obtained in time: how it started (handover or onset) and the background (past history/allergy or medications).",
           "kind": "action",
           "requires": [
-            { "any": ["handover", "onset"] },
-            { "any": ["past history", "medications"] }
+            {
+              "any": [
+                "handover",
+                "onset"
+              ]
+            },
+            {
+              "any": [
+                "past history",
+                "medications"
+              ]
+            }
           ],
           "patient_effect": "The story is in hand: sudden onset while eating, an allergy with no auto-injector, a radiated neck. He is still perfusing and oxygenating."
         },
@@ -423,14 +651,89 @@
           "to_state": "anaphylaxis_1",
           "description": "Treats as anaphylaxis and gives epinephrine.",
           "kind": "action",
-          "keywords": ["epinephrine", "adrenaline", "epipen"],
+          "keywords": [
+            "epinephrine",
+            "adrenaline",
+            "epipen"
+          ],
           "patient_effect": "Epinephrine in. He is still wheezy and working hard; nothing much changes."
+        },
+        {
+          "to_state": "fb_visualized",
+          "description": "A planned, controlled laryngoscopy: analgesia, sedation, topical anaesthesia or an explicit airway plan before the blade goes in.",
+          "kind": "action",
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope"
+          ],
+          "requires": [
+            {
+              "any": [
+                "ketamine",
+                "fentanyl",
+                "analges",
+                "sedat",
+                "topical",
+                "lidocaine",
+                "lignocaine",
+                "propofol",
+                "etomidate",
+                "midazolam",
+                "airway plan",
+                "double setup",
+                "backup"
+              ],
+              "scope": "run"
+            }
+          ],
+          "patient_effect": "He settles with it on board. Blade's in — the view's up on the screen."
+        },
+        {
+          "to_state": "fb_visualized",
+          "description": "Proceeds straight to RSI; induction and laryngoscopy give the view.",
+          "kind": "action",
+          "keywords": [
+            "rsi",
+            "rapid sequence",
+            "intubat",
+            "induction",
+            "induce"
+          ],
+          "patient_effect": "Induced and paralysed. Blade's in — the view's up on the screen."
+        },
+        {
+          "to_state": "vl_aborted",
+          "description": "Awake laryngoscopy with no analgesia, sedation or airway plan: he resists and the attempt is abandoned.",
+          "kind": "action",
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope"
+          ],
+          "patient_effect": "He's gagging and fighting the blade — he won't tolerate this. No view. Do you want something for analgesia, or a different airway plan?"
         },
         {
           "to_state": "fb_suspected",
           "description": "Suspects a mechanical upper-airway obstruction at the door and moves to look at the airway.",
           "kind": "action",
-          "keywords": ["foreign body", "choking", "choke", "food bolus", "obstruct", "laryngoscop", "glidescope", "magill", "airway kit", "suction"],
+          "keywords": [
+            "foreign body",
+            "choking",
+            "choke",
+            "food bolus",
+            "obstruct",
+            "airway kit",
+            "magill",
+            "forceps",
+            "suction",
+            "thrust",
+            "heimlich",
+            "something stuck",
+            "reassess the airway"
+          ],
           "patient_effect": "The team pivots to the airway. He is anxious and will not lie flat."
         },
         {
@@ -439,8 +742,18 @@
           "kind": "inaction",
           "after_seconds": 120,
           "requires": [
-            { "any": ["handover", "onset"] },
-            { "any": ["past history", "medications"] }
+            {
+              "any": [
+                "handover",
+                "onset"
+              ]
+            },
+            {
+              "any": [
+                "past history",
+                "medications"
+              ]
+            }
           ],
           "patient_effect": "He's getting sleepy on us and the sats are drifting down. Pressure's dropping — he still has a pulse."
         }
@@ -473,7 +786,11 @@
           "description": "He is tiring: rate up, saturation drifting.",
           "when": "on_time",
           "after_seconds": 60,
-          "set_vitals": { "respiratory_rate": 27, "oxygen_saturation": 94, "heart_rate": 102 }
+          "set_vitals": {
+            "respiratory_rate": 27,
+            "oxygen_saturation": 94,
+            "heart_rate": 102
+          }
         }
       ],
       "cues": [
@@ -488,14 +805,89 @@
           "to_state": "anaphylaxis_1",
           "description": "Treats as anaphylaxis and gives epinephrine.",
           "kind": "action",
-          "keywords": ["epinephrine", "adrenaline", "epipen"],
+          "keywords": [
+            "epinephrine",
+            "adrenaline",
+            "epipen"
+          ],
           "patient_effect": "Epinephrine in. He is still wheezy and working hard; nothing much changes."
+        },
+        {
+          "to_state": "fb_visualized",
+          "description": "A planned, controlled laryngoscopy: analgesia, sedation, topical anaesthesia or an explicit airway plan before the blade goes in.",
+          "kind": "action",
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope"
+          ],
+          "requires": [
+            {
+              "any": [
+                "ketamine",
+                "fentanyl",
+                "analges",
+                "sedat",
+                "topical",
+                "lidocaine",
+                "lignocaine",
+                "propofol",
+                "etomidate",
+                "midazolam",
+                "airway plan",
+                "double setup",
+                "backup"
+              ],
+              "scope": "run"
+            }
+          ],
+          "patient_effect": "He settles with it on board. Blade's in — the view's up on the screen."
+        },
+        {
+          "to_state": "fb_visualized",
+          "description": "Proceeds straight to RSI; induction and laryngoscopy give the view.",
+          "kind": "action",
+          "keywords": [
+            "rsi",
+            "rapid sequence",
+            "intubat",
+            "induction",
+            "induce"
+          ],
+          "patient_effect": "Induced and paralysed. Blade's in — the view's up on the screen."
+        },
+        {
+          "to_state": "vl_aborted",
+          "description": "Awake laryngoscopy with no analgesia, sedation or airway plan: he resists and the attempt is abandoned.",
+          "kind": "action",
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope"
+          ],
+          "patient_effect": "He's gagging and fighting the blade — he won't tolerate this. No view. Do you want something for analgesia, or a different airway plan?"
         },
         {
           "to_state": "fb_suspected",
           "description": "Reconsiders mechanical obstruction and moves to the airway.",
           "kind": "action",
-          "keywords": ["foreign body", "choking", "choke", "food bolus", "obstruct", "laryngoscop", "glidescope", "magill", "airway kit", "suction", "thrust", "heimlich"],
+          "keywords": [
+            "foreign body",
+            "choking",
+            "choke",
+            "food bolus",
+            "obstruct",
+            "airway kit",
+            "magill",
+            "forceps",
+            "suction",
+            "thrust",
+            "heimlich",
+            "something stuck",
+            "reassess the airway"
+          ],
           "patient_effect": "The team pivots to the airway. He is anxious and will not lie flat."
         },
         {
@@ -534,7 +926,10 @@
           "description": "Forty seconds in: saturation falling fast, heart rate climbing — the monitor is alarming.",
           "when": "on_time",
           "after_seconds": 40,
-          "set_vitals": { "oxygen_saturation": 78, "heart_rate": 130 }
+          "set_vitals": {
+            "oxygen_saturation": 78,
+            "heart_rate": 130
+          }
         }
       ],
       "cues": [
@@ -550,21 +945,45 @@
           "to_state": "fb_visualized",
           "description": "Decisive airway action: laryngoscopy or intubation. He is obtunded enough to tolerate the blade.",
           "kind": "action",
-          "keywords": ["laryngoscop", "glidescope", "intubat", "rsi", "rapid sequence", "look at the cords", "scope"],
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "intubat",
+            "rsi",
+            "rapid sequence",
+            "look at the cords",
+            "scope"
+          ],
           "patient_effect": "He's not fighting it. Blade's in — the view's up on the screen."
         },
         {
           "to_state": "fb_suspected",
           "description": "Reconsiders mechanical obstruction and calls for the airway kit.",
           "kind": "action",
-          "keywords": ["foreign body", "choking", "choke", "food bolus", "obstruct", "airway kit", "suction", "magill", "forceps", "ketamine", "airway plan"],
+          "keywords": [
+            "foreign body",
+            "choking",
+            "choke",
+            "food bolus",
+            "obstruct",
+            "airway kit",
+            "suction",
+            "magill",
+            "forceps",
+            "ketamine",
+            "airway plan"
+          ],
           "patient_effect": "The airway kit is open at the bedside. He is drowsy and no longer fighting."
         },
         {
           "to_state": "anaphylaxis_1",
           "description": "Treats as anaphylaxis and gives epinephrine.",
           "kind": "action",
-          "keywords": ["epinephrine", "adrenaline", "epipen"],
+          "keywords": [
+            "epinephrine",
+            "adrenaline",
+            "epipen"
+          ],
           "patient_effect": "Epinephrine in. Pressure comes up a little; he is still hypoxic and drowsy."
         },
         {
@@ -604,24 +1023,113 @@
           "description": "No reassessment a minute after the dose: he is tiring, saturation drifting down.",
           "when": "on_inaction",
           "after_seconds": 60,
-          "keywords": ["airway", "laryngoscop", "glidescope", "foreign body", "obstruct", "reassess", "scope"],
-          "set_vitals": { "oxygen_saturation": 90, "heart_rate": 116, "respiratory_rate": 28 }
+          "keywords": [
+            "airway",
+            "laryngoscop",
+            "glidescope",
+            "foreign body",
+            "obstruct",
+            "reassess",
+            "scope"
+          ],
+          "set_vitals": {
+            "oxygen_saturation": 90,
+            "heart_rate": 116,
+            "respiratory_rate": 28
+          }
         }
       ],
       "cues": [],
       "transitions": [
         {
+          "to_state": "fb_visualized",
+          "description": "A planned, controlled laryngoscopy: analgesia, sedation, topical anaesthesia or an explicit airway plan before the blade goes in.",
+          "kind": "action",
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope"
+          ],
+          "requires": [
+            {
+              "any": [
+                "ketamine",
+                "fentanyl",
+                "analges",
+                "sedat",
+                "topical",
+                "lidocaine",
+                "lignocaine",
+                "propofol",
+                "etomidate",
+                "midazolam",
+                "airway plan",
+                "double setup",
+                "backup"
+              ],
+              "scope": "run"
+            }
+          ],
+          "patient_effect": "He settles with it on board. Blade's in — the view's up on the screen."
+        },
+        {
+          "to_state": "fb_visualized",
+          "description": "Proceeds straight to RSI; induction and laryngoscopy give the view.",
+          "kind": "action",
+          "keywords": [
+            "rsi",
+            "rapid sequence",
+            "intubat",
+            "induction",
+            "induce"
+          ],
+          "patient_effect": "Induced and paralysed. Blade's in — the view's up on the screen."
+        },
+        {
+          "to_state": "vl_aborted",
+          "description": "Awake laryngoscopy with no analgesia, sedation or airway plan: he resists and the attempt is abandoned.",
+          "kind": "action",
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope"
+          ],
+          "patient_effect": "He's gagging and fighting the blade — he won't tolerate this. No view. Do you want something for analgesia, or a different airway plan?"
+        },
+        {
           "to_state": "fb_suspected",
           "description": "Reassesses the airway after the failed dose and reconsiders mechanical obstruction.",
           "kind": "action",
-          "keywords": ["reassess", "airway", "obstruct", "foreign body", "choking", "choke", "food bolus", "laryngoscop", "glidescope", "magill", "suction", "thrust", "heimlich", "scope"],
+          "keywords": [
+            "foreign body",
+            "choking",
+            "choke",
+            "food bolus",
+            "obstruct",
+            "airway kit",
+            "magill",
+            "forceps",
+            "suction",
+            "thrust",
+            "heimlich",
+            "something stuck",
+            "reassess the airway",
+            "reassess",
+            "airway"
+          ],
           "patient_effect": "The team pivots to the airway. He is anxious and will not lie flat."
         },
         {
           "to_state": "anaphylaxis_2",
           "description": "Gives a second dose of epinephrine.",
           "kind": "action",
-          "keywords": ["epinephrine", "adrenaline", "epipen"],
+          "keywords": [
+            "epinephrine",
+            "adrenaline",
+            "epipen"
+          ],
           "patient_effect": "Second dose in. Heart rate up, tremulous — the wheeze and the work of breathing are exactly the same."
         },
         {
@@ -659,7 +1167,11 @@
           "description": "Forty-five seconds on: saturation and pressure falling.",
           "when": "on_time",
           "after_seconds": 45,
-          "set_vitals": { "oxygen_saturation": 86, "heart_rate": 124, "blood_pressure": "96/60" }
+          "set_vitals": {
+            "oxygen_saturation": 86,
+            "heart_rate": 124,
+            "blood_pressure": "96/60"
+          }
         }
       ],
       "cues": [
@@ -672,17 +1184,94 @@
       ],
       "transitions": [
         {
+          "to_state": "fb_visualized",
+          "description": "A planned, controlled laryngoscopy: analgesia, sedation, topical anaesthesia or an explicit airway plan before the blade goes in.",
+          "kind": "action",
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope"
+          ],
+          "requires": [
+            {
+              "any": [
+                "ketamine",
+                "fentanyl",
+                "analges",
+                "sedat",
+                "topical",
+                "lidocaine",
+                "lignocaine",
+                "propofol",
+                "etomidate",
+                "midazolam",
+                "airway plan",
+                "double setup",
+                "backup"
+              ],
+              "scope": "run"
+            }
+          ],
+          "patient_effect": "He settles with it on board. Blade's in — the view's up on the screen."
+        },
+        {
+          "to_state": "fb_visualized",
+          "description": "Proceeds straight to RSI; induction and laryngoscopy give the view.",
+          "kind": "action",
+          "keywords": [
+            "rsi",
+            "rapid sequence",
+            "intubat",
+            "induction",
+            "induce"
+          ],
+          "patient_effect": "Induced and paralysed. Blade's in — the view's up on the screen."
+        },
+        {
+          "to_state": "vl_aborted",
+          "description": "Awake laryngoscopy with no analgesia, sedation or airway plan: he resists and the attempt is abandoned.",
+          "kind": "action",
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope"
+          ],
+          "patient_effect": "He's gagging and fighting the blade — he won't tolerate this. No view. Do you want something for analgesia, or a different airway plan?"
+        },
+        {
           "to_state": "fb_suspected",
           "description": "Finally reassesses the airway and reconsiders mechanical obstruction.",
           "kind": "action",
-          "keywords": ["reassess", "airway", "obstruct", "foreign body", "choking", "choke", "food bolus", "laryngoscop", "glidescope", "magill", "suction", "thrust", "heimlich", "scope"],
+          "keywords": [
+            "foreign body",
+            "choking",
+            "choke",
+            "food bolus",
+            "obstruct",
+            "airway kit",
+            "magill",
+            "forceps",
+            "suction",
+            "thrust",
+            "heimlich",
+            "something stuck",
+            "reassess the airway",
+            "reassess",
+            "airway"
+          ],
           "patient_effect": "The team pivots to the airway. He is drowsy and no longer resisting."
         },
         {
           "to_state": "pea_arrest",
           "description": "A third epinephrine trial without airway reassessment: hypoxic PEA arrest.",
           "kind": "action",
-          "keywords": ["epinephrine", "adrenaline", "epipen"],
+          "keywords": [
+            "epinephrine",
+            "adrenaline",
+            "epipen"
+          ],
           "patient_effect": "Third dose in — and he's gone. Unresponsive, no pulse, organised rhythm on the monitor. PEA.",
           "critical_error": true
         },
@@ -722,7 +1311,11 @@
           "description": "A minute of preparation without looking: he is tiring.",
           "when": "on_time",
           "after_seconds": 60,
-          "set_vitals": { "oxygen_saturation": 92, "heart_rate": 108, "respiratory_rate": 27 }
+          "set_vitals": {
+            "oxygen_saturation": 92,
+            "heart_rate": 108,
+            "respiratory_rate": 27
+          }
         }
       ],
       "cues": [
@@ -738,9 +1331,31 @@
           "to_state": "fb_visualized",
           "description": "A planned, controlled laryngoscopy: analgesia, sedation, topical anaesthesia or an explicit airway plan before the blade goes in.",
           "kind": "action",
-          "keywords": ["laryngoscop", "glidescope", "look at the cords", "scope"],
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope"
+          ],
           "requires": [
-            { "any": ["ketamine", "fentanyl", "analges", "sedat", "topical", "lidocaine", "lignocaine", "propofol", "etomidate", "midazolam", "airway plan", "double setup", "backup"], "scope": "run" }
+            {
+              "any": [
+                "ketamine",
+                "fentanyl",
+                "analges",
+                "sedat",
+                "topical",
+                "lidocaine",
+                "lignocaine",
+                "propofol",
+                "etomidate",
+                "midazolam",
+                "airway plan",
+                "double setup",
+                "backup"
+              ],
+              "scope": "run"
+            }
           ],
           "patient_effect": "He settles with it on board. Blade's in — the view's up on the screen."
         },
@@ -748,21 +1363,37 @@
           "to_state": "fb_visualized",
           "description": "Proceeds straight to RSI; induction and laryngoscopy give the view.",
           "kind": "action",
-          "keywords": ["rsi", "rapid sequence", "intubat", "induction", "induce"],
+          "keywords": [
+            "rsi",
+            "rapid sequence",
+            "intubat",
+            "induction",
+            "induce"
+          ],
           "patient_effect": "Induced and paralysed. Blade's in — the view's up on the screen."
         },
         {
           "to_state": "vl_aborted",
           "description": "Awake laryngoscopy with no analgesia, sedation or airway plan: he resists and the attempt is abandoned.",
           "kind": "action",
-          "keywords": ["laryngoscop", "glidescope", "look at the cords", "scope"],
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope"
+          ],
           "patient_effect": "He's gagging and fighting the blade — he won't tolerate this. No view. Do you want something for analgesia, or a different airway plan?"
         },
         {
           "to_state": "thrusts_failed",
           "description": "Attempts modified abdominal thrusts or back blows on the stretcher.",
           "kind": "action",
-          "keywords": ["thrust", "heimlich", "back blow", "back slap"],
+          "keywords": [
+            "thrust",
+            "heimlich",
+            "back blow",
+            "back slap"
+          ],
           "patient_effect": "Two rounds of thrusts on the stretcher. Nothing comes up. He is more distressed than before."
         },
         {
@@ -808,9 +1439,31 @@
           "to_state": "fb_visualized",
           "description": "A planned, controlled laryngoscopy after the failed manoeuvre.",
           "kind": "action",
-          "keywords": ["laryngoscop", "glidescope", "look at the cords", "scope"],
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope"
+          ],
           "requires": [
-            { "any": ["ketamine", "fentanyl", "analges", "sedat", "topical", "lidocaine", "lignocaine", "propofol", "etomidate", "midazolam", "airway plan", "double setup", "backup"], "scope": "run" }
+            {
+              "any": [
+                "ketamine",
+                "fentanyl",
+                "analges",
+                "sedat",
+                "topical",
+                "lidocaine",
+                "lignocaine",
+                "propofol",
+                "etomidate",
+                "midazolam",
+                "airway plan",
+                "double setup",
+                "backup"
+              ],
+              "scope": "run"
+            }
           ],
           "patient_effect": "He settles with it on board. Blade's in — the view's up on the screen."
         },
@@ -818,14 +1471,25 @@
           "to_state": "fb_visualized",
           "description": "Proceeds to RSI; induction and laryngoscopy give the view.",
           "kind": "action",
-          "keywords": ["rsi", "rapid sequence", "intubat", "induction", "induce"],
+          "keywords": [
+            "rsi",
+            "rapid sequence",
+            "intubat",
+            "induction",
+            "induce"
+          ],
           "patient_effect": "Induced and paralysed. Blade's in — the view's up on the screen."
         },
         {
           "to_state": "vl_aborted",
           "description": "Awake laryngoscopy with no plan: he resists and the attempt is abandoned.",
           "kind": "action",
-          "keywords": ["laryngoscop", "glidescope", "look at the cords", "scope"],
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope"
+          ],
           "patient_effect": "He's gagging and fighting the blade — he won't tolerate this. No view. Do you want something for analgesia, or a different airway plan?"
         },
         {
@@ -863,7 +1527,10 @@
           "description": "Thirty seconds after the abort: saturation slips further.",
           "when": "on_time",
           "after_seconds": 30,
-          "set_vitals": { "oxygen_saturation": 89, "heart_rate": 118 }
+          "set_vitals": {
+            "oxygen_saturation": 89,
+            "heart_rate": 118
+          }
         }
       ],
       "cues": [
@@ -879,9 +1546,33 @@
           "to_state": "fb_visualized",
           "description": "Re-attempts with analgesia, sedation or an explicit airway plan on board.",
           "kind": "action",
-          "keywords": ["laryngoscop", "glidescope", "look at the cords", "scope", "try again", "another look"],
+          "keywords": [
+            "laryngoscop",
+            "glidescope",
+            "look at the cords",
+            "scope",
+            "try again",
+            "another look"
+          ],
           "requires": [
-            { "any": ["ketamine", "fentanyl", "analges", "sedat", "topical", "lidocaine", "lignocaine", "propofol", "etomidate", "midazolam", "airway plan", "double setup", "backup"], "scope": "run" }
+            {
+              "any": [
+                "ketamine",
+                "fentanyl",
+                "analges",
+                "sedat",
+                "topical",
+                "lidocaine",
+                "lignocaine",
+                "propofol",
+                "etomidate",
+                "midazolam",
+                "airway plan",
+                "double setup",
+                "backup"
+              ],
+              "scope": "run"
+            }
           ],
           "patient_effect": "He settles with it on board. Blade's in — the view's up on the screen."
         },
@@ -889,7 +1580,13 @@
           "to_state": "fb_visualized",
           "description": "Moves to RSI; induction and laryngoscopy give the view.",
           "kind": "action",
-          "keywords": ["rsi", "rapid sequence", "intubat", "induction", "induce"],
+          "keywords": [
+            "rsi",
+            "rapid sequence",
+            "intubat",
+            "induction",
+            "induce"
+          ],
           "patient_effect": "Induced and paralysed. Blade's in — the view's up on the screen."
         },
         {
@@ -928,7 +1625,10 @@
           "description": "Thirty seconds with the blade in and nothing done: saturation falling.",
           "when": "on_time",
           "after_seconds": 30,
-          "set_vitals": { "oxygen_saturation": 86, "heart_rate": 114 }
+          "set_vitals": {
+            "oxygen_saturation": 86,
+            "heart_rate": 114
+          }
         }
       ],
       "cues": [
@@ -944,14 +1644,31 @@
           "to_state": "recovery",
           "description": "Removes the object with Magill forceps under video laryngoscopy.",
           "kind": "action",
-          "keywords": ["magill", "forceps", "extract", "remove", "retriev", "pull it out", "grab it", "take it out"],
+          "keywords": [
+            "magill",
+            "forceps",
+            "extract",
+            "remove",
+            "retriev",
+            "pull it out",
+            "grab it",
+            "take it out"
+          ],
           "patient_effect": "Out in one piece. Immediate improvement — he takes a full breath, the wheeze is gone, sats climbing. He can speak in full sentences."
         },
         {
           "to_state": "intubated_displaced",
           "description": "Intubates; the tube pushes the object into a main bronchus and ventilation is restored.",
           "kind": "action",
-          "keywords": ["intubat", "rsi", "rapid sequence", "tube", "push it", "advance", "displace"],
+          "keywords": [
+            "intubat",
+            "rsi",
+            "rapid sequence",
+            "tube",
+            "push it",
+            "advance",
+            "displace"
+          ],
           "patient_effect": "Tube's through. Something went distal with it — good chest rise on the right, quieter on the left. Sats coming up on the ventilator."
         },
         {
@@ -1021,7 +1738,15 @@
           "to_state": "bronch_disposition",
           "description": "States the disposition: ICU admission with bronchoscopic retrieval arranged.",
           "kind": "action",
-          "keywords": ["icu", "intensive care", "admit", "admission", "disposition", "bronchoscop", "transfer"],
+          "keywords": [
+            "icu",
+            "intensive care",
+            "admit",
+            "admission",
+            "disposition",
+            "bronchoscop",
+            "transfer"
+          ],
           "patient_effect": "Accepted to ICU, ventilated, with bronchoscopy arranged for retrieval."
         },
         {
@@ -1092,9 +1817,31 @@
           "description": "ROSC after CPR, a secured airway and two doses of arrest-dose epinephrine, in any order.",
           "kind": "action",
           "requires": [
-            { "any": ["cpr", "compression"] },
-            { "any": ["intubat", "tube", "airway secured", "secure the airway", "igel", "i-gel", "lma", "supraglottic"] },
-            { "any": ["epinephrine", "adrenaline"], "count": 2 }
+            {
+              "any": [
+                "cpr",
+                "compression"
+              ]
+            },
+            {
+              "any": [
+                "intubat",
+                "tube",
+                "airway secured",
+                "secure the airway",
+                "igel",
+                "i-gel",
+                "lma",
+                "supraglottic"
+              ]
+            },
+            {
+              "any": [
+                "epinephrine",
+                "adrenaline"
+              ],
+              "count": 2
+            }
           ],
           "patient_effect": "Pulse check — there's a pulse. Sinus tach on the monitor, pressure's coming up. ROSC."
         },
@@ -1103,7 +1850,20 @@
           "description": "No resuscitation step within sixty seconds of the arrest.",
           "kind": "inaction",
           "after_seconds": 60,
-          "keywords": ["cpr", "compression", "pads", "bag", "ventilat", "airway", "intubat", "epinephrine", "adrenaline", "pulse check", "rhythm check", "resus"],
+          "keywords": [
+            "cpr",
+            "compression",
+            "pads",
+            "bag",
+            "ventilat",
+            "airway",
+            "intubat",
+            "epinephrine",
+            "adrenaline",
+            "pulse check",
+            "rhythm check",
+            "resus"
+          ],
           "patient_effect": "Asystole on the monitor. No pulse, no respiratory effort, pupils fixed. He's gone.",
           "critical_error": true
         }
@@ -1144,7 +1904,15 @@
           "to_state": "icu_disposition",
           "description": "States the disposition: ICU with a definitive foreign-body plan.",
           "kind": "action",
-          "keywords": ["icu", "intensive care", "admit", "admission", "disposition", "bronchoscop", "transfer"],
+          "keywords": [
+            "icu",
+            "intensive care",
+            "admit",
+            "admission",
+            "disposition",
+            "bronchoscop",
+            "transfer"
+          ],
           "patient_effect": "Accepted to ICU post-arrest, with bronchoscopy arranged."
         },
         {
@@ -1206,9 +1974,27 @@
     {
       "id": "im_epinephrine_dose",
       "label": "Used the IM anaphylaxis dose of epinephrine",
-      "drugs": ["epinephrine", "adrenaline"],
+      "drugs": [
+        "epinephrine",
+        "adrenaline"
+      ],
       "expectation": "dose_adjust",
-      "dose_keywords": ["intramuscular", "mg im", "mcg im", "0.5 mg", "0.5mg", "0.3 mg", "0.3mg", "500 mcg", "500 microgram", "300 mcg", "300 microgram", "1:1000", "1 in 1000", "one in a thousand"],
+      "dose_keywords": [
+        "intramuscular",
+        "mg im",
+        "mcg im",
+        "0.5 mg",
+        "0.5mg",
+        "0.3 mg",
+        "0.3mg",
+        "500 mcg",
+        "500 microgram",
+        "300 mcg",
+        "300 microgram",
+        "1:1000",
+        "1 in 1000",
+        "one in a thousand"
+      ],
       "note": "Anaphylaxis with a pulse is treated with 0.5 mg (0.3-0.5 mg) of 1 mg/mL epinephrine IM — never the 1 mg IV arrest dose."
     }
   ],
@@ -1217,7 +2003,9 @@
       "id": "exam_skin",
       "label": "Examined the skin for urticaria",
       "kind": "exam",
-      "targets": ["Dermatological"],
+      "targets": [
+        "Dermatological"
+      ],
       "expectation": "expected",
       "note": "No hives, flushing or angio-oedema in a patient this distressed argues strongly against anaphylaxis."
     },
@@ -1225,7 +2013,9 @@
       "id": "exam_airway",
       "label": "Examined the mouth and neck",
       "kind": "exam",
-      "targets": ["ENT/Head & Neck"],
+      "targets": [
+        "ENT/Head & Neck"
+      ],
       "expectation": "expected",
       "note": "No lip or tongue swelling; a routine look is unrevealing, which is itself the prompt to look lower with a scope."
     },
@@ -1233,7 +2023,9 @@
       "id": "exam_resp",
       "label": "Assessed breathing at the bedside",
       "kind": "exam",
-      "targets": ["Respiratory"],
+      "targets": [
+        "Respiratory"
+      ],
       "expectation": "expected",
       "note": "The wheeze is monophonic and loudest over the upper airway — transmitted, not bronchospasm."
     },
@@ -1241,7 +2033,9 @@
       "id": "inv_laryngoscopy",
       "label": "Visualised the airway with the video laryngoscope",
       "kind": "investigation",
-      "targets": ["video_laryngoscopy"],
+      "targets": [
+        "video_laryngoscopy"
+      ],
       "expectation": "expected",
       "note": "The object sits above the cords and is only seen with direct or video laryngoscopy — the diagnostic reveal."
     }

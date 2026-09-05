@@ -349,3 +349,25 @@ def test_s3_proceed_confirms_a_disposition_without_looping(db_path, monkeypatch)
     assert turn.speaker == "nurse"
     assert session.engine.run.pending_action is None
     assert session.engine.run.current_state_id == "disposition"
+
+
+# ── multi-beat patient channel ────────────────────────────────────────────────
+def test_patient_channel_honours_the_interpreters_beat_not_just_the_next_one(db_path, monkeypatch):
+    """A case with several patient-held beats: asking about medications reveals the
+    medications beat (the interpreter mapped it), not whichever beat is next; a
+    label-word question ("allergies?") grounds even when the interpreter says chitchat."""
+    stub = sim_harness.StubLLM()
+    sim_harness.install_stubs(monkeypatch, stub)
+    from backend.voice_session import start_session
+    session = start_session("foreign_body_airway", "resident-1")
+
+    stub.intent_json = sim_harness._intent_json({"op": "ask_history", "target": "medications"})
+    turn = sim_harness.run_turn(session, "What medications do you take?")
+    assert turn.speaker == "patient"
+    assert "medications" in session.engine.run.revealed_history
+    assert "onset_while_eating" not in session.engine.run.revealed_history
+
+    stub.intent_json = sim_harness._intent_json({"op": "chitchat"})
+    turn = sim_harness.run_turn(session, "Do you have any allergies?", forced_addressee="patient")
+    assert turn.speaker == "patient"
+    assert "past_history_allergy" in session.engine.run.revealed_history

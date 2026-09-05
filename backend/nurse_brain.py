@@ -876,12 +876,21 @@ def _patient_routed_turn(
     patient_beats = [
         h for h in engine.case.history if provider_speaker(h.provider) == "patient"
     ]
-    # Symptom-directed → ground to the next unrevealed patient beat (engine reveal).
-    if patient_beats and (set(transcript.lower().split()) & _SYMPTOM_WORDS):
+    # The interpreter already mapped the words onto a beat the patient holds (it
+    # sees the case's history menu) → honour it. A case with several patient beats
+    # (onset, past history, medications) depends on this; the heuristics below are
+    # the fallback for a beat the interpreter missed.
+    if intent.op == "ask_history" and any(h.id == intent.target for h in patient_beats):
+        return _resolve_turn(session, intent, transcript, clock)
+    words = set(re.findall(r"[a-z]+", transcript.lower()))
+    if patient_beats:
         unrevealed = [h for h in patient_beats
                       if h.id not in engine.run.revealed_history]
-        if unrevealed:
-            grounded = NurseIntent(op="ask_history", target=unrevealed[0].id)
+        # A beat whose own label words appear in the question ("medications?",
+        # "allergies?") wins; otherwise symptom talk grounds to the next unrevealed.
+        named = next((h for h in unrevealed if _beat_words(h) & words), None)
+        if named is not None or (unrevealed and words & _SYMPTOM_WORDS):
+            grounded = NurseIntent(op="ask_history", target=(named or unrevealed[0]).id)
             return _resolve_turn(session, grounded, transcript, clock)
 
     # Free roleplay — patient_reply records the exchange on the patient channel.
@@ -1008,6 +1017,16 @@ def _action_label(session: VoiceSession, op: str, target: str | None) -> str:
         actor = find_consultant(case, target)
         return f"Call {actor.role if actor else target}."
     return target or op
+
+
+def _beat_words(beat) -> set[str]:
+    """The distinctive words of a history beat's id/label (5+ letters, minus role
+    words) — enough to recognise "any allergies?" as the allergy beat."""
+    tokens = set(re.findall(r"[a-z]+", f"{beat.id} {beat.label}".lower()))
+    return {t for t in tokens if len(t) >= 5 and t not in _BEAT_STOPWORDS}
+
+
+_BEAT_STOPWORDS = frozenset({"patient", "history", "collateral", "symptoms", "symptom"})
 
 
 _SYMPTOM_WORDS = frozenset({

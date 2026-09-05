@@ -1,0 +1,57 @@
+# GOLD (foreign body, salvage branch) — the resident goes straight to RSI, asks
+# for the view, cannot reach the object and intubates past it, displacing it into a
+# main bronchus; disposition to ICU with bronchoscopy is read back and confirmed.
+case: foreign_body_airway
+name: fb_gold_rsi_displacement
+turns:
+  - say: "EMS, give me the handover."
+    intent: { op: ask_history, target: ems_handover }
+    expect: { speaker: ems, op: ask_history, state: baseline }
+
+  - say: "What medications do you take?"
+    intent: { op: ask_history, target: medications }
+    expect: { speaker: patient, op: ask_history, reveals: "Amlodipine", state: checkpoint2, transitioned: true }
+
+  - say: "Skin, mouth and chest — examine all three."
+    intent: { op: perform_exam, target: Dermatological }
+    expect: { speaker: nurse, op: perform_exam }
+  - say: "Now his mouth and neck."
+    intent: { op: perform_exam, target: "ENT/Head & Neck" }
+    expect: { speaker: nurse, op: perform_exam }
+  - say: "And his chest."
+    intent: { op: perform_exam, target: Respiratory }
+    expect: { speaker: nurse, op: perform_exam }
+
+  # RSI is a spoken action: it gives the view but no card (actions have no card).
+  - say: "No rash, sudden onset at dinner — I'm not convinced this is anaphylaxis. RSI him: ketamine and rocuronium, then I look."
+    intent: { op: perform_action, action_text: "RSI with ketamine and rocuronium then laryngoscopy" }
+    expect: { speaker: nurse, op: perform_action, state: fb_visualized, transitioned: true }
+
+  # Asking for the view drops the image card (the RT cue in this state invites it).
+  - say: "RT, put the view up on the screen."
+    intent: { op: order_investigation, target: video_laryngoscopy }
+    expect: { speaker: rt, op: order_investigation, state: fb_visualized, transitioned: false, card_kind: image, reply_lacks: ["steak", "bolus"] }
+
+  - say: "There's a foreign body at the glottic inlet."
+    intent: { op: diagnose, action_text: "upper airway foreign body" }
+    expect: { speaker: nurse, op: diagnose }
+
+  - say: "I can't get the Magills on it — pass the tube and push it down the right main."
+    intent: { op: perform_action, action_text: "intubate and push it distally into the right main bronchus" }
+    expect: { speaker: nurse, op: perform_action, state: intubated_displaced, transitioned: true }
+
+  # Disposition is confirmable: read back and parked, then a plain "go ahead" commits it.
+  - say: "Admit him to ICU and get ENT for bronchoscopy."
+    intent: { op: perform_action, action_text: "admit to ICU, ENT for bronchoscopy" }
+    expect: { speaker: nurse, op: perform_action, state: intubated_displaced, transitioned: false }
+
+  - say: "Yes, go ahead."
+    intent: { op: confirm_pending }
+    expect: { speaker: nurse, op: confirm_pending, state: bronch_disposition, transitioned: true, ended: true }
+
+final:
+  reached_state: bronch_disposition
+  working_dx_contains: "foreign body"
+  critical_error: false
+  ended: true
+  min_score: 90
