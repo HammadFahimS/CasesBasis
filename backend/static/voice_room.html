@@ -2473,6 +2473,7 @@
     debriefShown = true;
     try { stopListening(); } catch(e){}
     stopAudio();
+    clientFlush();
     try {
       const d = await postJSON('/api/voice/debrief', { session_id: SESSION_ID });
       showDebrief(d);
@@ -2645,8 +2646,8 @@
   async function applyNurseData(data){
     const reply = (data.reply || '').trim();
     const speaker = data.speaker || 'nurse';   // a click can be answered by RT / a consultant too
-    if (reply) addTurn(ROOM, speaker, reply);
-    applyEngine(data);
+    if (reply) safeUI('reply', () => addTurn(ROOM, speaker, reply));
+    safeUI('engine', () => applyEngine(data));
     if (reply && VOICE_BACKEND){            // speak only once a voice mode is chosen
       const native = VOICE_BACKEND === 'native' && recognition;
       if (native){ recoSuspend = true; try { recognition.stop(); } catch(e){} }
@@ -2721,7 +2722,7 @@
     const cues = (d && d.cues) || [];
     for (const c of cues){
       const speaker = c.speaker || 'nurse';
-      addTurn(ROOM, speaker, c.text);
+      safeUI('cue', () => addTurn(ROOM, speaker, c.text));
       if (c.text && VOICE_BACKEND){ try { await playTTS(c.text, speaker); } catch(e){} }
     }
   }
@@ -2732,8 +2733,7 @@
     const items = (d && d.deferred) || [];
     for (const it of items){
       const speaker = it.speaker || 'nurse';
-      if (it.card) addDiagnostic(it.card);
-      if (it.text) addTurn(ROOM, speaker, it.text);
+      safeUI('result', () => { if (it.card) addDiagnostic(it.card); if (it.text) addTurn(ROOM, speaker, it.text); });
       if (it.text && VOICE_BACKEND){ try { await playTTS(it.text, speaker); } catch(e){} }
     }
   }
@@ -2772,16 +2772,20 @@
     const d = m.data || {};
     if (m.kind === 'cue'){
       const speaker = m.speaker || 'nurse';
-      addTurn(ROOM, speaker, m.text);
-      if (m.text && VOICE_BACKEND && !processing){ try { await playTTS(m.text, speaker); } catch(e){} }
+      // Shown *and* voiced even while a turn is in flight — the speak queue
+      // serialises it with the reply (it used to be silently dropped).
+      safeUI('live-cue', () => addTurn(ROOM, speaker, m.text));
+      if (m.text && VOICE_BACKEND){ try { await playTTS(m.text, speaker); } catch(e){} }
       return;
     }
     if (m.kind === 'result'){               // a scheduled result reporting back (+ card)
       const speaker = m.speaker || 'nurse';
-      clearWorking(speaker);                // its order just landed — stop the spinner
-      if (d.card) addDiagnostic(d.card);
-      if (m.text) addTurn(ROOM, speaker, m.text);
-      if (m.text && VOICE_BACKEND && !processing){ try { await playTTS(m.text, speaker); } catch(e){} }
+      safeUI('live-result', () => {
+        clearWorking(speaker);              // its order just landed — stop the spinner
+        if (d.card) addDiagnostic(d.card);
+        if (m.text) addTurn(ROOM, speaker, m.text);
+      });
+      if (m.text && VOICE_BACKEND){ try { await playTTS(m.text, speaker); } catch(e){} }
       return;
     }
     if (m.kind === 'state_change' || m.kind === 'condition'){
@@ -2818,6 +2822,35 @@
 
   // ---------- start the live engine-backed session ----------
   let SESSION_ID = null;
+
+  // ── client log: page errors + audio outcomes → /api/voice/client-log ────────
+  // The 2026-09-05 prod runs showed replies on screen with no audio and nothing on
+  // the server to say why. Every decision the speak queue makes (skipped, watchdog,
+  // rejected play, stuck AudioContext) and every UI error is batched here.
+  const clientBuf = []; let clientFlushT = 0;
+  function clientLog(kind, detail){
+    try {
+      const d = (detail && typeof detail === 'object') ? JSON.stringify(detail) : String(detail == null ? '' : detail);
+      clientBuf.push({ kind, detail: d.slice(0, 1000), t: (typeof clockStr === 'function') ? clockStr() : '' });
+      if (clientBuf.length > 200) clientBuf.splice(0, clientBuf.length - 200);
+      if (clientBuf.length >= 20) clientFlush(); else if (!clientFlushT) clientFlushT = setTimeout(clientFlush, 2000);
+    } catch(e){}
+  }
+  function clientFlush(useBeacon){
+    clearTimeout(clientFlushT); clientFlushT = 0;
+    if (!SESSION_ID || !clientBuf.length) return;
+    const payload = JSON.stringify({ session_id: SESSION_ID, events: clientBuf.splice(0, 50) });
+    try {
+      if (useBeacon && navigator.sendBeacon) navigator.sendBeacon('/api/voice/client-log', new Blob([payload], { type: 'application/json' }));
+      else fetch('/api/voice/client-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(() => {});
+    } catch(e){}
+    if (clientBuf.length) clientFlushT = setTimeout(clientFlush, 2000);
+  }
+  window.addEventListener('error', e => clientLog('js.error', ((e && e.message) || 'error') + ' @' + ((e && e.filename) || '') + ':' + ((e && e.lineno) || '')));
+  window.addEventListener('unhandledrejection', e => { const r = e && e.reason; clientLog('js.rejection', (r && (r.stack || r.message)) || String(r)); });
+  window.addEventListener('pagehide', () => clientFlush(true));
+  // A UI update that throws must never take the audio with it: run it in isolation.
+  function safeUI(what, fn){ try { fn(); } catch(e){ clientLog('ui.error', what + ': ' + ((e && (e.stack || e.message)) || e)); } }
   function titleCase(s){ return s ? s[0].toUpperCase()+s.slice(1) : s; }
   function shortId(id){ return (id||'').replace(/_/g,'-').slice(0,16) || 'session'; }
   async function startSession(){
@@ -2982,8 +3015,9 @@
     if (captionBar) captionBar.classList.remove('visible');
   }
 
-  function stopAudio(){ // halt any playing reply (barge-in / stop) and release the await
-    flushSpeak();        // drop anything queued behind the current line (barge-in wins)
+  // Kill whatever is playing right now and release its await. Leaves the queue
+  // alone — the watchdog uses it to unwedge one line without dropping the rest.
+  function killCurrent(){
     clearSpeaking();
     hideCaption();
     if (curAudio){ try { curAudio.pause(); } catch(e){} curAudio = null; }
@@ -2991,6 +3025,10 @@
     if (curPCMGain && audioCtx){ try { curPCMGain.gain.setValueAtTime(0, audioCtx.currentTime); } catch(e){} curPCMGain = null; }
     if (window.speechSynthesis){ try { speechSynthesis.cancel(); } catch(e){} }
     if (playResolve){ const r = playResolve; playResolve = null; r(); }
+  }
+  function stopAudio(){ // halt any playing reply (barge-in / stop) and release the await
+    flushSpeak();        // drop anything queued behind the current line (barge-in wins)
+    killCurrent();
   }
 
   // ── one speak queue so calls never overlap ───────────────────────────────────
@@ -3022,22 +3060,37 @@
     }, FILLER_DELAY_MS);
   }
   function cancelFiller(){ clearTimeout(fillerTimer); fillerTimer = 0; }
+  // How long one line may take end-to-end (synthesis + playback) before the queue
+  // is freed. On 2026-09-05 one stalled line silently swallowed every reply queued
+  // behind it. Speech runs ~15 chars/s; v3 synthesis alone can take several seconds.
+  const TTS_WATCHDOG = Object.assign({ base: 6000, perChar: 90, max: 60000 }, window.__ttsWatchdog || {});
+  function ttsBudget(text){ return Math.min(TTS_WATCHDOG.max, TTS_WATCHDOG.base + TTS_WATCHDOG.perChar * ((text || '').length)); }
   function playTTS(text, speaker, stabilityOverride){
     const gen = speakGen;
+    const brief = speaker + ': ' + (text || '').slice(0, 80);
     const run = async () => {
-      if (gen !== speakGen) return;        // a barge-in invalidated this queued line
-      try { await _playTTSNow(text, speaker, stabilityOverride); }
-      catch(e){
-        if (e && e.name === 'AbortError') return;
-        // A real synthesis failure used to be swallowed by callers — retry once, then
-        // surface it instead of looking like a dropped reply with no audio.
-        try { await _playTTSNow(text, speaker, stabilityOverride); }
-        catch(e2){
-          if (e2 && e2.name === 'AbortError') return;
-          setNow(ROOM, 'audio unavailable for that line — tap to continue');
-          ROOM.root.classList.remove('collapsed');
+      if (gen !== speakGen){ clientLog('tts.skipped', brief); return; }   // a barge-in invalidated this queued line
+      const t0 = performance.now(); let timer = 0;
+      const guard = new Promise(resolve => { timer = setTimeout(() => { clientLog('tts.watchdog', Math.round(performance.now() - t0) + 'ms ' + brief); killCurrent(); resolve('watchdog'); }, ttsBudget(text)); });
+      const attempt = async () => {
+        try { await _playTTSNow(text, speaker, stabilityOverride); return 'ok'; }
+        catch(e){
+          if (e && e.name === 'AbortError') return 'aborted';
+          clientLog('tts.error', ((e && e.message) || e) + ' ' + brief);
+          // A real synthesis failure used to be swallowed by callers — retry once, then
+          // surface it instead of looking like a dropped reply with no audio.
+          try { await _playTTSNow(text, speaker, stabilityOverride); return 'ok'; }
+          catch(e2){
+            if (e2 && e2.name === 'AbortError') return 'aborted';
+            clientLog('tts.failed', ((e2 && e2.message) || e2) + ' ' + brief);
+            setNow(ROOM, 'audio unavailable for that line — tap to continue');
+            ROOM.root.classList.remove('collapsed');
+            return 'failed';
+          }
         }
-      }
+      };
+      try { await Promise.race([attempt(), guard]); }
+      finally { clearTimeout(timer); }
     };
     speakChain = speakChain.then(run, run);
     return speakChain;
@@ -3052,6 +3105,9 @@
     if (stabilityOverride != null) body.stability = stabilityOverride;
     if (VOICE_TIER === 'extreme') body.tier = 'extreme';
     if (VOICE_EXPRESSIVE) body.expressive = true;
+    // A stuck AudioContext (suspended/interrupted, resume never lands) cannot
+    // schedule PCM; ask for a whole MP3 and play it through <audio> instead.
+    if (!(await audioContextReady())) body.format = 'mp3';
     const abortCtrl = new AbortController();
     curAbortCtrl = abortCtrl;
     try {
@@ -3059,28 +3115,42 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body), signal: abortCtrl.signal,
       });
-      if (!res.ok) throw new Error('synthesis failed');
+      if (!res.ok) throw new Error('synthesis failed (' + res.status + ')');
       const ct = res.headers.get('content-type') || '';
-      if (ct.includes('audio/pcm')) {
-        await _playPCMStream(res);
-      } else {
-        // MP3 blob path (Together fallback)
-        const url = URL.createObjectURL(await res.blob());
-        const audio = new Audio(url); curAudio = audio;
-        await new Promise(resolve => {
-          playResolve = resolve;
-          const done = () => { clearSpeaking(); hideCaption(); URL.revokeObjectURL(url); if (curAudio===audio) curAudio=null; if (playResolve){ playResolve=null; resolve(); } };
-          audio.onended = done; audio.onerror = done;
-          audio.play().catch(done);
-        });
-      }
+      if (ct.includes('audio/pcm')) await _playPCMStream(res);
+      else await _playBlob(res, speaker);
     } catch(e) {
       if (e.name !== 'AbortError') throw e;
     } finally {
-      curAbortCtrl = null;
+      if (curAbortCtrl === abortCtrl) curAbortCtrl = null;
       clearSpeaking();
       hideCaption();
     }
+  }
+  // Whole-file playback through <audio> (MP3 from the server, or the fallback above).
+  async function _playBlob(res, speaker){
+    const url = URL.createObjectURL(await res.blob());
+    const audio = new Audio(url); curAudio = audio;
+    await new Promise(resolve => {
+      playResolve = resolve;
+      const done = () => { clearSpeaking(); hideCaption(); URL.revokeObjectURL(url); if (curAudio===audio) curAudio=null; if (playResolve){ playResolve=null; resolve(); } };
+      audio.onended = done;
+      audio.onerror = () => { clientLog('tts.audio_error', speaker + ' code=' + ((audio.error && audio.error.code) || '?')); done(); };
+      let p; try { p = audio.play(); } catch(e){ clientLog('tts.play_threw', speaker + ' ' + ((e && e.name) || e)); done(); return; }
+      if (p && p.catch) p.catch(e => { clientLog('tts.play_rejected', speaker + ' ' + ((e && e.name) || e)); done(); });
+    });
+  }
+  // The shared AudioContext must be running to schedule PCM. Resume it with a
+  // bounded wait and report — rather than hang — when it will not run.
+  async function audioContextReady(){
+    try {
+      const ctx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx = ctx;
+      if (ctx.state === 'running') return true;
+      await Promise.race([Promise.resolve(ctx.resume()).catch(() => {}), new Promise(r => setTimeout(r, 1500))]);
+      if (ctx.state === 'running') return true;
+      clientLog('audio.ctx', String(ctx.state));
+      return false;
+    } catch(e){ clientLog('audio.ctx', 'error ' + ((e && e.message) || e)); return false; }
   }
 
   // Play a server-sent PCM-16000 stream (16-bit signed LE mono) via Web Audio API.
@@ -3090,7 +3160,6 @@
     const SAMPLE_RATE = 16000;
     const ctx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     audioCtx = ctx;
-    if (ctx.state === 'suspended') await ctx.resume();
 
     const masterGain = ctx.createGain();
     masterGain.connect(ctx.destination);
@@ -3242,50 +3311,52 @@
     const effectiveAddr = _forcedAddr || forcedAddressee || null;
     // Consume the chip selection so it doesn't bleed into subsequent turns.
     forcedAddressee = null;
-    addrChipsEl.querySelectorAll('.addr-chip').forEach(c => c.classList.remove('selected'));
-    leaveAskMode();
+    safeUI('chips', () => { addrChipsEl.querySelectorAll('.addr-chip').forEach(c => c.classList.remove('selected')); leaveAskMode(); });
 
+    let data;
     try {
-      addTurn(ROOM, 'res', said);
-
+      safeUI('transcript', () => addTurn(ROOM, 'res', said));
       // Single unified endpoint: the SERVER-SIDE Director decides who answers
       // (nurse / bystander / patient) from the utterance content. The browser no
       // longer pre-routes — it just sends the raw transcript and an optional chip.
       const body = { session_id: SESSION_ID, text: said };
       if (effectiveAddr) body.forced_addressee = effectiveAddr;
       scheduleFiller();                          // mask the dispatch latency if it's slow
-      let data;
       try { data = await postJSON('/api/voice/turn', body); }
       finally { cancelFiller(); }
-
-      const reply = (data.reply || '').trim();
-      const speaker = data.speaker || 'nurse';
-      const patientStability = data.affect_stability ?? null;
-      addTurn(ROOM, speaker, reply);
-      applyEngine(data);
-
-      // Director ask-back: store the utterance and illuminate the addressee chips.
-      if (data.needs_addressee){
-        pendingTranscript = said;
-        enterAskMode();
-      }
-
-      processing = false;
-      if (!capturing) setMic(listening ? 'listen' : 'off');
-      // affect_stability is the speaker's live EmotionalState (Phase 5): set for the
-      // patient and a frightened relative, absent for the steady professionals.
-      if (reply) await playTTS(reply, speaker, patientStability);
-      await deliverCues(data);
-      setNow(ROOM, 'listening for your next order…');
-      if (pendingEnd){ pendingEnd = false; concludeCase(); }
     } catch(e){
+      clientLog('turn.error', (e && e.message) || e);
       setNow(ROOM, (e && e.message) ? e.message : 'something went wrong');
       ROOM.root.classList.remove('collapsed');
-    } finally {
       processing = false;
       if (!capturing) setMic(listening ? 'listen' : 'off');
       selectState(listening ? 'listening' : 'idle');
+      return;
     }
+    await deliverTurn(data, said);
+  }
+  // Everything that happens once a turn's reply is in hand. The transcript, the
+  // engine update and the ask-back chips each run in isolation from the speech
+  // path — on 2026-09-05 a UI error here left replies on screen that were never
+  // heard. `processing` clears before playback so the resident can barge in.
+  async function deliverTurn(data, said){
+    const reply = (data.reply || '').trim();
+    const speaker = data.speaker || 'nurse';
+    const patientStability = data.affect_stability ?? null;
+    if (reply) safeUI('reply', () => addTurn(ROOM, speaker, reply));
+    safeUI('engine', () => applyEngine(data));
+    // Director ask-back: store the utterance and illuminate the addressee chips.
+    if (data.needs_addressee) safeUI('ask-mode', () => { pendingTranscript = said; enterAskMode(); });
+    processing = false;
+    if (!capturing) setMic(listening ? 'listen' : 'off');
+    // affect_stability is the speaker's live EmotionalState (Phase 5): set for the
+    // patient and a frightened relative, absent for the steady professionals.
+    if (reply){ try { await playTTS(reply, speaker, patientStability); } catch(e){} }
+    await deliverCues(data);
+    safeUI('now', () => setNow(ROOM, 'listening for your next order…'));
+    if (!capturing) setMic(listening ? 'listen' : 'off');
+    selectState(listening ? 'listening' : 'idle');
+    if (pendingEnd){ pendingEnd = false; concludeCase(); }
   }
 
   // Play the one-time spoken handoff before the floor opens (both backends).

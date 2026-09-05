@@ -751,6 +751,20 @@ def api_voice_tts(body: dict[str, Any], request: Request):
 
     speaker_label = body.get("speaker") or "nurse"
     t0 = time.perf_counter()
+
+    # A browser whose AudioContext is stuck (suspended/interrupted with a resume
+    # that never lands) can still play a whole file through <audio>; it asks for
+    # that with format="mp3" instead of the PCM stream it can't schedule.
+    if (body.get("format") or "").lower() == "mp3":
+        from backend.voice_service import synthesize
+        try:
+            audio = synthesize(text, voice, stability_override=stability_override, tier=tier, expressive=expressive)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"synthesis failed: {exc}")
+        logger.info("[LATENCY] tts_mp3=%.0fms chars=%d speaker=%s",
+                    (time.perf_counter() - t0) * 1000, len(text), speaker_label)
+        return Response(content=audio, media_type="audio/mpeg")
+
     media_type, chunks = synthesize_stream(text, voice, stability_override=stability_override, tier=tier, expressive=expressive)
 
     # ElevenLabs streams PCM-16000 (audio/pcm). Probe the first chunk before
@@ -807,6 +821,42 @@ def api_voice_tts(body: dict[str, Any], request: Request):
         except Exception as exc:
             logger.warning("ElevenLabs stream TTS error mid-stream: %s", exc)
     return StreamingResponse(_gen(), media_type=media)
+
+
+@router.post("/api/voice/client-log")
+@limiter.limit("120/minute")
+def api_voice_client_log(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Store browser-side events for an owned voice session.
+
+    The rooms post page errors and audio outcomes (a playback watchdog firing, a
+    queued line skipped, a rejected play(), an AudioContext that will not run) so a
+    "reply shown but never heard" run can be diagnosed from the server. Bounded per
+    post and per event; a session that isn't the caller's is a 404."""
+    resident_id = require_resident(request)
+    session_id = (body.get("session_id") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    events = body.get("events")
+    if not isinstance(events, list):
+        raise HTTPException(status_code=400, detail="events must be a list")
+    from backend import voice_persistence
+    if not voice_persistence.owns_session(session_id, resident_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    stored = voice_persistence.record_client_events(session_id, resident_id, events)
+    return {"stored": stored}
+
+
+@router.get("/api/voice/client-log")
+def api_voice_client_log_read(request: Request, session_id: str = "") -> dict[str, Any]:
+    """The stored browser events for one of the caller's sessions, oldest first."""
+    resident_id = require_resident(request)
+    session_id = (session_id or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    from backend import voice_persistence
+    if not voice_persistence.owns_session(session_id, resident_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    return {"session_id": session_id, "events": voice_persistence.client_events(session_id, resident_id)}
 
 
 @router.get("/api/voice/sample")

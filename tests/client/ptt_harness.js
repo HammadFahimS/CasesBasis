@@ -1,84 +1,7 @@
 // Drive the functional room's real inline script with stubbed browser globals and
 // exercise push-to-talk: hold -> capture starts + PCM socket armed; release -> recorder
 // stops + commit sent; short tap -> discarded; Space in a text field -> ignored.
-const vm = require('vm'), fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
-const calls = [];                     // (what, detail) trace
-const listeners = [];                 // {target, type, fn}
-function stub(name){
-  const f = function(){ return stub(name + '()'); };
-  return new Proxy(f, {
-    get(t, k){
-      if (typeof k === 'symbol' || k === 'then') return undefined;
-      if (k === 'toString' || k === 'valueOf') return () => '';
-      if (k === 'length') return 0;
-      if (k === 'querySelectorAll' || k === 'getElementsByClassName' || k === 'children') return () => [];
-      if (k === 'querySelector') return (sel) => stub(sel);
-      if (k === 'getElementById') return (id) => stub('#' + id);
-      if (k === 'closest') return (sel) => stub(name + '.closest(' + sel + ')');
-      if (k === 'getAttribute') return () => null;
-      if (k === 'contains') return () => false;
-      if (k === 'addEventListener') return (type, fn) => { listeners.push({ target: name, type, fn }); };
-      if (k === 'classList') return { add(){}, remove(){}, toggle(){}, contains(){ return false; } };
-      if (k === 'style') return stub(name + '.style');
-      if (k === 'dataset') return stub(name + '.dataset');
-      if (k === 'tagName') return 'DIV';
-      if (k === 'value' || k === 'textContent' || k === 'innerHTML' || k === 'placeholder') return '';
-      if (k === 'disabled' || k === 'hidden' || k === 'isContentEditable') return false;
-      return stub(name + '.' + String(k));
-    },
-    set(){ return true; },
-    construct(){ return stub('new ' + name); },
-    apply(){ return stub(name + '()'); },
-  });
-}
-class FakeRecorder {
-  constructor(stream, opts){ this.opts = opts; calls.push(['recorder.new', opts && opts.mimeType]); FakeRecorder.last = this; }
-  static isTypeSupported(){ return true; }
-  start(){ calls.push(['recorder.start']); }
-  stop(){ calls.push(['recorder.stop']); setTimeout(() => { const blob = new Blob([new Uint8Array(6000)], { type: 'audio/webm' }); this.ondataavailable && this.ondataavailable({ data: blob }); this.onstop && this.onstop(); }, 0); }
-}
-class FakeWS {
-  constructor(url){ this.url = url; this.readyState = 0; this.sent = []; FakeWS.last = this; calls.push(['ws.new', url]); setTimeout(() => { this.readyState = 1; this.onopen && this.onopen(); }, 20); }
-  send(x){ this.sent.push(x); if (typeof x === 'string') calls.push(['ws.send', x]); else calls.push(['ws.pcm', x.byteLength]); }
-  close(){}
-}
-const fetchLog = [];
-const sandboxBase = {
-  console, setTimeout, clearTimeout, setInterval, clearInterval, Promise, JSON, Math, Date, Object, Array, String, Number, Boolean, RegExp, Error, TypeError, Map, Set, Symbol, parseInt, parseFloat, isNaN, encodeURIComponent, decodeURIComponent,
-  Blob, URLSearchParams, AbortController, Uint8Array, Int16Array, Float32Array, ArrayBuffer, Proxy, Reflect, Intl,
-  MediaRecorder: FakeRecorder, WebSocket: FakeWS,
-  Audio: class { play(){ setTimeout(() => this.onended && this.onended(), 5); return Promise.resolve(); } pause(){} },
-  performance: { now: () => Date.now() },
-  location: { search: '?ui=functional&speech=models&case=foreign_body_airway', protocol: 'https:', host: 'x', href: '' , pathname: '/simulator/voice-room' },
-  navigator: { mediaDevices: { getUserMedia: async () => stub('stream') }, userAgent: 'node' },
-  fetch: async (url, opts) => { fetchLog.push([url, opts && opts.method]); return { ok: true, status: 200, json: async () => ({ session_id: 'S1', intro: '', vitals: {}, roster: [], menu: {}, history: [], cards: [] }), headers: { get: () => '' }, blob: async () => new Blob([]) }; },
-  requestAnimationFrame: () => 0, cancelAnimationFrame(){},
-  URL: { createObjectURL: () => 'blob:x', revokeObjectURL(){} },
-  localStorage: { getItem: () => null, setItem(){}, removeItem(){} },
-  sessionStorage: { getItem: () => null, setItem(){}, removeItem(){} },
-  speechSynthesis: undefined, SpeechRecognition: undefined, webkitSpeechRecognition: undefined, webkitAudioContext: undefined,
-};
-const doc = stub('document');
-const sandbox = new Proxy(sandboxBase, {
-  has: () => true,
-  get(t, k){
-    if (k in t) return t[k];
-    if (k === 'document') return doc;
-    if (k === 'addEventListener') return (type, fn) => { listeners.push({ target: 'window', type, fn }); };
-    if (k === 'window' || k === 'globalThis' || k === 'self') return sandbox;
-    if (k === 'undefined') return undefined;
-    if (typeof k === 'symbol') return undefined;
-    return stub(String(k));
-  },
-  set(t, k, v){ t[k] = v; return true; },
-});
-const ctx = vm.createContext(sandbox);
-vm.runInContext(src, ctx, { filename: 'room.js' });
-
-const find = (target, type) => listeners.filter(l => l.target.includes(target) && l.type === type).map(l => l.fn);
-const tick = (ms) => new Promise(r => setTimeout(r, ms));
-function assert(cond, msg){ if (!cond){ console.error('FAIL:', msg); console.error(calls); process.exit(1); } console.log('ok  -', msg); }
+const { calls, fetchLog, FakeWS, find, tick, assert } = require('./sandbox').create(process.argv[2]);
 
 const MODE = process.argv[3] || 'functional';
 (async () => {
@@ -99,7 +22,8 @@ const MODE = process.argv[3] || 'functional';
   fire(kd, bodyEv('Space')); fire(kd, bodyEv('Space', { repeat: true }));
   await tick(10);
   assert(calls.filter(c => c[0] === 'recorder.start').length === 1, 'hold starts exactly one recording');
-  const ws = FakeWS.last;
+  const sttSock = () => FakeWS.all.filter(w => /\/ws\/stt/.test(w.url)).pop();
+  const ws = sttSock();
   // 3. release after a real hold -> recorder stops, commit sent, transcript awaited then turn posted
   await tick(250);
   fire(ku, bodyEv('Space'));
@@ -127,13 +51,13 @@ const MODE = process.argv[3] || 'functional';
 
   // 6. socket closed -> press still records and release falls back to batch upload
   await tick(300);
+  const socketsBefore = FakeWS.all.length;
   ws.readyState = 3; ws.onclose && ws.onclose();
   await tick(10);
-  FakeWS.last = null;
   fire(kd, bodyEv('Space')); await tick(250); fire(ku, bodyEv('Space')); await tick(100);
   assert(fetchLog.some(f => /\/api\/voice\/stt/.test(f[0])), 'with the socket down, release uploads the blob to /api/voice/stt');
   await tick(600);
-  assert(FakeWS.last && /\/ws\/stt/.test(FakeWS.last.url), 'socket reconnects on its own after a drop');
+  assert(FakeWS.all.length > socketsBefore && sttSock() !== ws, 'socket reconnects on its own after a drop');
 
   // 7. losing window focus releases a held key
   const stops = calls.filter(c => c[0] === 'recorder.stop').length;
