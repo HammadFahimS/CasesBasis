@@ -312,21 +312,29 @@ def test_bedside_order_reports_back_later_with_the_rt_and_a_card(db_path, monkey
 
 def test_arrival_is_announced_by_the_nurse_when_the_husband_walks_in(db_path, monkeypatch):
     """The 'her husband's just arrived' line fires when presence actually flips true,
-    via the cue-firing path (so both the turn and the live WS surface it)."""
+    via the cue-firing path (so both the turn and the live WS surface it). The gold
+    case's authored husband cue is that line: the nurse voices it, with no second
+    generic 'just arrived' alongside."""
     stub = sim_harness.StubLLM()
     sim_harness.install_stubs(monkeypatch, stub)
+    from backend import actor_voice
+    directions: list[str] = []
+
+    def capture(system: str, user: str) -> str:
+        directions.append(user)
+        return stub.voice_complete(system, user)
+
+    monkeypatch.setattr(actor_voice, "_complete", capture)
     from backend.voice_session import start_session
     session = start_session("myasthenic_crisis", "resident-1")
     session.engine.tick(305)                                      # husband arrives on the clock
 
     from backend.director import fire_cues
     rows = fire_cues(session)
-    arrivals = [r for r in rows if "arrived" in r["text"].lower()]
-    assert len(arrivals) == 1 and arrivals[0]["speaker"] == "nurse"
-    # A second pass never re-announces his arrival (it may carry an authored cue,
-    # but no second "arrived" line).
-    again = fire_cues(session)
-    assert all("arrived" not in r["text"].lower() for r in again)
+    assert len(rows) == 1 and rows[0]["speaker"] == "nurse"       # one line, from the nurse
+    assert len(directions) == 1 and "arrived" in directions[0].lower()
+    # A second pass never re-announces his arrival.
+    assert fire_cues(session) == []
 
 
 def test_s3_proceed_confirms_a_disposition_without_looping(db_path, monkeypatch):

@@ -223,13 +223,29 @@ def test_legacy_snapshot_without_summoned_actors_restores_to_empty():
 # ── Arrival announcements (C1) ────────────────────────────────────────────────
 
 def test_arrival_announces_once_when_a_timed_actor_enters():
-    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    # No authored cue references him → the generic arrival line is the announcement.
+    case = load_case("myasthenic_crisis").model_copy(deep=True)   # load_case is cached
+    for state in case.states:
+        state.cues = [c for c in state.cues if "husband" not in c.requires_present]
+    engine = SimulationEngine(case)
     assert engine.due_arrivals() == []                       # husband still en route at t=0
     engine.tick(305)                                         # clock passes his 300s arrival
     fired = engine.due_arrivals()
     assert [a["actor_id"] for a in fired] == ["husband"]     # announced the moment he arrives
     assert engine.due_arrivals() == []                       # exactly once
     assert "husband" in engine.run.announced_arrivals
+
+
+def test_pending_authored_cue_replaces_the_generic_arrival_line():
+    # The gold case has an unfired nurse cue requiring the husband, so that cue is
+    # the arrival line — fired the same tick he arrives, not after the linger.
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    engine.tick(305)
+    assert engine.due_arrivals() == []                       # generic line suppressed
+    assert "husband" in engine.run.announced_arrivals        # ...but recorded as announced
+    cues = engine.due_cues()
+    assert len(cues) == 1 and cues[0]["actor_id"] == "nurse"
+    assert "husband" in cues[0]["text"].lower()
 
 
 def test_summon_suppresses_the_duplicate_clock_arrival_announce():

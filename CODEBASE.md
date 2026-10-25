@@ -61,7 +61,7 @@ scripts/           Ops: seed, backup, migrate, reseed, build PTB-XL / CXR FAISS 
 tests/             pytest suite
   sim_scripts/     YAML live-sim scenarios (failing_* and gold_* runs for the harness)
 docs/              Architecture + the live-sim design docs (room-of-agents, session runtime, plan)
-design-samples/    HTML UI mockups (landing themes + the SimRoom dashboard variants)
+live-sim-ui-mehmood/  HTML UI mockups (SimRoom theme variants — exploratory, not wired)
 docker-compose.yml FalkorDB container
 environment.yml    Conda env spec   |   pyproject.toml  Package + clinical-case CLI entry point
 ```
