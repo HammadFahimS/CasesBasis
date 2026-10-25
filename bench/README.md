@@ -7,6 +7,7 @@ optimisation once the comparison says the shift is bigger than the noise.
 python -m bench.latency --label baseline            # full run (needs API keys)
 python -m bench.latency --pure-only                 # no network, no keys
 python -m bench.latency --label after-step-1 --n 15
+python -m bench.latency --label flash --probes tts_ttfb --tts-model eleven_flash_v2_5
 
 python -m bench.compare bench/results/<before>.json bench/results/<after>.json
 ```

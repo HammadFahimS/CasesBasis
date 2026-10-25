@@ -379,3 +379,22 @@ def test_patient_channel_honours_the_interpreters_beat_not_just_the_next_one(db_
     turn = sim_harness.run_turn(session, "Do you have any allergies?", forced_addressee="patient")
     assert turn.speaker == "patient"
     assert "past_history_allergy" in session.engine.run.revealed_history
+
+
+def test_turn_payload_hands_the_client_the_speakers_affect(db_path, monkeypatch):
+    """A breathless patient's turn carries ``affect`` (→ an Eleven v4 audio tag at
+    /tts) beside ``affect_stability``; the steady nurse's carries neither."""
+    stub = sim_harness.StubLLM()
+    sim_harness.install_stubs(monkeypatch, stub)
+    from backend.routers.voice import _run_grounded_turn
+    from backend.voice_session import start_session
+    session = start_session("myasthenic_crisis", "resident-1")
+    session.engine.run.vitals_override.update(oxygen_saturation=91)
+
+    patient = _run_grounded_turn(session, "How are you feeling?", forced_addressee="patient")
+    assert patient["speaker"] == "patient"
+    assert patient["affect"] == "breathless" and patient["affect_stability"] is not None
+
+    nurse = _run_grounded_turn(session, "Nurse, can you get a set of vitals?", forced_addressee="nurse")
+    assert nurse["speaker"] == "nurse"
+    assert "affect" not in nurse and "affect_stability" not in nurse

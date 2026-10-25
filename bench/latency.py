@@ -146,8 +146,8 @@ def run(
 
 def _tts_model() -> str:
     try:
-        from backend.voice_service import EL_TTS_MODEL
-        return EL_TTS_MODEL
+        from backend.voice_service import tts_model
+        return tts_model()
     except Exception:
         return "unknown"
 
@@ -171,7 +171,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--pure-only", action="store_true",
                     help="run only the no-network probes")
     ap.add_argument("--out", type=Path, default=None, help="explicit output path")
+    ap.add_argument("--tts-model", default="",
+                    help="ElevenLabs TTS model for this run (sets ELEVENLABS_TTS_MODEL), "
+                         "e.g. eleven_flash_v2_5 to compare against the v4 Turbo default")
     args = ap.parse_args(argv)
+    if args.tts_model:
+        import os
+        os.environ["ELEVENLABS_TTS_MODEL"] = args.tts_model
 
     if args.pure_only:
         names = list(PURE_PROBES)

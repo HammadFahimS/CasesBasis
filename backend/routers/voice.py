@@ -452,13 +452,16 @@ def _run_grounded_turn(session: Any, text: str, forced_addressee: str | None) ->
     payload["deferred"] = deferred
     # In-flight orders (scheduled, not yet back) so the room shows the holder working.
     payload["pending"] = pending_deferred(session)
-    # Hand the front-end this speaker's live EmotionalState stability (Phase 5) so the
-    # patient and a frightened relative are voiced with more affect; the professionals
-    # resolve to None and keep their configured default voice.
-    from backend.emotional_state import for_speaker
-    stability = for_speaker(turn.speaker, session.engine).stability
-    if stability is not None:
-        payload["affect_stability"] = stability
+    # Hand the front-end this speaker's live EmotionalState (Phase 5) so the patient
+    # and a frightened relative are voiced with more affect — a stability override
+    # plus the descriptor it echoes to /tts as ``affect`` (an Eleven v4 audio tag).
+    # The professionals resolve to neither and keep their configured default voice.
+    from backend.emotional_state import audio_tag, for_speaker
+    emotion = for_speaker(turn.speaker, session.engine)
+    if emotion.stability is not None:
+        payload["affect_stability"] = emotion.stability
+    if audio_tag(emotion.descriptor):
+        payload["affect"] = emotion.descriptor
     return payload
 
 
@@ -724,9 +727,9 @@ def api_voice_tts(body: dict[str, Any], request: Request):
     """Text-to-speech.
 
     When ElevenLabs is configured, streams PCM-16000 (``audio/pcm``) so the
-    browser can start playing after the first chunk (~75 ms).  Falls back to a
-    blocking Together/Cartesia MP3 response (``audio/mpeg``) when ElevenLabs is
-    absent.  ``speaker`` selects the voice; an explicit ``voice`` wins."""
+    browser can start playing after the first chunk.  Falls back to a blocking
+    MP3 response (``audio/mpeg``) when the stream comes back empty.  ``speaker``
+    selects the voice; an explicit ``voice`` wins; ``affect`` colours delivery."""
     require_resident(request)
     text = (body.get("text") or "").strip()
     if not text:
@@ -741,10 +744,10 @@ def api_voice_tts(body: dict[str, Any], request: Request):
             stability_override = float(raw_stab)
         except (TypeError, ValueError):
             pass
-    # Speech tier from the launch chooser: 'extreme' → ElevenLabs frontier model.
-    tier = body.get("tier")
-    # Expressiveness opt-in (Extreme only) → more emotional style on the frontier model.
-    expressive = bool(body.get("expressive"))
+    # The speaker's EmotionalState descriptor (from the turn payload's ``affect``) →
+    # an Eleven v4 audio tag. Legacy ``tier``/``expressive`` fields are ignored: every
+    # ElevenLabs line now rides the one expressive model.
+    affect = body.get("affect") if isinstance(body.get("affect"), str) else None
 
     from backend.voice_service import synthesize_stream
     from fastapi.responses import StreamingResponse
@@ -758,14 +761,14 @@ def api_voice_tts(body: dict[str, Any], request: Request):
     if (body.get("format") or "").lower() == "mp3":
         from backend.voice_service import synthesize
         try:
-            audio = synthesize(text, voice, stability_override=stability_override, tier=tier, expressive=expressive)
+            audio = synthesize(text, voice, stability_override=stability_override, affect=affect)
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"synthesis failed: {exc}")
         logger.info("[LATENCY] tts_mp3=%.0fms chars=%d speaker=%s",
                     (time.perf_counter() - t0) * 1000, len(text), speaker_label)
         return Response(content=audio, media_type="audio/mpeg")
 
-    media_type, chunks = synthesize_stream(text, voice, stability_override=stability_override, tier=tier, expressive=expressive)
+    media_type, chunks = synthesize_stream(text, voice, stability_override=stability_override, affect=affect)
 
     # ElevenLabs streams PCM-16000 (audio/pcm). Probe the first chunk before
     # committing to the content-type so a failed stream (auth/voice/quota error,
@@ -788,14 +791,14 @@ def api_voice_tts(body: dict[str, Any], request: Request):
     # PCM, so a single ElevenLabs hiccup doesn't silence a non-nurse speaker.
     if not first_chunk:
         logger.info("EL TTS stream empty for speaker=%s; retrying the stream once", speaker_label)
-        _media2, chunks2 = synthesize_stream(text, voice, stability_override=stability_override, tier=tier, expressive=expressive)
+        _media2, chunks2 = synthesize_stream(text, voice, stability_override=stability_override, affect=affect)
         first_chunk, chunks = _probe(chunks2)
 
     if not first_chunk:
         logger.info("EL TTS stream returned no bytes for speaker=%s; retrying non-streaming", speaker_label)
         from backend.voice_service import synthesize
         try:
-            audio = synthesize(text, voice, stability_override=stability_override, tier=tier, expressive=expressive)
+            audio = synthesize(text, voice, stability_override=stability_override, affect=affect)
             return Response(content=audio, media_type="audio/mpeg")
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"synthesis failed: {exc}")

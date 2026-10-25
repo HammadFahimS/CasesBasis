@@ -11,9 +11,9 @@ How it works:
 
 * :data:`RULES` is our curated lexicon — ``alias`` rules (a targeted respelling the
   engine speaks in place of the term). Alias rules are model-agnostic, so they apply on
-  the multilingual Flash v2.5 default *and* the ``eleven_v3`` frontier tier. (Phoneme/IPA
-  rules only work on ElevenLabs' English-only models, so we deliberately don't rely on
-  them here.)
+  the Eleven v4 Turbo default *and* a Flash v2.5 / ``eleven_v3`` rollback. (Phoneme
+  rules only work on ElevenLabs' v2 English models — v4 takes inline ``/IPA/`` instead —
+  so we deliberately don't rely on them here.)
 * :func:`tts_locators` returns the ``pronunciation_dictionary_locators`` list to attach to
   a TTS request. It resolves the dictionary once per process and caches it: an env-pinned
   id wins; otherwise we reuse an existing dictionary of the same name on the account;

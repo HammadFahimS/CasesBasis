@@ -7,7 +7,8 @@ little more worry as their loved one deteriorates; the professionals (EMS, RT,
 consultant, nurse) stay steady. This is the ``EmotionalState`` term of
 ``CharacterAgent = Constitution + CaseFlavor + EmotionalState + VoiceBinding``
 (see :mod:`backend.agents`): computed live from the engine each turn and handed to
-both the prompt (an `instruction`) and the voice (a `stability` override).
+both the prompt (an `instruction`) and the voice (a `stability` override, plus an
+Eleven v4 audio tag for the descriptor — see :func:`audio_tag`).
 
 The engine remains the single source of clinical truth — nothing here invents a
 value; it only reads vitals/state to colour *how* a line is said. The patient logic
@@ -148,6 +149,22 @@ _STEADY: dict[str, str] = {
     "head": "You are the head physician — calm, authoritative and brief.",
     "nurse": "",
 }
+
+
+# Eleven v4 audio tags voicing each descriptor — the expressive half of the voice
+# binding (stability is the other). Tags name a voice quality, not a sound, so v4
+# doesn't render them as a sound effect. Steady/composed/silent speakers get none.
+_AUDIO_TAGS: dict[str, str] = {
+    "breathless": "short of breath, frightened",
+    "drowsy": "weak, exhausted voice",
+    "worried": "worried",
+    "frightened": "frightened, voice tight with fear",
+}
+
+
+def audio_tag(descriptor: str | None) -> str | None:
+    """The audio tag for an EmotionalState descriptor (``None`` = speak untagged)."""
+    return _AUDIO_TAGS.get(descriptor or "")
 
 
 def for_speaker(speaker: str, engine) -> EmotionalState:

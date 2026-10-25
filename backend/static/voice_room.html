@@ -2651,7 +2651,7 @@
     if (reply && VOICE_BACKEND){            // speak only once a voice mode is chosen
       const native = VOICE_BACKEND === 'native' && recognition;
       if (native){ recoSuspend = true; try { recognition.stop(); } catch(e){} }
-      try { await playTTS(reply, speaker, data.affect_stability ?? null); } catch(e){}
+      try { await playTTS(reply, speaker, data.affect_stability ?? null, data.affect ?? null); } catch(e){}
       await deliverCues(data);              // room nudges after the reply
       if (native) recoSuspend = false;   // recognition only runs while Space is held
     }
@@ -2925,13 +2925,10 @@
   // The pre-load chooser (voice_launch.html) may already have picked it and
   // passed it as ?speech=native|models — honour that and skip the in-room modal.
   const _speechParam = new URLSearchParams(location.search).get('speech');
-  // 'extreme' rides the server-side ('models') backend but requests the frontier
-  // TTS model via VOICE_TIER, sent on each /api/voice/tts call.
-  const VOICE_TIER = (_speechParam === 'extreme') ? 'extreme' : (_speechParam === 'models' ? 'models' : 'native');
+  // A legacy ?speech=extreme link (the retired frontier tier) rides 'models': every
+  // ElevenLabs line now uses the one expressive model.
   let VOICE_BACKEND = (_speechParam === 'native' || _speechParam === 'models') ? _speechParam
                     : (_speechParam === 'extreme' ? 'models' : null);
-  // Expressiveness is Extreme-only (emotionally expressive frontier voices).
-  const VOICE_EXPRESSIVE = (new URLSearchParams(location.search).get('expressive') === '1') && VOICE_TIER === 'extreme';
   let recognition = null;    // native SpeechRecognition (native mode)
   let recoSuspend = false;   // pause native recognition while the reply speaks (no AEC)
 
@@ -3065,7 +3062,7 @@
   // behind it. Speech runs ~15 chars/s; v3 synthesis alone can take several seconds.
   const TTS_WATCHDOG = Object.assign({ base: 6000, perChar: 90, max: 60000 }, window.__ttsWatchdog || {});
   function ttsBudget(text){ return Math.min(TTS_WATCHDOG.max, TTS_WATCHDOG.base + TTS_WATCHDOG.perChar * ((text || '').length)); }
-  function playTTS(text, speaker, stabilityOverride){
+  function playTTS(text, speaker, stabilityOverride, affect){
     const gen = speakGen;
     const brief = speaker + ': ' + (text || '').slice(0, 80);
     const run = async () => {
@@ -3073,13 +3070,13 @@
       const t0 = performance.now(); let timer = 0;
       const guard = new Promise(resolve => { timer = setTimeout(() => { clientLog('tts.watchdog', Math.round(performance.now() - t0) + 'ms ' + brief); killCurrent(); resolve('watchdog'); }, ttsBudget(text)); });
       const attempt = async () => {
-        try { await _playTTSNow(text, speaker, stabilityOverride); return 'ok'; }
+        try { await _playTTSNow(text, speaker, stabilityOverride, affect); return 'ok'; }
         catch(e){
           if (e && e.name === 'AbortError') return 'aborted';
           clientLog('tts.error', ((e && e.message) || e) + ' ' + brief);
           // A real synthesis failure used to be swallowed by callers — retry once, then
           // surface it instead of looking like a dropped reply with no audio.
-          try { await _playTTSNow(text, speaker, stabilityOverride); return 'ok'; }
+          try { await _playTTSNow(text, speaker, stabilityOverride, affect); return 'ok'; }
           catch(e2){
             if (e2 && e2.name === 'AbortError') return 'aborted';
             clientLog('tts.failed', ((e2 && e2.message) || e2) + ' ' + brief);
@@ -3096,15 +3093,14 @@
     return speakChain;
   }
 
-  async function _playTTSNow(text, speaker, stabilityOverride){
+  async function _playTTSNow(text, speaker, stabilityOverride, affect){
     selectState('responding');
     if (VOICE_BACKEND === 'native') return speakNative(text, speaker);
     speakRoster(speaker, true, text);
     showCaption(text, speaker);
     const body = { text, speaker };
     if (stabilityOverride != null) body.stability = stabilityOverride;
-    if (VOICE_TIER === 'extreme') body.tier = 'extreme';
-    if (VOICE_EXPRESSIVE) body.expressive = true;
+    if (affect) body.affect = affect;     // EmotionalState descriptor → v4 audio tag
     // A stuck AudioContext (suspended/interrupted, resume never lands) cannot
     // schedule PCM; ask for a whole MP3 and play it through <audio> instead.
     if (!(await audioContextReady())) body.format = 'mp3';
@@ -3349,9 +3345,9 @@
     if (data.needs_addressee) safeUI('ask-mode', () => { pendingTranscript = said; enterAskMode(); });
     processing = false;
     if (!capturing) setMic(listening ? 'listen' : 'off');
-    // affect_stability is the speaker's live EmotionalState (Phase 5): set for the
-    // patient and a frightened relative, absent for the steady professionals.
-    if (reply){ try { await playTTS(reply, speaker, patientStability); } catch(e){} }
+    // affect_stability / affect are the speaker's live EmotionalState (Phase 5): set
+    // for the patient and a frightened relative, absent for the steady professionals.
+    if (reply){ try { await playTTS(reply, speaker, patientStability, data.affect ?? null); } catch(e){} }
     await deliverCues(data);
     safeUI('now', () => setNow(ROOM, 'listening for your next order…'));
     if (!capturing) setMic(listening ? 'listen' : 'off');

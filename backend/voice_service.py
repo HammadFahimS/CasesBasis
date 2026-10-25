@@ -4,11 +4,13 @@ Three independent legs:
 
 * STT  — ElevenLabs Scribe (``scribe_v1``, ``/v1/speech-to-text``)
 * LLM  — the app's existing provider (Cerebras) via ``agent_runtime.complete``
-* TTS  — ElevenLabs Flash v2.5 (``eleven_flash_v2_5``), streamed PCM-16000
+* TTS  — ElevenLabs Eleven v4 Turbo (``eleven_v4_turbo``), streamed PCM-16000
 
 ElevenLabs is the sole voice provider — it requires ``ELEVENLABS_API_KEY``.
-Flash v2.5 is used for every live turn: it targets ~75 ms latency and streams
-PCM the browser plays after the first chunk. There is no second voice vendor; a
+v4 Turbo is used for every live turn: it is real-time-rated (~100 ms inference),
+expressive through audio tags, billed at Flash rates, and streams PCM the browser
+plays after the first chunk. ``ELEVENLABS_TTS_MODEL`` overrides it (e.g. back to
+``eleven_flash_v2_5``) without a deploy. There is no second voice vendor; a
 voice failure surfaces as an error rather than silently degrading. (The LLM
 provider is separate and unaffected.)
 
@@ -56,8 +58,8 @@ def _http() -> httpx.Client:
                 _client = httpx.Client(timeout=_EL_TIMEOUT, limits=_EL_LIMITS)
     return _client
 
-EL_TTS_MODEL = "eleven_flash_v2_5"   # ~75 ms, low-latency; all live chatty turns
-EL_TTS_MODEL_V3 = "eleven_v3"        # expressive + audio tags; reserved for set-pieces
+EL_TTS_MODEL = "eleven_v4_turbo"     # real-time + audio tags, 0.5× credits; every live turn
+EL_TTS_MODEL_FLASH = "eleven_flash_v2_5"  # rollback via ELEVENLABS_TTS_MODEL (no audio tags)
 EL_STT_MODEL = "scribe_v1"           # ElevenLabs Scribe — blocking speech-to-text
 EL_STT_REALTIME_MODEL = "scribe_v2_realtime"  # Scribe v2 — streaming STT over WebSocket
 
@@ -211,15 +213,16 @@ def _el_tts_request(
     similarity: float,
     model_id: str,
     fmt: str,
-    style: float = 0.0,
+    tag: str | None = None,
 ) -> bytes:
     """ElevenLabs TTS request.
 
     ``fmt='mp3'`` maps to ``mp3_44100_128`` (128 kbps, 44.1 kHz). Pass a raw
-    ElevenLabs format string (e.g. ``pcm_16000``) directly for other formats."""
+    ElevenLabs format string (e.g. ``pcm_16000``) directly for other formats.
+    ``tag`` is a delivery audio tag (``breathless``) prefixed as ``[breathless]``."""
     from backend.speech_normalize import normalize_for_speech
     from backend.pronunciation import tts_locators
-    text = normalize_for_speech(text)
+    text = _tagged(normalize_for_speech(text), tag)
     output_format = "mp3_44100_128" if fmt == "mp3" else fmt
     body = {
         "text": text,
@@ -227,7 +230,6 @@ def _el_tts_request(
         "voice_settings": {
             "stability": stability,
             "similarity_boost": similarity,
-            "style": style,
             "use_speaker_boost": True,
         },
     }
@@ -256,7 +258,7 @@ def _el_tts_stream(
     stability: float,
     similarity: float,
     model_id: str = EL_TTS_MODEL,
-    style: float = 0.0,
+    tag: str | None = None,
 ):
     """Yield raw PCM-16000 chunks from ElevenLabs /stream endpoint.
 
@@ -264,14 +266,13 @@ def _el_tts_stream(
     these to Float32 AudioBuffers for scheduling on the Web Audio API timeline."""
     from backend.speech_normalize import normalize_for_speech
     from backend.pronunciation import tts_locators
-    text = normalize_for_speech(text)
+    text = _tagged(normalize_for_speech(text), tag)
     body = {
         "text": text,
         "model_id": model_id,
         "voice_settings": {
             "stability": stability,
             "similarity_boost": similarity,
-            "style": style,
             "use_speaker_boost": True,
         },
     }
@@ -313,56 +314,64 @@ def _resolve_el_voice(
     return voice_id, stability, similarity
 
 
-def _tts_model_for_tier(tier: str | None) -> str:
-    """Map a launch-chooser speech tier to an ElevenLabs TTS model.
-
-    ``extreme`` → the frontier expressive model (``eleven_v3``); everything else →
-    Flash v2.5, the low-latency default that carries every ordinary live turn."""
-    return EL_TTS_MODEL_V3 if (tier or "").lower() == "extreme" else EL_TTS_MODEL
+def tts_model() -> str:
+    """The ElevenLabs TTS model for every live line: ``ELEVENLABS_TTS_MODEL`` if set
+    (the no-deploy rollback, e.g. to ``eleven_flash_v2_5``), else v4 Turbo."""
+    return os.environ.get("ELEVENLABS_TTS_MODEL", "").strip() or EL_TTS_MODEL
 
 
-# Style boost applied when the resident opts into Expressiveness (Extreme tier only).
-# Higher `style` = more emotional variation/emphasis on the v3 frontier model.
-EL_EXPRESSIVE_STYLE = 0.6
+def supports_audio_tags(model_id: str) -> bool:
+    """Only the v3/v4 families interpret ``[tags]``; Flash would read them aloud."""
+    return model_id.startswith(("eleven_v3", "eleven_v4"))
 
 
-def _expressive_style(expressive: bool) -> float:
-    return EL_EXPRESSIVE_STYLE if expressive else 0.0
+def _tagged(text: str, tag: str | None) -> str:
+    return f"[{tag}] {text}" if tag and text else text
+
+
+def _affect_tag(affect: str | None, model_id: str) -> str | None:
+    """The audio tag for a speaker's EmotionalState descriptor, on a model that
+    honours tags. Looked up from a fixed table, so a client can only name a
+    descriptor — never inject tag text."""
+    if not affect or not supports_audio_tags(model_id):
+        return None
+    from backend.emotional_state import audio_tag
+    return audio_tag(affect)
 
 
 def synthesize_stream(
     text: str, voice: str | None = None, stability_override: float | None = None,
-    tier: str | None = None, expressive: bool = False,
+    affect: str | None = None,
 ) -> tuple[str, Any]:
     """Return ``('audio/pcm', PCM-16000 generator)`` for streaming TTS.
 
-    Voice is ElevenLabs only. ``tier='extreme'`` selects the frontier model
-    (``eleven_v3``); otherwise Flash v2.5, streamed PCM-16000 (the browser plays
-    after the first ~75 ms chunk). ``expressive`` (Extreme only) raises the style so
-    speech carries more emotion. Raises if ElevenLabs is unavailable; the room
-    surfaces the error rather than silently degrading to another provider."""
+    Voice is ElevenLabs only, on :func:`tts_model`, streamed PCM-16000 (the browser
+    plays after the first chunk). ``affect`` is the speaker's EmotionalState
+    descriptor; on a tag-capable model it becomes a delivery audio tag. Raises if
+    ElevenLabs is unavailable; the room surfaces the error rather than silently
+    degrading to another provider."""
     if not _elevenlabs_key():
         raise RuntimeError("ELEVENLABS_API_KEY is not set — voice requires ElevenLabs")
     voice_id, stability, similarity = _resolve_el_voice(voice, stability_override)
-    model_id = _tts_model_for_tier(tier)
-    style = _expressive_style(expressive)
-    return "audio/pcm", _el_tts_stream(text, voice_id, stability, similarity, model_id, style)
+    model_id = tts_model()
+    tag = _affect_tag(affect, model_id)
+    return "audio/pcm", _el_tts_stream(text, voice_id, stability, similarity, model_id, tag)
 
 
 def synthesize(text: str, voice: str | None = None, fmt: str = "mp3",
-               stability_override: float | None = None, tier: str | None = None,
-               expressive: bool = False) -> bytes:
-    """TTS: text -> audio bytes via ElevenLabs (~75 ms on Flash v2.5).
+               stability_override: float | None = None,
+               affect: str | None = None) -> bytes:
+    """TTS: text -> audio bytes via ElevenLabs on :func:`tts_model`.
 
     ``voice`` is an ElevenLabs voice_id; ``None`` resolves to the nurse default.
-    ``tier='extreme'`` uses the frontier model (``eleven_v3``); ``expressive`` raises
-    the style boost. Raises on ElevenLabs failure — there is no second provider."""
+    ``affect`` is as for :func:`synthesize_stream`. Raises on ElevenLabs failure —
+    there is no second provider."""
     if not _elevenlabs_key():
         raise RuntimeError("ELEVENLABS_API_KEY is not set — voice requires ElevenLabs")
     voice_id, stability, similarity = _resolve_el_voice(voice, stability_override)
-    model_id = _tts_model_for_tier(tier)
-    style = _expressive_style(expressive)
-    return _el_tts_request(text, voice_id, stability, similarity, model_id, fmt, style)
+    model_id = tts_model()
+    tag = _affect_tag(affect, model_id)
+    return _el_tts_request(text, voice_id, stability, similarity, model_id, fmt, tag)
 
 
 def nurse_reply(transcript: str, history: list[dict] | None = None) -> str:

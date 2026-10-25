@@ -111,16 +111,6 @@
   .opt .osub { font-size:11.5px; color:var(--ink-400); line-height:1.5; margin-top:2px; }
   .opt .check { position:absolute; top:13px; right:13px; width:18px; height:18px; border-radius:50%; border:1.5px solid var(--ink-600); display:grid; place-items:center; color:transparent; transition:all .2s; }
   .opt.sel .check { border-color:var(--teal-glow); background:var(--teal-glow); color:#04181c; }
-  .expr { margin-top:14px; display:flex; align-items:center; gap:14px; padding:13px 16px; border-radius:12px; border:1px solid var(--line); background:var(--panel-2); transition:opacity .2s; }
-  .expr.disabled { opacity:0.4; }
-  .expr.disabled .expr-sw { cursor:not-allowed; }
-  .expr .expr-txt { flex:1; }
-  .expr .expr-title { font-size:13px; font-weight:700; color:var(--ink-50); display:flex; align-items:center; gap:8px; }
-  .expr .expr-sub { font-size:11px; color:var(--ink-400); line-height:1.5; margin-top:2px; }
-  .expr-sw { width:42px; height:24px; border-radius:20px; background:var(--ink-700); border:1px solid var(--line); position:relative; cursor:pointer; flex-shrink:0; transition:background .2s; }
-  .expr-sw::after { content:''; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:var(--ink-300); transition:all .2s; }
-  .expr.on .expr-sw { background:var(--teal-deep); }
-  .expr.on .expr-sw::after { left:20px; background:var(--teal-glow); }
 
   /* start row */
   .foot { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:26px; }
@@ -136,9 +126,6 @@
   }
   .start:hover { filter:brightness(1.06); }
   .start:active { transform:translateY(1px); }
-
-  /* golden lightning bolt beside the Extreme label */
-  .ott .bolt { color:#f2c94c; flex-shrink:0; filter:drop-shadow(0 0 4px rgba(242,201,76,0.65)); }
 
   @media (max-width:560px){
     .opts { grid-template-columns:1fr; }
@@ -245,22 +232,8 @@
       <span class="check"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 4.5"/></svg></span>
       <span class="oic"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8c1.6-3.6 10.4-3.6 12 0M2 8c1.6 3.6 10.4 3.6 12 0"/><circle cx="8" cy="8" r="2"/></svg></span>
       <span class="ott">Speech models <span class="otag cost">Costly</span></span>
-      <span class="osub">ElevenLabs premium voice AI models. Best accuracy for clinical terms.</span>
+      <span class="osub">ElevenLabs Eleven v4 Turbo — expressive, low-latency voices that carry the patient's distress. Best accuracy for clinical terms.</span>
     </button>
-    <button type="button" class="opt" data-speech="extreme">
-      <span class="check"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 4.5"/></svg></span>
-      <span class="oic"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5l1.9 4.2 4.6.5-3.4 3.1 1 4.5L8 11.6 3.9 13.8l1-4.5L1.5 6.2l4.6-.5z"/></svg></span>
-      <span class="ott">Extreme <svg class="bolt" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M9.3 1.2L3.3 9.2h3.4l-1 5.6 6-8.1H8.3z"/></svg> <span class="otag cost">Frontier</span></span>
-      <span class="osub">Uses ElevenLabs frontier models.</span>
-    </button>
-  </div>
-
-  <div class="expr disabled" id="exprRow">
-    <div class="expr-txt">
-      <div class="expr-title">Expressiveness <span class="otag cost">Frontier</span></div>
-      <div class="expr-sub">Emotionally expressive, context-aware voices. Available with Extreme.</div>
-    </div>
-    <div class="expr-sw" id="exprSw" role="switch" aria-checked="false" tabindex="0"></div>
   </div>
 
   <div class="foot">
@@ -291,7 +264,6 @@
   // ── state ──
   let ui = 'functional';      // default per product spec
   let speech = 'native';      // default speech mode (zero cost); user can switch
-  let expressive = false;     // Extreme-only: emotionally expressive voices
 
   // ── UI toggle (corner) ──
   const uiSeg = document.getElementById('uiSeg');
@@ -302,29 +274,11 @@
 
   // ── speech model cards ──
   const speechOpts = document.getElementById('speechOpts');
-  const exprRow = document.getElementById('exprRow');
-  const exprSw = document.getElementById('exprSw');
-  function syncExpr(){
-    const isExtreme = (speech === 'extreme');
-    exprRow.classList.toggle('disabled', !isExtreme);
-    if (!isExtreme){ expressive = false; exprRow.classList.remove('on'); exprSw.setAttribute('aria-checked', 'false'); }
-  }
-  function toggleExpr(){
-    if (speech !== 'extreme') return;   // only clickable under Extreme
-    expressive = !expressive;
-    exprRow.classList.toggle('on', expressive);
-    exprSw.setAttribute('aria-checked', String(expressive));
-  }
-  exprSw.addEventListener('click', toggleExpr);
-  exprSw.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggleExpr(); } });
-
   speechOpts.querySelectorAll('.opt').forEach(o => o.addEventListener('click', () => {
     speech = o.dataset.speech;
     speechOpts.querySelectorAll('.opt').forEach(x => x.classList.toggle('sel', x===o));
-    syncExpr();
     document.getElementById('footNote').textContent =
-      speech === 'extreme' ? 'Extreme uses ElevenLabs frontier models — highest fidelity, higher latency and cost. You can refresh to change any of this.'
-      : speech === 'models' ? 'Speech models use ElevenLabs premium voice AI (paid). You can refresh to change any of this.'
+      speech === 'models' ? 'Speech models use ElevenLabs Eleven v4 Turbo (paid). You can refresh to change any of this.'
       : "Native uses your device's speech engine — no key required. You can refresh to change any of this.";
   }));
 
@@ -381,7 +335,6 @@
     const p = new URLSearchParams();
     p.set('ui', ui);
     p.set('speech', speech);
-    if (expressive && speech === 'extreme') p.set('expressive', '1');
     if (caseId) p.set('case', caseId);
     if (sessionId) p.set('session', sessionId);
     const dest = '/simulator/voice-room?' + p.toString();

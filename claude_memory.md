@@ -606,7 +606,7 @@ for a full step-by-step run that exercises every feature.
   an authored history beat without inventing), `voice_bedside` (RT reports VC/NIF), `voice_cue` (turns
   an authored cue stage-direction into a natural spoken prompt). Distinct from `consult_voice` (a
   specialist who *advises*).
-- TTS via `voice_service.synthesize` (Cartesia Sonic voice names; falls back to nurse voice if rejected).
+- TTS via `voice_service.synthesize` / `synthesize_stream` — ElevenLabs **Eleven v4 Turbo** (`eleven_v4_turbo`) for every line; `ELEVENLABS_TTS_MODEL` rolls back (e.g. `eleven_flash_v2_5`). Expressiveness = the speaker's `EmotionalState`: a stability override **plus** an audio tag (`emotional_state.audio_tag`, e.g. `[short of breath, frightened]`) — the turn payload carries `affect`, the client echoes it to `/api/voice/tts`, the server maps it via a fixed table (tags only on v3/v4 models). The old Extreme tier + Expressiveness toggle are gone (`?speech=extreme` → models).
 
 ### Gating & the medication mechanic (myasthenic crisis specifics)
 - **Real-time gates:** results return only after wall-clock delay — **VC/NIF 60s · VBG 120s · husband

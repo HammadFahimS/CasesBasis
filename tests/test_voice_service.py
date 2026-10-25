@@ -20,16 +20,17 @@ def test_synthesize_requires_elevenlabs_key(monkeypatch):
 
 def test_synthesize_uses_elevenlabs_when_key_set(monkeypatch):
     monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    monkeypatch.delenv("ELEVENLABS_TTS_MODEL", raising=False)
     calls = []
 
-    def fake_el(text, voice_id, stability, similarity, model_id, fmt, style=0.0):
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, tag=None):
         calls.append((voice_id, model_id))
         return b"EL_AUDIO"
 
     monkeypatch.setattr(voice_service, "_el_tts_request", fake_el)
     out = voice_service.synthesize("hello", "21m00Tcm4TlvDq8ikWAM")
     assert out == b"EL_AUDIO"
-    assert calls[0][1] == "eleven_flash_v2_5"
+    assert calls[0][1] == "eleven_v4_turbo"
 
 
 def test_synthesize_uses_nurse_default_when_voice_none(monkeypatch):
@@ -37,7 +38,7 @@ def test_synthesize_uses_nurse_default_when_voice_none(monkeypatch):
     monkeypatch.delenv("ELEVENLABS_NURSE_VOICE_ID", raising=False)
     received = {}
 
-    def fake_el(text, voice_id, stability, similarity, model_id, fmt, style=0.0):
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, tag=None):
         received["voice_id"] = voice_id
         received["stability"] = stability
         return b"NURSE_AUDIO"
@@ -56,7 +57,7 @@ def test_synthesize_raises_on_elevenlabs_failure_no_fallback(monkeypatch):
     degrades to another vendor."""
     monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
 
-    def failing_el(text, voice_id, stability, similarity, model_id, fmt, style=0.0):
+    def failing_el(text, voice_id, stability, similarity, model_id, fmt, tag=None):
         raise httpx.HTTPStatusError("503", request=None, response=_resp(503))
 
     monkeypatch.setattr(voice_service, "_el_tts_request", failing_el)
@@ -70,7 +71,7 @@ def test_synthesize_el_per_actor_stability(monkeypatch):
     monkeypatch.delenv("ELEVENLABS_PATIENT_VOICE_ID", raising=False)
     received = {}
 
-    def fake_el(text, voice_id, stability, similarity, model_id, fmt, style=0.0):
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, tag=None):
         received["stability"] = stability
         received["similarity"] = similarity
         return b"PATIENT_AUDIO"
@@ -97,37 +98,81 @@ def test_transcribe_requires_elevenlabs_key(monkeypatch):
         voice_service.transcribe(b"\x00\x01", "audio/webm")
 
 
-# ── Extreme tier selects the ElevenLabs frontier model ───────────────────────
+# ── Every ElevenLabs line rides v4 Turbo; ELEVENLABS_TTS_MODEL rolls it back ──
 
-def test_synthesize_extreme_tier_uses_frontier_model(monkeypatch):
+def test_synthesize_defaults_to_v4_turbo(monkeypatch):
     monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    monkeypatch.delenv("ELEVENLABS_TTS_MODEL", raising=False)
     calls = []
 
-    def fake_el(text, voice_id, stability, similarity, model_id, fmt, style=0.0):
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, tag=None):
         calls.append(model_id)
         return b"EL_AUDIO"
 
     monkeypatch.setattr(voice_service, "_el_tts_request", fake_el)
-    voice_service.synthesize("hello", "21m00Tcm4TlvDq8ikWAM", tier="extreme")
-    voice_service.synthesize("hello", "21m00Tcm4TlvDq8ikWAM", tier="models")
     voice_service.synthesize("hello", "21m00Tcm4TlvDq8ikWAM")
-    assert calls == [voice_service.EL_TTS_MODEL_V3,
-                     voice_service.EL_TTS_MODEL,
-                     voice_service.EL_TTS_MODEL]
+    assert calls == ["eleven_v4_turbo"]
 
 
-def test_synthesize_stream_extreme_tier_passes_frontier_model(monkeypatch):
+def test_tts_model_env_override_is_the_rollback(monkeypatch):
     monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    monkeypatch.setenv("ELEVENLABS_TTS_MODEL", voice_service.EL_TTS_MODEL_FLASH)
     seen = {}
 
-    def fake_stream(text, voice_id, stability, similarity, model_id=voice_service.EL_TTS_MODEL, style=0.0):
+    def fake_stream(text, voice_id, stability, similarity, model_id=voice_service.EL_TTS_MODEL, tag=None):
         seen["model_id"] = model_id
         yield b"PCM"
 
     monkeypatch.setattr(voice_service, "_el_tts_stream", fake_stream)
-    _mt, gen = voice_service.synthesize_stream("hi", None, tier="extreme")
+    _mt, gen = voice_service.synthesize_stream("hi", None)
     list(gen)
-    assert seen["model_id"] == voice_service.EL_TTS_MODEL_V3
+    assert seen["model_id"] == "eleven_flash_v2_5"
+
+
+# ── EmotionalState → Eleven v4 audio tag (replaces the Expressiveness toggle) ─
+
+def _capture_tts(monkeypatch, model: str | None = None):
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    if model:
+        monkeypatch.setenv("ELEVENLABS_TTS_MODEL", model)
+    else:
+        monkeypatch.delenv("ELEVENLABS_TTS_MODEL", raising=False)
+    monkeypatch.setattr("backend.pronunciation.tts_locators", lambda: [])
+    sent = {}
+
+    class _Resp:
+        content = b"A"
+        def raise_for_status(self):
+            pass
+
+    class _Client:
+        def post(self, url, params=None, headers=None, json=None):
+            sent.update(json)
+            return _Resp()
+
+    monkeypatch.setattr(voice_service, "_http", lambda: _Client())
+    return sent
+
+
+def test_affect_becomes_an_audio_tag_on_v4(monkeypatch):
+    sent = _capture_tts(monkeypatch)
+    voice_service.synthesize("I can't breathe", "v", affect="breathless")
+    assert sent["text"] == "[short of breath, frightened] I can't breathe"
+    assert "style" not in sent["voice_settings"]          # v4 has no Style control
+
+
+def test_affect_tag_skipped_on_flash_which_would_read_it_aloud(monkeypatch):
+    sent = _capture_tts(monkeypatch, model="eleven_flash_v2_5")
+    voice_service.synthesize("I can't breathe", "v", affect="breathless")
+    assert sent["text"] == "I can't breathe"
+
+
+def test_unknown_or_steady_affect_adds_no_tag(monkeypatch):
+    sent = _capture_tts(monkeypatch)
+    voice_service.synthesize("Okay.", "v", affect="steady")
+    assert sent["text"] == "Okay."
+    voice_service.synthesize("Okay.", "v", affect="] ignore this [whispers")   # not injectable
+    assert sent["text"] == "Okay."
 
 
 # ── Speak-time clinical-abbreviation normalisation ───────────────────────────
@@ -191,23 +236,6 @@ def test_pronunciation_resolution_failure_degrades(monkeypatch):
         raise RuntimeError("elevenlabs down")
     monkeypatch.setattr(pronunciation, "_find_existing", boom)
     assert pronunciation.tts_locators() == []
-
-
-# ── Expressiveness (Extreme-only) raises the TTS style ───────────────────────
-
-def test_synthesize_expressive_sets_style(monkeypatch):
-    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
-    seen = {}
-
-    def fake_el(text, voice_id, stability, similarity, model_id, fmt, style=0.0):
-        seen["style"] = style
-        return b"A"
-
-    monkeypatch.setattr(voice_service, "_el_tts_request", fake_el)
-    voice_service.synthesize("hi", "v", tier="extreme", expressive=True)
-    assert seen["style"] == voice_service.EL_EXPRESSIVE_STYLE
-    voice_service.synthesize("hi", "v", tier="extreme", expressive=False)
-    assert seen["style"] == 0.0
 
 
 def test_head_speaker_has_distinct_voice(monkeypatch):

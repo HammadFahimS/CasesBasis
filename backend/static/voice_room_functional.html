@@ -974,12 +974,10 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   // ── launch config from the chooser popup ──
   const _qs = new URLSearchParams(location.search);
   window.SIM_CONFIG = { caseId: _qs.get('case'), sessionId: (_qs.get('session') || _qs.get('resume')), speech: _qs.get('speech') || 'native' };
-  // 'models' and 'extreme' both use the server-side ElevenLabs backend; 'extreme'
-  // additionally requests the frontier model via VOICE_TIER (sent on every TTS call).
-  const VOICE_TIER = window.SIM_CONFIG.speech;   // 'native' | 'models' | 'extreme'
-  const VOICE_BACKEND = (VOICE_TIER === 'models' || VOICE_TIER === 'extreme') ? 'models' : 'native';
-  // Expressiveness is Extreme-only (emotionally expressive frontier voices).
-  const VOICE_EXPRESSIVE = (_qs.get('expressive') === '1') && VOICE_TIER === 'extreme';
+  // A legacy ?speech=extreme link (the retired frontier tier) is 'models': every
+  // ElevenLabs line now uses the one expressive model.
+  const VOICE_TIER = (window.SIM_CONFIG.speech === 'extreme') ? 'models' : window.SIM_CONFIG.speech;   // 'native' | 'models'
+  const VOICE_BACKEND = (VOICE_TIER === 'models') ? 'models' : 'native';
 
   // X-ray silhouette (inlined so the page is self-contained)
   const SILHOUETTE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600" width="400" height="600"><g fill="#e2e8f0" stroke="#94a3b8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"><ellipse cx="200" cy="68" rx="36" ry="42"/><path d="M 182 102 C 182 118, 178 128, 176 138 L 224 138 C 222 128, 218 118, 218 102 Z"/><path d="M 176 138 C 158 142, 138 148, 122 158 C 110 165, 102 176, 96 192 C 90 212, 86 236, 82 264 C 78 292, 74 318, 70 346 C 68 358, 70 366, 78 370 C 86 372, 92 368, 94 358 C 98 336, 104 310, 110 286 C 112 278, 116 274, 120 274 C 122 290, 122 308, 122 326 L 122 360 C 122 392, 124 424, 128 458 C 130 484, 134 510, 138 538 C 140 558, 144 572, 152 578 C 162 584, 174 580, 176 568 C 176 548, 174 524, 174 500 C 174 472, 176 444, 180 416 C 184 396, 190 380, 196 372 C 200 368, 200 368, 204 372 C 210 380, 216 396, 220 416 C 224 444, 226 472, 226 500 C 226 524, 224 548, 224 568 C 226 580, 238 584, 248 578 C 256 572, 260 558, 262 538 C 266 510, 270 484, 272 458 C 276 424, 278 392, 278 360 L 278 326 C 278 308, 278 290, 280 274 C 284 274, 288 278, 290 286 C 296 310, 302 336, 306 358 C 308 368, 314 372, 322 370 C 330 366, 332 358, 330 346 C 326 318, 322 292, 318 264 C 314 236, 310 212, 304 192 C 298 176, 290 165, 278 158 C 262 148, 242 142, 224 138 Z"/></g></svg>';
@@ -1643,7 +1641,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     safeUI('engine', () => applyEngine(data));
     if (data.needs_addressee) safeUI('chips', () => { pendingTranscript = said; showAddrChips(); });
     processing = false;
-    if (reply){ try { await playTTS(reply, speaker, stability); } catch(e){} }
+    if (reply){ try { await playTTS(reply, speaker, stability, data.affect ?? null); } catch(e){} }
     safeUI('state', () => setState(listening ? 'listening' : 'idle'));
     await deliverCues(data); await deliverDeferred(data);
     if (pendingEnd){ pendingEnd = false; concludeCase(); }
@@ -1776,7 +1774,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   // behind it. Speech runs ~15 chars/s; v3 synthesis alone can take several seconds.
   const TTS_WATCHDOG = Object.assign({ base: 6000, perChar: 90, max: 60000 }, window.__ttsWatchdog || {});
   function ttsBudget(text){ return Math.min(TTS_WATCHDOG.max, TTS_WATCHDOG.base + TTS_WATCHDOG.perChar * ((text||'').length)); }
-  function playTTS(text, speaker, stability){
+  function playTTS(text, speaker, stability, affect){
     const gen = speakGen;
     const brief = speaker + ': ' + (text||'').slice(0, 80);
     const run = async () => {
@@ -1784,11 +1782,11 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
       const t0 = performance.now(); let timer = 0;
       const guard = new Promise(resolve => { timer = setTimeout(() => { clientLog('tts.watchdog', Math.round(performance.now()-t0) + 'ms ' + brief); killCurrent(); resolve('watchdog'); }, ttsBudget(text)); });
       const attempt = async () => {
-        try { await _playTTSNow(text, speaker, stability); return 'ok'; }
+        try { await _playTTSNow(text, speaker, stability, affect); return 'ok'; }
         catch(e){
           if (e && e.name==='AbortError') return 'aborted';
           clientLog('tts.error', ((e && e.message) || e) + ' ' + brief);
-          try { await _playTTSNow(text, speaker, stability); return 'ok'; }
+          try { await _playTTSNow(text, speaker, stability, affect); return 'ok'; }
           catch(e2){ if (e2 && e2.name==='AbortError') return 'aborted'; clientLog('tts.failed', ((e2 && e2.message) || e2) + ' ' + brief); return 'failed'; }
         }
       };
@@ -1798,15 +1796,14 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
     };
     speakChain = speakChain.then(run, run); return speakChain;
   }
-  async function _playTTSNow(text, speaker, stability){
+  async function _playTTSNow(text, speaker, stability, affect){
     setState('responding');
     // Muted: no audio, but hold the "speaking" beat so the bubble/transcript stay
     // readable (roughly speech-paced), then let the caller clear it.
     if (audioMuted){ await new Promise(r => setTimeout(r, Math.min(3500, 350 + (text||'').length * 38))); return; }
     if (VOICE_BACKEND === 'native') return speakNative(text, speaker);
     const body = { text, speaker }; if (stability != null) body.stability = stability;
-    if (VOICE_TIER === 'extreme') body.tier = 'extreme';
-    if (VOICE_EXPRESSIVE) body.expressive = true;
+    if (affect) body.affect = affect;     // EmotionalState descriptor → v4 audio tag
     // A stuck AudioContext (suspended/interrupted, resume never lands) cannot
     // schedule PCM; ask for a whole MP3 and play it through <audio> instead.
     if (!(await audioContextReady())) body.format = 'mp3';
@@ -2363,7 +2360,7 @@ Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + E
   function openSettings(){
     const html =
       '<div class="st-row"><div class="lab"><b>Speech input</b><i>Switching reloads the room and resumes this case.</i></div>' +
-        '<div class="st-seg" id="stSpeech"><button data-v="native" class="' + (VOICE_TIER==='native' ? 'on' : '') + '">Browser</button><button data-v="models" class="' + (VOICE_TIER==='models' ? 'on' : '') + '">Voice models</button><button data-v="extreme" class="' + (VOICE_TIER==='extreme' ? 'on' : '') + '">Extreme</button></div></div>' +
+        '<div class="st-seg" id="stSpeech"><button data-v="native" class="' + (VOICE_TIER==='native' ? 'on' : '') + '">Browser</button><button data-v="models" class="' + (VOICE_TIER==='models' ? 'on' : '') + '">Voice models</button></div></div>' +
       '<div class="st-row"><div class="lab"><b>Room audio</b><i>Play the room’s voices aloud.</i></div>' +
         '<div class="st-switch ' + (audioMuted ? '' : 'on') + '" id="stAudioSw" role="switch" aria-checked="' + (!audioMuted) + '"></div></div>' +
       '<div class="st-row"><div class="lab"><b>Talking</b><i>Hold Space or the orb while you speak; release to send.</i></div></div>';

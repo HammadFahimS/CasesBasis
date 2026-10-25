@@ -6,7 +6,7 @@ states sound right without naming them in code."""
 
 from __future__ import annotations
 
-from backend.emotional_state import for_speaker, is_silent, severity
+from backend.emotional_state import audio_tag, for_speaker, is_silent, severity
 from backend.simulated_case_store import load_case
 from backend.simulation_engine import SimulationEngine
 
@@ -87,3 +87,24 @@ def test_severity_rises_with_acuity():
     mid = severity(eng)
     eng.goto("pea_arrest")
     assert base < mid < severity(eng) == 1.0
+
+
+# ── Eleven v4 audio tags: the expressive half of the voice binding ───────────
+
+def test_distress_is_tagged_and_calm_speech_is_not():
+    eng = _engine()
+    assert audio_tag(for_speaker("patient", eng).descriptor) is None      # steady
+    _set(eng, oxygen_saturation=91)
+    assert audio_tag(for_speaker("patient", eng).descriptor)              # breathless
+    _set(eng, oxygen_saturation=84)
+    assert audio_tag(for_speaker("patient", eng).descriptor)              # drowsy
+    for kind in ("ems", "rt", "consult", "nurse", "head"):
+        assert audio_tag(for_speaker(kind, eng).descriptor) is None       # professionals
+
+
+def test_audio_tags_are_bare_voice_directions():
+    # The tag is wrapped in [...] at TTS time; a bracket inside would break it.
+    for d in ("breathless", "drowsy", "worried", "frightened"):
+        tag = audio_tag(d)
+        assert tag and "[" not in tag and "]" not in tag
+    assert audio_tag(None) is None and audio_tag("silent") is None
