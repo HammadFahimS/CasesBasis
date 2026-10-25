@@ -3123,17 +3123,19 @@
       hideCaption();
     }
   }
-  // Whole-file playback through <audio> (MP3 from the server, or the fallback above).
+  // Whole-file playback through <audio> (the MP3 fallback above). An element that
+  // cannot decode or start rejects, so playTTS retries and reports the line instead
+  // of counting silence as played; killCurrent (barge-in/watchdog) still resolves.
   async function _playBlob(res, speaker){
     const url = URL.createObjectURL(await res.blob());
     const audio = new Audio(url); curAudio = audio;
-    await new Promise(resolve => {
+    await new Promise((resolve, reject) => {
       playResolve = resolve;
-      const done = () => { clearSpeaking(); hideCaption(); URL.revokeObjectURL(url); if (curAudio===audio) curAudio=null; if (playResolve){ playResolve=null; resolve(); } };
-      audio.onended = done;
-      audio.onerror = () => { clientLog('tts.audio_error', speaker + ' code=' + ((audio.error && audio.error.code) || '?')); done(); };
-      let p; try { p = audio.play(); } catch(e){ clientLog('tts.play_threw', speaker + ' ' + ((e && e.name) || e)); done(); return; }
-      if (p && p.catch) p.catch(e => { clientLog('tts.play_rejected', speaker + ' ' + ((e && e.name) || e)); done(); });
+      const done = (err) => { clearSpeaking(); hideCaption(); URL.revokeObjectURL(url); if (curAudio===audio) curAudio=null; if (playResolve){ playResolve=null; err ? reject(err) : resolve(); } };
+      audio.onended = () => done();
+      audio.onerror = () => { const code = (audio.error && audio.error.code) || '?'; clientLog('tts.audio_error', speaker + ' code=' + code); done(new Error('audio element error code=' + code)); };
+      let p; try { p = audio.play(); } catch(e){ clientLog('tts.play_threw', speaker + ' ' + ((e && e.name) || e)); done(e); return; }
+      if (p && p.catch) p.catch(e => { clientLog('tts.play_rejected', speaker + ' ' + ((e && e.name) || e)); done(e); });
     });
   }
   // The shared AudioContext must be running to schedule PCM. Resume it with a

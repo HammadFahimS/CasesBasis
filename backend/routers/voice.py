@@ -726,10 +726,11 @@ def api_voice_session_delete(session_id: str, request: Request) -> dict[str, Any
 def api_voice_tts(body: dict[str, Any], request: Request):
     """Text-to-speech.
 
-    When ElevenLabs is configured, streams PCM-16000 (``audio/pcm``) so the
-    browser can start playing after the first chunk.  Falls back to a blocking
-    MP3 response (``audio/mpeg``) when the stream comes back empty.  ``speaker``
-    selects the voice; an explicit ``voice`` wins; ``affect`` colours delivery."""
+    Streams ElevenLabs PCM-16000 (``audio/pcm``) so the browser can start playing
+    after the first chunk; ``format="mp3"`` returns one whole MP3 instead (for a
+    browser whose AudioContext will not run). A synthesis failure is a 502.
+    ``speaker`` selects the voice; an explicit ``voice`` wins; ``affect`` colours
+    delivery."""
     require_resident(request)
     text = (body.get("text") or "").strip()
     if not text:
@@ -770,52 +771,22 @@ def api_voice_tts(body: dict[str, Any], request: Request):
 
     media_type, chunks = synthesize_stream(text, voice, stability_override=stability_override, affect=affect)
 
-    # ElevenLabs streams PCM-16000 (audio/pcm). Probe the first chunk before
-    # committing to the content-type so a failed stream (auth/voice/quota error,
-    # which comes back empty) doesn't send an empty body the browser silently
-    # ignores — and so we can recover via a single non-streaming retry.
-    def _probe(gen):
-        try:
-            return next(gen), gen
-        except StopIteration:
-            return b"", gen
-        except Exception as exc:
-            logger.warning("ElevenLabs TTS failed at stream start: %s", exc)
-            return b"", gen
-
-    first_chunk, chunks = _probe(chunks)
-
-    # A cold/less-used agent voice (RT, family, the patient) intermittently returns
-    # an empty PCM stream on first hit while the warm nurse voice succeeds — which
-    # reads as "the agents have no TTS". Re-open the stream once before giving up on
-    # PCM, so a single ElevenLabs hiccup doesn't silence a non-nurse speaker.
+    # Probe the first chunk before committing to a 200: a stream that fails at the
+    # start (auth / voice / quota / concurrency) or comes back empty is a 502 naming
+    # the cause, and the client retries once and surfaces it. The response is served
+    # as the PCM it asked for (output_format is pinned in the query string) — never
+    # re-labelled by sniffing bytes: PCM whose first sample is -1 starts ``FF FF``,
+    # an MP3 frame sync, and served as audio/mpeg it played silently (2026-10-25).
+    try:
+        first_chunk = next(chunks, b"")
+        why = "empty stream"
+    except Exception as exc:
+        first_chunk, why = b"", str(exc)
     if not first_chunk:
-        logger.info("EL TTS stream empty for speaker=%s; retrying the stream once", speaker_label)
-        _media2, chunks2 = synthesize_stream(text, voice, stability_override=stability_override, affect=affect)
-        first_chunk, chunks = _probe(chunks2)
-
-    if not first_chunk:
-        logger.info("EL TTS stream returned no bytes for speaker=%s; retrying non-streaming", speaker_label)
-        from backend.voice_service import synthesize
-        try:
-            audio = synthesize(text, voice, stability_override=stability_override, affect=affect)
-            return Response(content=audio, media_type="audio/mpeg")
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"synthesis failed: {exc}")
-
-    # Defensive: ElevenLabs only returns MP3 here if output_format ever regresses
-    # to the body (it belongs in the query string). MP3 bytes carry an ID3 / frame
-    # -sync header; if the browser plays those through the PCM decoder it's loud
-    # static, so detect the real format and serve the correct content-type.
-    is_mp3 = first_chunk[:3] == b"ID3" or (
-        len(first_chunk) >= 2 and first_chunk[0] == 0xFF and (first_chunk[1] & 0xE0) == 0xE0
-    )
-    media = "audio/mpeg" if is_mp3 else "audio/pcm"
-    if is_mp3:
-        logger.warning("EL TTS returned MP3 (not PCM) for speaker=%s; serving as audio/mpeg", speaker_label)
-    else:
-        logger.info("[LATENCY] tts_first=%.0fms chars=%d speaker=%s",
-                    (time.perf_counter() - t0) * 1000, len(text), speaker_label)
+        logger.warning("EL TTS produced no audio for speaker=%s: %s", speaker_label, why)
+        raise HTTPException(status_code=502, detail=f"synthesis failed: {why}")
+    logger.info("[LATENCY] tts_first=%.0fms chars=%d speaker=%s",
+                (time.perf_counter() - t0) * 1000, len(text), speaker_label)
 
     def _gen():
         try:
@@ -823,7 +794,7 @@ def api_voice_tts(body: dict[str, Any], request: Request):
             yield from chunks
         except Exception as exc:
             logger.warning("ElevenLabs stream TTS error mid-stream: %s", exc)
-    return StreamingResponse(_gen(), media_type=media)
+    return StreamingResponse(_gen(), media_type=media_type)
 
 
 @router.post("/api/voice/client-log")

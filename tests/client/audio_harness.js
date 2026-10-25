@@ -4,7 +4,7 @@
 const sb = require('./sandbox').create(process.argv[2], {
   globals: { __ttsWatchdog: { base: 300, perChar: 0, max: 300 } },   // fast watchdog for the test
 });
-const { calls, fetchLog, FakeWS, FakeAudioContext, routes, responses, find, tick, assert } = sb;
+const { calls, fetchLog, FakeWS, FakeAudioContext, FakeAudio, routes, responses, find, tick, assert } = sb;
 const MODE = process.argv[3] || 'functional';
 
 const ttsPosts = () => fetchLog.filter(f => /\/api\/voice\/tts/.test(f[0]));
@@ -79,7 +79,25 @@ routes.turn = async () => responses.json({ reply, speaker: 'nurse' });
   assert(calls.filter(c => c[0] === 'audio.play').length === before + 1, 'the MP3 is played through <audio>');
   ctx.state = 'running'; FakeAudioContext.resumeHangs = false; routes.tts = async () => responses.pcm();
 
-  // 6. page errors reach the log too
+  // 6. an <audio> line that cannot decode (2026-10-25: raw PCM served as audio/mpeg →
+  //    MEDIA_ERR_SRC_NOT_SUPPORTED) is a failure, not "played": retried once, and a
+  //    line that fails twice is logged as failed instead of passing silently
+  routes.tts = async () => responses.mp3();
+  const realPlay = FakeAudio.prototype.play; let failPlays = 1;
+  FakeAudio.prototype.play = function(){
+    if (failPlays > 0){ failPlays--; calls.push(['audio.play']); const e = new Error('NotSupportedError'); e.name = 'NotSupportedError'; return Promise.reject(e); }
+    return realPlay.call(this);
+  };
+  reply = 'Her vital capacity is down to one point one liters.';
+  await say('vital capacity', 400);
+  assert(ttsTexts().filter(t => t === reply).length === 2, 'an undecodable line is re-requested once');
+  failPlays = 2;
+  reply = 'The husband is at the bedside now.';
+  await say('is the husband here', 400);
+  assert(ttsTexts().filter(t => t === reply).length === 2, 'a line that fails twice is not retried forever');
+  FakeAudio.prototype.play = realPlay; routes.tts = async () => responses.pcm();
+
+  // 7. page errors reach the log too
   find('window', 'error').forEach(f => f({ message: 'Cannot read properties of null', filename: 'room.js', lineno: 7 }));
 
   await tick(2300);   // the log batches every 2 s
@@ -87,6 +105,8 @@ routes.turn = async () => responses.json({ reply, speaker: 'nurse' });
   assert(has('tts.watchdog', /chest X-ray/), 'the watchdog fire was logged with the line');
   assert(has('audio.ctx', /suspended/), 'the stuck AudioContext was logged');
   assert(has('js.error', /Cannot read properties of null @room\.js:7/), 'window errors are logged');
+  assert(has('tts.error', /vital capacity/), 'the undecodable line was logged before its retry');
+  assert(has('tts.failed', /husband is at the bedside/), 'the twice-failed line was logged as failed');
   assert(!has('tts.skipped'), 'no reply was skipped in this run');
   console.log('\nALL PASS' + (MODE === 'cool' ? ' (cool)' : '')); process.exit(0);
 })().catch(e => { console.error('HARNESS ERROR', e); console.error(calls.slice(-12)); console.error(fetchLog.slice(-6)); process.exit(1); });

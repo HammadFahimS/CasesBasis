@@ -5,6 +5,19 @@ the last two sessions, what was broken before, what was attempted, and what is s
 
 ---
 
+> **Resolved 2026-10-25 — "reply shown, never heard" (the long-running silent-TTS bug).**
+> Root cause: `/api/voice/tts` sniffed the first two bytes of the PCM stream for an MP3
+> frame sync (`FF Ex`, added in 1b9e81a). PCM-16 whose first sample is -1 starts `FF FF`,
+> so ~1 line in 6 was served as `audio/mpeg`; `<audio>` cannot decode raw PCM
+> (`MEDIA_ERR_SRC_NOT_SUPPORTED`) and `_playBlob` resolved as if the line had played —
+> no retry, no message. Repeating the question re-synthesised with a different first
+> sample, which is why it "fixed itself". Fixed by serving the PCM the request pins
+> (`output_format` in the query string) and making an `<audio>` failure reject so the
+> client's retry + failure report run. The server's stream-retry and non-streaming MP3
+> fallbacks (aimed at the same symptom; never on its path) were removed: one retry, at the
+> client, where it is logged. Tests: `tests/test_tts_route.py`, `tests/client/audio_harness.js` §6.
+> Change 7 below (first-chunk probe) is kept; its non-streaming fallback is gone.
+
 ## Baseline commit (what worked before any of this)
 
 ```
