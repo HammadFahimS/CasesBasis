@@ -20,7 +20,7 @@ DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_TOGETHER_MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
 DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
-# gemma-4-31b is the general-purpose reasoning model for the live voice sim
+# qwen-3.8-27b is the general-purpose reasoning model for the live voice sim
 # (nurse brain, routing, actors, director — everything that flows through
 # agent_runtime.complete) and the default for anything that doesn't pin a model.
 # It is the default because it responds fast; zai-glm-4.7 is capable but too slow
@@ -28,13 +28,14 @@ DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 # model is required and the latency is acceptable (off the conversational path):
 #   - ECG parameter generation (see CEREBRAS_ECG_MODEL + agents/ecg.py)
 #   - the manual case simulator, all of it (see CEREBRAS_MANUAL_MODEL +
-#     manual_sim_model() + backend/sim_core.py), because gemma-4-31b can't
-#     reliably satisfy the strict ClinicalCase/MedicalFacts schemas.
-DEFAULT_CEREBRAS_MODEL = "gemma-4-31b"
+#     manual_sim_model() + backend/sim_core.py), because the fast live model
+#     can't reliably satisfy the strict ClinicalCase/MedicalFacts schemas.
+# (gemma-4-31b held this slot until Cerebras archived it in October 2026.)
+DEFAULT_CEREBRAS_MODEL = "qwen-3.8-27b"
 CEREBRAS_ECG_MODEL = "gpt-oss-120b"
 CEREBRAS_MANUAL_MODEL = "gpt-oss-120b"
 CEREBRAS_FALLBACK_MODELS = [
-    "gemma-4-31b",
+    "qwen-3.8-27b",
     "gpt-oss-120b",
 ]
 TOGETHER_BASE_URL = "https://api.together.xyz/v1"

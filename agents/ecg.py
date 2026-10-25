@@ -11,7 +11,7 @@ class ECGParameterAgent(OpenAIJsonAgent):
     """Maps a diagnosis string to validated ECGParameters via structured LLM output.
 
     ECG generation is pinned to gpt-oss-120b on Cerebras (the live sim runs on
-    gemma-4-31b; the manual sim also uses gpt-oss-120b). When the provider is
+    qwen-3.8-27b; the manual sim also uses gpt-oss-120b). When the provider is
     Cerebras and no model is explicitly given, we force the ECG model so this
     stays true regardless of the ``CEREBRAS_MODEL`` env default."""
 

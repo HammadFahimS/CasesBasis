@@ -7,7 +7,7 @@ authored summary into the component value lines a report would list — faithful
 the summary, never inventing a diagnosis or interpretation.
 
 Pinned to gpt-oss-120b on Cerebras (structured output; same rationale as the ECG
-agent), regardless of the live-sim ``CEREBRAS_MODEL`` default (gemma-4-31b).
+agent), regardless of the live-sim ``CEREBRAS_MODEL`` default (qwen-3.8-27b).
 """
 
 from __future__ import annotations
