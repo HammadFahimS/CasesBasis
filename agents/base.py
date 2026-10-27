@@ -9,6 +9,9 @@ from urllib import error, request
 logger = logging.getLogger(__name__)
 
 from langsmith import traceable
+
+from utils.observability import span as lw_span
+from utils.observability import update_current_span
 from pydantic import BaseModel
 from schemas.clinical_case import ClinicalCase, normalize_case_data
 
@@ -381,6 +384,13 @@ def decode_json_if_needed(raw_value: Any) -> Any:
     return json.loads(raw_value)
 
 
+def _chat_input(system_prompt: str, user_prompt: str) -> list[dict[str, str]]:
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
 class OpenAIJsonAgent:
     """Provider-aware base class for structured JSON and text LLM calls."""
 
@@ -394,6 +404,7 @@ class OpenAIJsonAgent:
         self.client = client or build_llm_client(self.provider)
         self.model = resolve_model(self.provider, model)
 
+    @lw_span("llm.parse_response", type="llm", capture_input=False)
     @traceable(run_type="llm")
     def parse_response(
         self,
@@ -402,6 +413,11 @@ class OpenAIJsonAgent:
         user_prompt: str,
         response_model: type[ResponseModel],
     ) -> ResponseModel:
+        update_current_span(
+            model=self.model,
+            input=_chat_input(system_prompt, user_prompt),
+            metadata={"provider": self.provider, "response_model": response_model.__name__},
+        )
         if self.provider in ("ollama", "groq", "together", "openrouter", "cerebras"):
             return self.client.parse_response(
                 model=self.model,
@@ -422,8 +438,14 @@ class OpenAIJsonAgent:
             raise ValueError("OpenAI response did not include parsed structured output")
         return safe_parse(response_model, parsed)
 
+    @lw_span("llm.text_response", type="llm", capture_input=False)
     @traceable(run_type="llm")
     def text_response(self, *, system_prompt: str, user_prompt: str) -> str:
+        update_current_span(
+            model=self.model,
+            input=_chat_input(system_prompt, user_prompt),
+            metadata={"provider": self.provider},
+        )
         if self.provider in ("ollama", "groq", "together", "openrouter", "cerebras"):
             return self.client.text_response(
                 model=self.model,

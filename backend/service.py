@@ -8,6 +8,7 @@ from agents.validator import ValidatorAgent
 from backend.medical_validation import MedicalValidationError, validate_medical_realism
 from schemas.clinical_case import ClinicalCase
 from schemas.evaluation import ClinicalEvaluation
+from utils.observability import trace, update_current_trace
 
 
 class ClinicalCaseSimulator:
@@ -38,12 +39,14 @@ class ClinicalCaseSimulator:
             provider=provider,
         )
 
+    @trace("generate_case")
     def generate_case(
         self,
         diagnosis: str,
         difficulty: str = "medium",
         session_history: list[ClinicalEvaluation | dict[str, object] | str] | None = None,
     ) -> ClinicalCase:
+        update_current_trace(metadata={"diagnosis": diagnosis, "difficulty": difficulty})
         first_case = self._generate_case_once(
             diagnosis,
             difficulty=difficulty,
