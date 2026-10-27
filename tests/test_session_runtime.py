@@ -22,6 +22,8 @@ def _session(status: str = "active", ended: bool = False, elapsed: int = 120):
         current_vitals=lambda: types.SimpleNamespace(
             model_dump=lambda exclude_none=True: {"heart_rate": 120}
         ),
+        due_deferred=lambda: [],          # no scheduled results in these unit ticks
+        due_arrivals=lambda: [],
     )
     return types.SimpleNamespace(
         id="s1", status=status, lock=threading.Lock(), engine=engine

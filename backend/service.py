@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from agents.base import build_llm_client, get_llm_provider
+from agents.base import build_llm_client, get_llm_provider, manual_sim_model
 from agents.generator import GenerationError, GeneratorAgent
 from agents.validator import ValidatorAgent
 from backend.medical_validation import MedicalValidationError, validate_medical_realism
 from schemas.clinical_case import ClinicalCase
 from schemas.evaluation import ClinicalEvaluation
+from utils.observability import trace, update_current_trace
 
 
 class ClinicalCaseSimulator:
@@ -27,23 +28,30 @@ class ClinicalCaseSimulator:
             return
         provider = get_llm_provider()
         shared_client = client or build_llm_client(provider)
+        # The Cerebras default (zai-glm-4.7) can't reliably satisfy the strict
+        # ClinicalCase/MedicalFacts schemas, so the manual simulator pins the
+        # stronger gpt-oss-120b. An explicit `model` arg or a non-Cerebras
+        # provider is left untouched.
+        gen_model = model if model is not None else manual_sim_model(provider)
         self.generator = generator or GeneratorAgent(
             client=shared_client,
-            model=model,
+            model=gen_model,
             provider=provider,
         )
         self.validator = validator or ValidatorAgent(
             client=shared_client,
-            model=model,
+            model=gen_model,
             provider=provider,
         )
 
+    @trace("generate_case")
     def generate_case(
         self,
         diagnosis: str,
         difficulty: str = "medium",
         session_history: list[ClinicalEvaluation | dict[str, object] | str] | None = None,
     ) -> ClinicalCase:
+        update_current_trace(metadata={"diagnosis": diagnosis, "difficulty": difficulty})
         first_case = self._generate_case_once(
             diagnosis,
             difficulty=difficulty,

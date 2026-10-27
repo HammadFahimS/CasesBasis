@@ -55,3 +55,6 @@ dependencies:
       - tqdm
       - loguru
       - tenacity                # Retry logic for API calls
+
+      # ── Observability ─────────────────────────────────────────────────────
+      - langwatch>=1.4.0        # LangWatch tracing (utils/observability.py)

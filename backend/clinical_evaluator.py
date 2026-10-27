@@ -75,9 +75,11 @@ class ClinicalEvaluator:
     def __init__(
         self,
         *,
+        model: str | None = None,
         enable_reasoning_review: bool = False,
         reasoning_reviewer: ReasoningReviewAgent | None = None,
     ) -> None:
+        self.model = model
         self.enable_reasoning_review = enable_reasoning_review
         self.reasoning_reviewer = reasoning_reviewer
 
@@ -174,7 +176,7 @@ class ClinicalEvaluator:
 
     def get_reasoning_reviewer(self) -> ReasoningReviewAgent:
         if self.reasoning_reviewer is None:
-            self.reasoning_reviewer = ReasoningReviewAgent()
+            self.reasoning_reviewer = ReasoningReviewAgent(model=self.model)
         return self.reasoning_reviewer
 
 

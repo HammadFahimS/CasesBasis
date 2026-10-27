@@ -1,0 +1,49 @@
+# EMS DISMISSED (foreign body) — after the handover the resident thanks the crew
+# and later asks them to repeat themselves. Neither turn may re-deliver the
+# handover through the "I already told you" path (the 2026-09-05 loop): the
+# paramedic answers as a person, recorded under his own speaker, and the run
+# proceeds to the gold rescue.
+case: foreign_body_airway
+name: fb_ems_dismissed
+turns:
+  - say: "EMS, what happened?"
+    intent: { op: ask_history, target: ems_handover }
+    expect: { speaker: ems, op: ask_history, reveals: "restaurant", state: baseline }
+
+  - say: "Thanks guys, we've got him from here."
+    intent: { op: chitchat, addressee: ems }
+    expect: { speaker: ems, op: chitchat, reveals: null, persisted_role: ems }
+
+  - say: "EMS, remind me, what happened again?"
+    intent: { op: ask_history, target: ems_handover }
+    expect: { speaker: ems, op: chitchat, reveals: null, persisted_role: ems }
+
+  - say: "What were you doing when this started?"
+    intent: { op: ask_history, target: onset_while_eating }
+    expect: { speaker: patient, op: ask_history, reveals: "eating", state: baseline }
+
+  - say: "Any medical problems? Allergies?"
+    intent: { op: ask_history, target: past_history_allergy }
+    expect: { speaker: patient, op: ask_history, reveals: "allergy", state: checkpoint2, transitioned: true }
+
+  - say: "Ketamine, one mig per kig, and get suction and the Magills ready."
+    intent: { op: order_medication, target: ketamine, action_text: "1 mg/kg" }
+    expect: { speaker: nurse, op: order_medication, state: checkpoint2 }
+
+  - say: "RT, take a look with the GlideScope."
+    intent: { op: order_investigation, target: video_laryngoscopy }
+    expect: { speaker: rt, op: order_investigation, state: fb_visualized, transitioned: true }
+
+  - say: "Food bolus above the cords — foreign body airway obstruction."
+    intent: { op: diagnose, action_text: "foreign body airway obstruction from a food bolus" }
+    expect: { speaker: nurse, op: diagnose }
+
+  - say: "Magill forceps — I'm taking it out under the scope."
+    intent: { op: perform_action, action_text: "remove it with Magill forceps" }
+    expect: { speaker: nurse, op: perform_action, state: recovery, ended: true }
+
+final:
+  reached_state: recovery
+  working_dx_contains: "foreign body"
+  critical_error: false
+  ended: true

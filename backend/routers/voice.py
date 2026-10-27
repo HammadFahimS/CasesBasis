@@ -79,6 +79,10 @@ def _voice_session_payload(session: Any) -> dict[str, Any]:
             "opening_vignette": case.presentation.opening_vignette,
         },
         "vitals": engine.current_vitals().model_dump(exclude_none=True),
+        # The engine's scenario clock (seconds). The front-end seeds its scenario
+        # timer from this and re-syncs off the live event `t`, so timed arrivals show
+        # at their true time instead of a cosmetic client counter.
+        "elapsed_seconds": engine.run.elapsed_seconds,
         "state": {"id": engine.run.current_state_id, "name": engine.state.name},
         # The case's own menu, so the panels offer only orderable tests / examinable
         # systems / pageable consultants (everything here returns a real result).
@@ -150,6 +154,7 @@ def _turn_payload(turn: Any) -> dict[str, Any]:
         "working_dx": getattr(turn, "working_dx", None),
         "cues": getattr(turn, "cues", []),
         "needs_addressee": getattr(turn, "needs_addressee", False),
+        "summon": getattr(turn, "summon", None),
     }
 
 
@@ -195,6 +200,9 @@ def api_voice_resume(body: dict[str, Any], request: Request) -> dict[str, Any]:
     payload["history"] = session.history
     payload["patient_history"] = session.patient_history
     payload["cards"] = session.cards
+    # Restore any orders still in flight so the round-table shows the holder working.
+    from backend.director import pending_deferred
+    payload["pending"] = pending_deferred(session)
     return payload
 
 
@@ -241,6 +249,124 @@ async def ws_voice(websocket: WebSocket, session_id: str) -> None:
         pass
     finally:
         bus.unsubscribe(session_id, queue)
+
+
+@router.websocket("/ws/stt")
+async def ws_stt(websocket: WebSocket) -> None:
+    """Streaming STT proxy: browser mic PCM → ElevenLabs Scribe v2 Realtime.
+
+    The browser streams raw 16 kHz mono PCM (binary frames) while the resident
+    talks, then sends a text control ``{"t":"commit"}`` at end-of-speech. We relay
+    audio to ElevenLabs' realtime socket and stream transcripts back as
+    ``{"partial": true, "text": …}`` (interim) and ``{"final": true, "text": …}``
+    (committed). The ElevenLabs API key stays server-side — the browser only ever
+    talks to us. Auth is the same signed cookie as the REST routes."""
+    import asyncio
+    import base64
+    import contextlib
+    import json
+
+    from backend.voice_service import open_realtime_stt
+
+    resident_id = get_current_resident_id(websocket)
+    if resident_id is None:
+        await websocket.close(code=4401)  # unauthenticated
+        return
+    await websocket.accept()
+
+    # Case vocabulary → keyterms bias (best-effort; a missing session never breaks STT).
+    keyterms: list[str] = []
+    session_id = websocket.query_params.get("session_id", "").strip()
+    if session_id:
+        try:
+            from backend.voice_session import get_session
+            session = await asyncio.to_thread(get_session, session_id, resident_id)
+            keyterms = [t.strip() for t in _stt_prompt(session.case).split(",") if t.strip()][:32]
+        except Exception:
+            pass
+
+    try:
+        upstream = await open_realtime_stt(keyterms)
+    except Exception as exc:  # key missing / connect failed → client falls back to blocking STT
+        logger.warning("realtime STT upstream connect failed: %s", exc)
+        with contextlib.suppress(Exception):
+            await websocket.close(code=1011)
+        return
+
+    async def pump_up() -> None:
+        """Browser → ElevenLabs: wrap PCM frames as input_audio_chunk; handle commit."""
+        while True:
+            msg = await websocket.receive()
+            if msg.get("type") == "websocket.disconnect":
+                return
+            audio = msg.get("bytes")
+            if audio is not None:
+                await upstream.send(json.dumps({
+                    "message_type": "input_audio_chunk",
+                    "audio_base_64": base64.b64encode(audio).decode("ascii"),
+                }))
+                continue
+            text = msg.get("text")
+            if text is None:
+                continue
+            try:
+                ctrl = json.loads(text)
+            except (ValueError, TypeError):
+                continue
+            if ctrl.get("t") == "commit":
+                await upstream.send(json.dumps({
+                    "message_type": "input_audio_chunk", "audio_base_64": "", "commit": True,
+                }))
+            elif ctrl.get("t") == "bye":
+                return
+
+    # Upstream rejections arrive as a normal message, then the socket closes — and the
+    # browser quietly falls back to the blocking upload. That fallback is the right
+    # behaviour but it hides the fault: a bad keyterm once made every realtime session
+    # fail while the room looked healthy. Log these loudly so the next contract change
+    # shows up in the logs instead of as unexplained latency.
+    _UPSTREAM_ERRORS = {
+        "error", "auth_error", "invalid_request", "input_error", "rate_limited",
+        "quota_exceeded", "unaccepted_terms", "chunk_size_exceeded",
+        "queue_overflow", "resource_exhausted", "transcriber_error",
+        "session_time_limit_exceeded",
+    }
+
+    async def pump_down() -> None:
+        """ElevenLabs → browser: forward partial and committed transcripts."""
+        async for raw in upstream:
+            try:
+                data = json.loads(raw)
+            except (ValueError, TypeError):
+                continue
+            mt = data.get("message_type")
+            if mt == "partial_transcript":
+                await websocket.send_json({"partial": True, "text": data.get("text", "")})
+            elif mt in ("committed_transcript", "committed_transcript_with_timestamps",
+                        "final_transcript", "final_transcript_with_timestamps"):
+                await websocket.send_json({"final": True, "text": data.get("text", "")})
+            elif mt in _UPSTREAM_ERRORS:
+                logger.error("realtime STT upstream %s: %s", mt, data.get("error") or data)
+                return
+            elif mt == "warning":
+                logger.warning("realtime STT upstream warning: %s", data)
+
+    up = asyncio.create_task(pump_up())
+    down = asyncio.create_task(pump_down())
+    try:
+        _done, pending = await asyncio.wait({up, down}, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        for task in (up, down):
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await task
+        with contextlib.suppress(Exception):
+            await upstream.close()
+        with contextlib.suppress(Exception):
+            await websocket.close()
 
 
 def _stt_prompt(case: Any) -> str:
@@ -317,15 +443,25 @@ def _run_grounded_turn(session: Any, text: str, forced_addressee: str | None) ->
     llm_ms = (time.perf_counter() - t0) * 1000
     logger.info("[LATENCY] session=%s llm=%.0fms op=%s speaker=%s",
                 session.id[:8], llm_ms, turn.intent.op, turn.speaker)
+    # Any scheduled results that came due this turn report back now (the room talking
+    # back). Fired before persist so the spoken line + panel card survive a park.
+    from backend.director import fire_deferred, pending_deferred
+    deferred = fire_deferred(session)
     _persist_turn(session, turn)
     payload = _turn_payload(turn)
-    # Hand the front-end this speaker's live EmotionalState stability (Phase 5) so the
-    # patient and a frightened relative are voiced with more affect; the professionals
-    # resolve to None and keep their configured default voice.
-    from backend.emotional_state import for_speaker
-    stability = for_speaker(turn.speaker, session.engine).stability
-    if stability is not None:
-        payload["affect_stability"] = stability
+    payload["deferred"] = deferred
+    # In-flight orders (scheduled, not yet back) so the room shows the holder working.
+    payload["pending"] = pending_deferred(session)
+    # Hand the front-end this speaker's live EmotionalState (Phase 5) so the patient
+    # and a frightened relative are voiced with more affect — a stability override
+    # plus the descriptor it echoes to /tts as ``affect`` (an Eleven v4 audio tag).
+    # The professionals resolve to neither and keep their configured default voice.
+    from backend.emotional_state import audio_tag, for_speaker
+    emotion = for_speaker(turn.speaker, session.engine)
+    if emotion.stability is not None:
+        payload["affect_stability"] = emotion.stability
+    if audio_tag(emotion.descriptor):
+        payload["affect"] = emotion.descriptor
     return payload
 
 
@@ -356,6 +492,11 @@ def api_voice_turn(body: dict[str, Any], request: Request) -> dict[str, Any]:
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
     session = _owned_session_or_404(session_id, resident_id)
+    # A paused run is parked — the clock is frozen and the room must not respond.
+    # The UI stops listening on pause, but guard here too so a stray utterance from
+    # a still-open mic can't drive a turn while the case is on hold.
+    if getattr(session, "status", "active") == "paused":
+        raise HTTPException(status_code=409, detail="session is paused")
     forced_addressee = (body.get("forced_addressee") or "").strip() or None
     try:
         return _run_grounded_turn(session, text, forced_addressee)
@@ -386,6 +527,11 @@ def api_voice_llm(body: dict[str, Any], request: Request) -> dict[str, Any]:
             raise HTTPException(status_code=502, detail=f"nurse reply failed: {exc}")
 
     session = _owned_session_or_404(session_id, resident_id)
+    # A paused run is parked — the clock is frozen and the room must not respond.
+    # The UI stops listening on pause, but guard here too so a stray utterance from
+    # a still-open mic can't drive a turn while the case is on hold.
+    if getattr(session, "status", "active") == "paused":
+        raise HTTPException(status_code=409, detail="session is paused")
     forced_addressee = (body.get("forced_addressee") or "").strip() or None
     try:
         return _run_grounded_turn(session, text, forced_addressee)
@@ -417,13 +563,23 @@ def api_voice_action(body: dict[str, Any], request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="session not found")
     except AccessDenied:
         raise HTTPException(status_code=403, detail="access denied")
+    if getattr(session, "status", "active") == "paused":
+        raise HTTPException(status_code=409, detail="session is paused")
     try:
         turn = run_action(session, op, target)
     except Exception as exc:
         logging.getLogger(__name__).warning("voice action failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"action failed: {exc}")
+    # Parity with the spoken-turn path: fire any results that came due (the room
+    # talks back) and surface the in-flight set so a panel-click order shows the
+    # holder working until it lands.
+    from backend.director import fire_deferred, pending_deferred
+    deferred = fire_deferred(session)
     _persist_turn(session, turn)
-    return _turn_payload(turn)
+    payload = _turn_payload(turn)
+    payload["deferred"] = deferred
+    payload["pending"] = pending_deferred(session)
+    return payload
 
 
 @router.post("/api/voice/llm-patient")
@@ -443,6 +599,11 @@ def api_voice_patient(body: dict[str, Any], request: Request) -> dict[str, Any]:
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
     session = _owned_session_or_404(session_id, resident_id)
+    # A paused run is parked — the clock is frozen and the room must not respond.
+    # The UI stops listening on pause, but guard here too so a stray utterance from
+    # a still-open mic can't drive a turn while the case is on hold.
+    if getattr(session, "status", "active") == "paused":
+        raise HTTPException(status_code=409, detail="session is paused")
     forced_addressee = (body.get("forced_addressee") or "").strip() or None
     try:
         return _run_grounded_turn(session, text, forced_addressee)
@@ -565,10 +726,11 @@ def api_voice_session_delete(session_id: str, request: Request) -> dict[str, Any
 def api_voice_tts(body: dict[str, Any], request: Request):
     """Text-to-speech.
 
-    When ElevenLabs is configured, streams PCM-16000 (``audio/pcm``) so the
-    browser can start playing after the first chunk (~75 ms).  Falls back to a
-    blocking Together/Cartesia MP3 response (``audio/mpeg``) when ElevenLabs is
-    absent.  ``speaker`` selects the voice; an explicit ``voice`` wins."""
+    Streams ElevenLabs PCM-16000 (``audio/pcm``) so the browser can start playing
+    after the first chunk; ``format="mp3"`` returns one whole MP3 instead (for a
+    browser whose AudioContext will not run). A synthesis failure is a 502.
+    ``speaker`` selects the voice; an explicit ``voice`` wins; ``affect`` colours
+    delivery."""
     require_resident(request)
     text = (body.get("text") or "").strip()
     if not text:
@@ -583,48 +745,48 @@ def api_voice_tts(body: dict[str, Any], request: Request):
             stability_override = float(raw_stab)
         except (TypeError, ValueError):
             pass
+    # The speaker's EmotionalState descriptor (from the turn payload's ``affect``) →
+    # an Eleven v4 audio tag. Legacy ``tier``/``expressive`` fields are ignored: every
+    # ElevenLabs line now rides the one expressive model.
+    affect = body.get("affect") if isinstance(body.get("affect"), str) else None
 
     from backend.voice_service import synthesize_stream
     from fastapi.responses import StreamingResponse
 
     speaker_label = body.get("speaker") or "nurse"
     t0 = time.perf_counter()
-    media_type, chunks = synthesize_stream(text, voice, stability_override=stability_override)
 
-    # ElevenLabs streams PCM-16000 (audio/pcm). Probe the first chunk before
-    # committing to the content-type so a failed stream (auth/voice/quota error,
-    # which comes back empty) doesn't send an empty body the browser silently
-    # ignores — and so we can recover via a single non-streaming retry.
-    try:
-        first_chunk: bytes = next(chunks)
-    except StopIteration:
-        first_chunk = b""
-    except Exception as exc:
-        logger.warning("ElevenLabs TTS failed at stream start: %s", exc)
-        first_chunk = b""
-
-    if not first_chunk:
-        logger.info("EL TTS stream returned no bytes for speaker=%s; retrying non-streaming", speaker_label)
+    # A browser whose AudioContext is stuck (suspended/interrupted with a resume
+    # that never lands) can still play a whole file through <audio>; it asks for
+    # that with format="mp3" instead of the PCM stream it can't schedule.
+    if (body.get("format") or "").lower() == "mp3":
         from backend.voice_service import synthesize
         try:
-            audio = synthesize(text, voice, stability_override=stability_override)
-            return Response(content=audio, media_type="audio/mpeg")
+            audio = synthesize(text, voice, stability_override=stability_override, affect=affect)
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"synthesis failed: {exc}")
-
-    # Defensive: ElevenLabs only returns MP3 here if output_format ever regresses
-    # to the body (it belongs in the query string). MP3 bytes carry an ID3 / frame
-    # -sync header; if the browser plays those through the PCM decoder it's loud
-    # static, so detect the real format and serve the correct content-type.
-    is_mp3 = first_chunk[:3] == b"ID3" or (
-        len(first_chunk) >= 2 and first_chunk[0] == 0xFF and (first_chunk[1] & 0xE0) == 0xE0
-    )
-    media = "audio/mpeg" if is_mp3 else "audio/pcm"
-    if is_mp3:
-        logger.warning("EL TTS returned MP3 (not PCM) for speaker=%s; serving as audio/mpeg", speaker_label)
-    else:
-        logger.info("[LATENCY] tts_first=%.0fms chars=%d speaker=%s",
+        logger.info("[LATENCY] tts_mp3=%.0fms chars=%d speaker=%s",
                     (time.perf_counter() - t0) * 1000, len(text), speaker_label)
+        return Response(content=audio, media_type="audio/mpeg")
+
+    media_type, chunks = synthesize_stream(text, voice, stability_override=stability_override, affect=affect)
+
+    # Probe the first chunk before committing to a 200: a stream that fails at the
+    # start (auth / voice / quota / concurrency) or comes back empty is a 502 naming
+    # the cause, and the client retries once and surfaces it. The response is served
+    # as the PCM it asked for (output_format is pinned in the query string) — never
+    # re-labelled by sniffing bytes: PCM whose first sample is -1 starts ``FF FF``,
+    # an MP3 frame sync, and served as audio/mpeg it played silently (2026-10-25).
+    try:
+        first_chunk = next(chunks, b"")
+        why = "empty stream"
+    except Exception as exc:
+        first_chunk, why = b"", str(exc)
+    if not first_chunk:
+        logger.warning("EL TTS produced no audio for speaker=%s: %s", speaker_label, why)
+        raise HTTPException(status_code=502, detail=f"synthesis failed: {why}")
+    logger.info("[LATENCY] tts_first=%.0fms chars=%d speaker=%s",
+                (time.perf_counter() - t0) * 1000, len(text), speaker_label)
 
     def _gen():
         try:
@@ -632,7 +794,43 @@ def api_voice_tts(body: dict[str, Any], request: Request):
             yield from chunks
         except Exception as exc:
             logger.warning("ElevenLabs stream TTS error mid-stream: %s", exc)
-    return StreamingResponse(_gen(), media_type=media)
+    return StreamingResponse(_gen(), media_type=media_type)
+
+
+@router.post("/api/voice/client-log")
+@limiter.limit("120/minute")
+def api_voice_client_log(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Store browser-side events for an owned voice session.
+
+    The rooms post page errors and audio outcomes (a playback watchdog firing, a
+    queued line skipped, a rejected play(), an AudioContext that will not run) so a
+    "reply shown but never heard" run can be diagnosed from the server. Bounded per
+    post and per event; a session that isn't the caller's is a 404."""
+    resident_id = require_resident(request)
+    session_id = (body.get("session_id") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    events = body.get("events")
+    if not isinstance(events, list):
+        raise HTTPException(status_code=400, detail="events must be a list")
+    from backend import voice_persistence
+    if not voice_persistence.owns_session(session_id, resident_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    stored = voice_persistence.record_client_events(session_id, resident_id, events)
+    return {"stored": stored}
+
+
+@router.get("/api/voice/client-log")
+def api_voice_client_log_read(request: Request, session_id: str = "") -> dict[str, Any]:
+    """The stored browser events for one of the caller's sessions, oldest first."""
+    resident_id = require_resident(request)
+    session_id = (session_id or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    from backend import voice_persistence
+    if not voice_persistence.owns_session(session_id, resident_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    return {"session_id": session_id, "events": voice_persistence.client_events(session_id, resident_id)}
 
 
 @router.get("/api/voice/sample")

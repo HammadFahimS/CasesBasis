@@ -77,6 +77,9 @@ class RunState:
     revealed_history: list[str] = field(default_factory=list)
     ordered_investigations: list[str] = field(default_factory=list)
     actions_this_state: list[str] = field(default_factory=list)
+    # Every normalised action text in the run, across states (for run-scoped
+    # transition requirements). Never cleared.
+    actions: list[str] = field(default_factory=list)
     applied_modifiers: list[str] = field(default_factory=list)
     vitals_override: dict[str, object] = field(default_factory=dict)
     visited_states: list[str] = field(default_factory=list)
@@ -97,6 +100,17 @@ class RunState:
     # SimulationEngine.is_present (time-arrival + summon); only the summon events
     # need to persist. See docs/room-of-agents.md C1.
     summoned_actors: list[str] = field(default_factory=list)
+    # Actors whose arrival has already been announced to the room, so the "X has
+    # just arrived" line fires exactly once when presence flips true (RA-1).
+    announced_arrivals: list[str] = field(default_factory=list)
+    # Actors the resident has actually engaged (they've spoken/answered at least
+    # once). A "go and talk to X" prompt cue is obsolete once X is engaged, so these
+    # suppress redundant nudges — see due_cues + mark_engaged.
+    engaged_actors: list[str] = field(default_factory=list)
+    # Scheduled "room talks back" results: tests ordered before they're ready. Each
+    # is {"inv_id", "fire_at" (elapsed_seconds), "actor_id"}; drained by due_deferred
+    # once the clock passes fire_at, producing a spoken report + a panel card.
+    deferred_events: list[dict] = field(default_factory=list)
 
 
 class SimulationEngine:
@@ -187,8 +201,56 @@ class SimulationEngine:
         if actor is None or actor_id in self.run.summoned_actors:
             return False
         self.run.summoned_actors.append(actor_id)
+        # A summon is announced by the nurse at the moment it happens ("calling them
+        # in now"), so suppress the generic arrival announce for this actor.
+        if actor_id not in self.run.announced_arrivals:
+            self.run.announced_arrivals.append(actor_id)
         self._log("summon", actor_id)
         return True
+
+    def mark_engaged(self, actor_id: str | None) -> None:
+        """Record that the resident has engaged this actor (they've answered). Once
+        engaged, prompt cues that only nudge the resident *to* talk to them stop
+        firing (due_cues). Idempotent."""
+        if actor_id and actor_id not in self.run.engaged_actors:
+            self.run.engaged_actors.append(actor_id)
+
+    def due_arrivals(self) -> list[dict[str, str]]:
+        """Timed-arrival actors who just entered the room and haven't been announced.
+
+        Fires once per actor the moment presence flips true (the clock reaches their
+        ``available_after_seconds``). This is what makes "her husband's just arrived"
+        land *when he actually arrives* — not on a state-linger timer that can fire
+        before he's here (RA-1/C1)."""
+        out: list[dict[str, str]] = []
+        for actor in self.case.actors:
+            after = getattr(actor, "available_after_seconds", None)
+            if after is None:                              # in the room from the start
+                continue
+            if actor.id in self.run.announced_arrivals:
+                continue
+            if not self.is_present(actor.id):
+                continue
+            self.run.announced_arrivals.append(actor.id)   # dedup: fire at most once
+            self._log("arrival", actor.id)
+            # Avoid a double announcement: if an authored, not-yet-fired cue already
+            # references this actor (via requires_present), let that single cue be the
+            # arrival line — don't also emit the generic "just arrived" here.
+            if self._has_pending_cue_for(actor.id):
+                continue
+            out.append({"actor_id": actor.id, "role": actor.role or actor.id})
+        return out
+
+    def _has_pending_cue_for(self, actor_id: str) -> bool:
+        """Does the current state have an unfired authored cue that requires this
+        actor present? If so it will announce them, so the generic arrival line is
+        redundant (RA-1 dedup)."""
+        for i, cue in enumerate(self.state.cues):
+            if f"{self.run.current_state_id}:{i}" in self.run.fired_cues:
+                continue
+            if actor_id in cue.requires_present:
+                return True
+        return False
 
     # --------------------------------------------------------------- actions #
     def ask(self, history_id: str) -> StepResult:
@@ -214,21 +276,91 @@ class SimulationEngine:
         step.revealed = beat.content
         return step
 
+    def _result_holder(self, inv: InvestigationDef) -> str:
+        """Which actor id delivers this investigation's result aloud."""
+        if inv.result_actor_id:
+            return inv.result_actor_id
+        if inv.category == "bedside":
+            from backend.actor_voice import actor_speaker
+            rt = next((a for a in self.case.actors if actor_speaker(a) == "rt"), None)
+            if rt is not None:
+                return rt.id
+        return "nurse"
+
+    def _result_ready_at(self, inv: InvestigationDef) -> int:
+        """Case-clock second at which this test's result is available.
+
+        ``available_after_seconds`` is an absolute-clock gate; ``result_latency_seconds``
+        is measured from *now* (order time). A test takes whichever is later."""
+        absolute = inv.available_after_seconds or 0
+        relative = self.run.elapsed_seconds + (inv.result_latency_seconds or 0)
+        return max(absolute, relative)
+
     def order_investigation(self, inv_id: str) -> StepResult:
-        """Order a test and get its result (respecting availability + state)."""
+        """Order a test and get its result (respecting availability + state).
+
+        If the result isn't ready yet, the order is *recorded* and a deferred event
+        is scheduled so the holding actor reports the number back when it lands —
+        instead of a dead "pending" that never returns (the open-loop bug)."""
         inv = self._investigation(inv_id)
         if inv is None:
             return self._result(message=f"No investigation '{inv_id}'.")
-        if inv.available_after_seconds and self.run.elapsed_seconds < inv.available_after_seconds:
-            wait = inv.available_after_seconds - self.run.elapsed_seconds
-            return self._result(message=f"Result pending ({wait}s) — {inv.name}.")
+        ready_at = self._result_ready_at(inv)
+        if ready_at > self.run.elapsed_seconds:
+            if inv_id not in self.run.ordered_investigations:
+                self.run.ordered_investigations.append(inv_id)
+            self._schedule_deferred(inv, ready_at)
+            wait = ready_at - self.run.elapsed_seconds
+            holder = self._result_holder(inv)
+            who = self._actor(holder)
+            who_label = (who.role if who else "the team") or "the team"
+            self._log("order", inv_id)
+            return self._result(
+                message=(
+                    f"{who_label} is on the {inv.name} now — the result will come "
+                    f"back in about {wait} seconds."
+                )
+            )
         if inv_id not in self.run.ordered_investigations:
             self.run.ordered_investigations.append(inv_id)
-        result = inv.result_by_state.get(self.run.current_state_id, inv.result)
         self._log("order", inv_id)
         step = self._after_action(inv.name)
-        step.revealed = result
+        # Resolve the result in the state the order *leads to*, so a study whose
+        # own transition reveals something reads the post-transition text — the
+        # same moment a deferred result resolves at (due_deferred).
+        step.revealed = inv.result_for(self.run.current_state_id)
         return step
+
+    def _schedule_deferred(self, inv: InvestigationDef, fire_at: int) -> None:
+        """Queue a result to report back, unless one is already queued for this test."""
+        if any(ev.get("inv_id") == inv.id for ev in self.run.deferred_events):
+            return
+        self.run.deferred_events.append(
+            {"inv_id": inv.id, "fire_at": int(fire_at), "actor_id": self._result_holder(inv)}
+        )
+
+    def due_deferred(self) -> list[dict]:
+        """Drain scheduled results whose time has come (the room reporting back).
+
+        Each returns ``{actor_id, inv, revealed}`` so the caller can voice the report
+        in the holder's voice and drop a card in the diagnostics panel. Fires once —
+        the event is removed from the queue here."""
+        out: list[dict] = []
+        remaining: list[dict] = []
+        for ev in self.run.deferred_events:
+            if ev.get("fire_at", 0) > self.run.elapsed_seconds:
+                remaining.append(ev)
+                continue
+            inv = self._investigation(ev.get("inv_id", ""))
+            if inv is None:
+                continue
+            if inv.id not in self.run.ordered_investigations:
+                self.run.ordered_investigations.append(inv.id)
+            revealed = inv.result_for(self.run.current_state_id)
+            self._log("result", inv.id)
+            out.append({"actor_id": ev.get("actor_id", "nurse"), "inv": inv, "revealed": revealed})
+        self.run.deferred_events = remaining
+        return out
 
     def examine(self, system: str) -> StepResult:
         """Reveal the authored exam findings for a body system.
@@ -247,6 +379,23 @@ class SimulationEngine:
             if finding.note:
                 line += f" — {finding.note}"
             parts.append(line)
+        step.revealed = "\n".join(parts)
+        return step
+
+    def examine_all(self) -> StepResult:
+        """A succinct whole-body screen: ONE headline finding per system, no
+        interpretive notes — the "keep it brief, give detail only when asked"
+        physical exam. The resident examines a specific system (:meth:`examine`)
+        for the full findings. Counts as a single action."""
+        self._log("exam", "all")
+        step = self._after_action("physical exam")
+        if not self.case.exam:
+            step.revealed = "No specific examination findings documented."
+            return step
+        parts = []
+        for finding in self.case.exam:
+            headline = finding.findings[0] if finding.findings else "no specific findings"
+            parts.append(f"{finding.system}: {headline}")
         step.revealed = "\n".join(parts)
         return step
 
@@ -302,11 +451,33 @@ class SimulationEngine:
         Fires at most one cue per call (so prompts trickle rather than pile up),
         once the resident has been in the state a while. Each cue fires once; the
         record lives in ``run.fired_cues`` so it survives park/resume."""
-        if self.elapsed_in_state < self.CUE_AFTER_SECONDS:
-            return []
         for i, cue in enumerate(self.state.cues):
             key = f"{self.run.current_state_id}:{i}"
             if key in self.run.fired_cues:
+                continue
+            # Presence gate (C1): a cue that references an absent actor (e.g. "ask the
+            # husband") must wait until they're in the room — don't mark it fired, so
+            # it becomes eligible once they arrive rather than firing a lie now.
+            if any(not self.is_present(aid) for aid in cue.requires_present):
+                continue
+            # Engagement gate: a cue that only prompts "go talk to X" is obsolete once
+            # the resident has already engaged everyone it references — retire it
+            # silently so the room doesn't re-nudge about someone already spoken to.
+            if cue.requires_present and all(
+                aid in self.run.engaged_actors for aid in cue.requires_present
+            ):
+                self.run.fired_cues.append(key)
+                continue
+            # A cue that waits on a timed-arrival actor fires the moment that person
+            # is in the room, so the arrival is announced on time (RA-1). Every other
+            # cue holds until the resident has lingered in the state a while.
+            arrival_gated = any(
+                getattr(self._actor(aid), "available_after_seconds", None) is not None
+                for aid in cue.requires_present
+            )
+            # An authored ``after_seconds`` sets the linger; otherwise the default.
+            wait = cue.after_seconds if cue.after_seconds is not None else self.CUE_AFTER_SECONDS
+            if not arrival_gated and self.elapsed_in_state < wait:
                 continue
             self.run.fired_cues.append(key)
             self._log("cue", cue.text)
@@ -328,13 +499,30 @@ class SimulationEngine:
         norm = text.strip().lower()
         if norm:
             self.run.actions_this_state.append(norm)
+            self.run.actions.append(norm)
             self._apply_action_modifiers(norm)
         for tr in self.state.transitions:
             if tr.kind != "action":
                 continue
-            if self._action_matches(norm, tr):
+            if self._action_fires(norm, tr):
                 return self._fire(tr)
         return self._result()
+
+    def _action_fires(self, norm_text: str, tr: Transition) -> bool:
+        """An action transition fires when its requirements (all-of) are met and,
+        if it names keywords/a description, the current action matches them."""
+        if tr.requires:
+            if not self._requirements_met(tr):
+                return False
+            if not tr.keywords:
+                return True  # completing the requirements is the trigger
+        return self._action_matches(norm_text, tr)
+
+    def _requirements_met(self, tr: Transition) -> bool:
+        def hits(req) -> int:
+            pool = self.run.actions if req.scope == "run" else self.run.actions_this_state
+            return sum(any(stem.lower() in act for stem in req.any) for act in pool)
+        return all(hits(req) >= req.count for req in tr.requires)
 
     def _action_matches(self, norm_text: str, tr: Transition) -> bool:
         if any(kw.lower() in norm_text for kw in tr.keywords):
@@ -349,7 +537,9 @@ class SimulationEngine:
             if tr.kind == "time" and self.elapsed_in_state >= (tr.after_seconds or 0):
                 return tr
             if tr.kind == "inaction" and self.elapsed_in_state >= (tr.after_seconds or 0):
-                if not self._any_action_taken(tr.keywords):
+                idle = (not self._requirements_met(tr)) if tr.requires \
+                    else (not self._any_action_taken(tr.keywords))
+                if idle:
                     return tr
             if tr.kind == "vitals" and tr.vitals_check is not None:
                 value = getattr(vitals, tr.vitals_check.param, None)
@@ -417,6 +607,11 @@ class SimulationEngine:
             self.run.visited_states.append(state_id)
         if state.is_terminal:
             self.run.ended = True
+
+    def log_event(self, kind: str, detail: str) -> None:
+        """Record a protocol event on the run log (e.g. an intercepted order) so
+        the debrief can read it with its state and time."""
+        self._log(kind, detail)
 
     def _log(self, kind: str, detail: str) -> None:
         self.run.log.append(

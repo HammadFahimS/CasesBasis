@@ -94,6 +94,10 @@
         <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></svg></span>
         <span class="txt">Simulator<span class="sub">Live patient encounter</span></span>
       </a>
+      <a class="cb-ni" href="/qbank" data-view="qbank">
+        <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 2h8l2 2v10H3z"/><path d="M6 6h4M6 9h4"/><circle cx="11.5" cy="12" r="2.2" fill="white"/><path d="M11.5 10.8v1.4M11.5 13.1v.02"/></svg></span>
+        <span class="txt">Question Bank<span class="sub">UWorld-style practice sets</span></span>
+      </a>
       <a class="cb-ni" href="/ecg-algorithm" data-view="ecg">
         <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1.5 8h2l1.5-4 2.5 9 2-5 1 2.5h3.5"/></svg></span>
         <span class="txt">ECG Algorithm Diagnosis<span class="sub">Rhythm strip trainer</span></span>
@@ -153,6 +157,7 @@
         (v === 'home' && path === '/home') ||
         (v === 'analytics' && path === '/analytics') ||
         (v === 'simulator' && path.startsWith('/simulator')) ||
+        (v === 'qbank' && path.startsWith('/qbank')) ||
         (v === 'ecg' && path.startsWith('/ecg-algorithm'));
       if (match) el.classList.add('active');
     });

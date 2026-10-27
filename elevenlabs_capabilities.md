@@ -4,6 +4,22 @@
 > (credits on `hammad.fahim57@gmail.com`; key in `.env` as `ELEVENLABS_API_KEY`).
 > This documents what ElevenLabs offers and, for each piece, **what it means for our app**.
 > Verified against the live docs in **June 2026** — re-check model IDs/prices before relying on them.
+>
+> **Update — October 2026: Eleven v4 Turbo is now our TTS model for every live line** (branch
+> `v4-turbo`). Verified against the docs + our account's `GET /v1/models`:
+> - `eleven_v4_turbo`: real-time-rated (~100 ms median inference, vendor figure), 10,000 chars/req,
+>   **0.5× credits (same as Flash v2.5; `eleven_v3` is 1.0×)**, own concurrency group.
+> - Works on the plain `/v1/text-to-speech/{voice}/stream` endpoint with `pcm_16000` + our
+>   pronunciation dictionary (the docs only show it on the Text-to-Dialogue WebSocket; the TTS
+>   WebSocket does **not** accept v3/v4).
+> - v4 has **no Style or Speed** control and **no SSML**; expressiveness = **stability + audio tags**.
+>   (Our account reports `can_use_style: false` for *every* model, so the old `style=0.6`
+>   Expressiveness toggle was a no-op even on v3.) Phoneme tags are v2-only; v4 takes inline `/IPA/`.
+> - Probe (2026-10-25, warm pool, small n — confirm with `bench.latency --tts-model`): time to first
+>   chunk ≈ 210 ms v4 Turbo vs ≈ 440 ms Flash v2.5 vs ≈ 370 ms v3.
+> - Wiring: `emotional_state.audio_tag()` maps a speaker's EmotionalState to a tag; the turn payload
+>   carries `affect`; `/api/voice/tts` adds the tag only on a v3/v4 model. Rollback:
+>   `ELEVENLABS_TTS_MODEL=eleven_flash_v2_5`.
 
 ---
 
@@ -39,6 +55,8 @@ source of truth, which constrains how much of Agents we can adopt.
 
 | Model | `model_id` | Latency | Max chars/req | Languages | Notes |
 |---|---|---|---|---|---|
+| **Eleven v4 Turbo** ⭐ (in use) | `eleven_v4_turbo` | **~100 ms** inference | 10,000 | 90+ | Real-time **and** expressive: audio tags, stability only (no style/speed/SSML). 0.5× credits. |
+| **Eleven v4** | `eleven_v4` | not real-time-rated | 10,000 | 90+ | Highest quality, PVC `clone_strength`; for content, not the live room. |
 | **Eleven v3** (expressive) | `eleven_v3` | not real-time-rated | 5,000 (~5 min) | 70+ | Most expressive; **audio tags** (`[whispers]`, `[sighs]`), multi-speaker dialogue, emotional range. Best **quality**, not for tight latency. |
 | **Multilingual v2** | `eleven_multilingual_v2` | — | 10,000 | 29 | High quality, stable on long-form, emotionally aware. API default. |
 | **Flash v2.5** | `eleven_flash_v2_5` | **~75 ms** | 40,000 | 32 | **Ultra-low latency**, ~50% cheaper/char. The conversational/real-time pick. May fumble complex number normalization. |

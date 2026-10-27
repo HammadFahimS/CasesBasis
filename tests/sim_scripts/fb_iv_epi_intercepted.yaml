@@ -1,0 +1,25 @@
+# GUARDRAIL (foreign body) — the resident orders the 1 mg IV *arrest* dose of
+# epinephrine while the patient has a pulse. The nurse withholds it (no state
+# change, nothing given), says why, and re-parks the order awaiting a dose; the
+# corrected IM dose then administers and the case moves on. The debrief takes the
+# intercept off the score.
+case: foreign_body_airway
+name: fb_iv_epi_intercepted
+setup:
+  - goto: checkpoint2
+turns:
+  - say: "Give epinephrine 1 milligram IV."
+    intent: { op: order_medication, target: epinephrine, action_text: "1 mg IV" }
+    expect: { speaker: nurse, op: order_medication, state: checkpoint2, transitioned: false }
+
+  # The resident answers the nurse's question with the right dose: the parked
+  # order fills and administers; the case advances to the anaphylaxis branch.
+  - say: "Fine — 0.5 milligrams IM."
+    intent: { op: chitchat }
+    expect: { speaker: nurse, state: anaphylaxis_1, transitioned: true }
+
+final:
+  reached_state: anaphylaxis_1
+  critical_error: false
+  # the intercept guardrail is unmet → 25 off (no critical error)
+  max_score: 80

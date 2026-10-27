@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CasesBasis — Live Simulation Room</title>
+<meta name="description" content="CasesBasis live simulation room — a control-room dashboard for trainee doctors running an acute chest pain scenario: AI patient and care team, live vitals, voice transcript, ECG and investigations, all scored against your record." />
+
+<!-- Minimax skill fonts: clean grotesque + Inter body + JetBrains Mono numerics -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink:    '#0A0A0A',
+          paper:  '#FFFFFF',
+          hair:   '#E5E5E5',
+          mist:   '#FAFAFA',
+          accent: '#2563EB',
+          'accent-700': '#1D4ED8',
+          muted:  '#6B6B6B',
+          faint:  '#9A9A9A',
+          routine:  '#15803D',
+          urgent:   '#B45309',
+          critical: '#B91C1C',
+          gSymptom: '#16A34A',
+          gFinding: '#0891B2',
+          gRisk:    '#EA580C',
+          gTemporal:'#D97706',
+          gPatient: '#7C3AED',
+        },
+        fontFamily: {
+          grotesk: ['"Space Grotesk"', 'Inter', 'system-ui', 'sans-serif'],
+          sans:    ['Inter', 'system-ui', 'sans-serif'],
+          mono:    ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        },
+        borderRadius: { none:'0px', sm:'2px', DEFAULT:'4px', md:'4px', lg:'4px' },
+        boxShadow:    { none:'none' },
+        letterSpacing:{ tightest:'-0.04em', tighter:'-0.03em' },
+      },
+    },
+  };
+</script>
+
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-family: Inter, system-ui, sans-serif; color:#0A0A0A; background:#FFFFFF; }
+  *, *::before, *::after { box-shadow: none !important; }
+
+  /* visible focus everywhere — accessibility */
+  :focus-visible { outline: 2px solid #2563EB; outline-offset: 2px; }
+  button:focus:not(:focus-visible), a:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: none; }
+
+  .num     { font-family:'JetBrains Mono', ui-monospace, monospace; font-feature-settings:'tnum' 1; }
+  .grotesk { font-family:'Space Grotesk', Inter, system-ui, sans-serif; }
+
+  /* thin scrollbars, keep accessible */
+  .scroll-area { scrollbar-width: thin; scrollbar-color: #D4D4D4 transparent; }
+  .scroll-area::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scroll-area::-webkit-scrollbar-thumb { background:#D4D4D4; }
+  .scroll-area::-webkit-scrollbar-track { background:transparent; }
+
+  /* fade/slide reveal */
+  @keyframes riseIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
+  .rise { animation: riseIn .45s cubic-bezier(.22,.61,.36,1) both; }
+
+  /* typing dots */
+  @keyframes blink { 0%,80%,100% { opacity:.2; } 40% { opacity:1; } }
+  .dot { animation: blink 1.2s infinite both; }
+  .dot:nth-child(2){ animation-delay:.2s; }
+  .dot:nth-child(3){ animation-delay:.4s; }
+
+  /* live pulse dot */
+  @keyframes livePulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
+  .live-dot { animation: livePulse 1.4s ease-in-out infinite; }
+
+  /* voice waveform bars */
+  .wave { display:flex; align-items:center; gap:2px; height:16px; }
+  .wave-bar { width:2px; height:100%; background:currentColor; border-radius:2px; transform:scaleY(.30); transform-origin:center; opacity:.55; }
+  .wave.is-live .wave-bar { opacity:1; animation: waveBar 1s ease-in-out infinite; }
+  @keyframes waveBar { 0%,100% { transform:scaleY(.28); } 50% { transform:scaleY(1); } }
+  .wave-bar:nth-child(1){ animation-delay:0s;    height:80%; }
+  .wave-bar:nth-child(2){ animation-delay:.12s;  height:100%; }
+  .wave-bar:nth-child(3){ animation-delay:.24s;  height:65%; }
+  .wave-bar:nth-child(4){ animation-delay:.36s;  height:100%; }
+  .wave-bar:nth-child(5){ animation-delay:.18s;  height:78%; }
+  .wave-bar:nth-child(6){ animation-delay:.30s;  height:55%; }
+
+  /* mic orb pulse when recording */
+  @keyframes micPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+  .mic-live { animation: micPulse 1s ease-in-out infinite; }
+
+  /* ECG trace draw + sweep */
+  .ecg-trace { stroke-dasharray: 1600; stroke-dashoffset: 1600; animation: ecgDraw 4s linear infinite; }
+  @keyframes ecgDraw { to { stroke-dashoffset: 0; } }
+  .ecg-sweep { animation: ecgSweep 4s linear infinite; }
+  @keyframes ecgSweep { from { transform: translateX(-6px); } to { transform: translateX(320px); } }
+
+  /* monitor blip */
+  @keyframes blipSlide { from { transform: translateX(0); } to { transform: translateX(-60px); } }
+  .blip-track { animation: blipSlide 1.4s linear infinite; }
+
+  /* expandable card body */
+  details.inv-card > summary { list-style:none; cursor:pointer; }
+  details.inv-card > summary::-webkit-details-marker { display:none; }
+  details.inv-card .chev { transition: transform .2s ease; }
+  details.inv-card[open] .chev { transform: rotate(180deg); }
+
+  /* collapsible rails (mobile) — chevron rotation */
+  details.rail .chev { transition: transform .2s ease; }
+  details.rail[open] .chev { transform: rotate(180deg); }
+  details.rail > summary { list-style:none; cursor:pointer; }
+  details.rail > summary::-webkit-details-marker { display:none; }
+  /* keep rails open / non-interactive summary on desktop */
+  @media (min-width:1024px){ details.rail > summary { pointer-events:none; } details.rail > summary .chev { display:none; } }
+
+  /* tab + filter underline states */
+  .tab-btn[aria-selected="true"]    { color:#0A0A0A; border-color:#0A0A0A; }
+  .filter-btn[aria-selected="true"] { background:#0A0A0A; color:#FFFFFF; border-color:#0A0A0A; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
+    .ecg-trace { stroke-dashoffset: 0; }
+    .wave-bar  { transform:scaleY(.5); }
+  }
+</style>
+</head>
+
+<body class="bg-paper text-ink antialiased">
+
+<div class="min-h-screen lg:h-screen flex flex-col lg:overflow-hidden">
+
+  <!-- ============================================================= -->
+  <!-- TOP BAR                                                        -->
+  <!-- ============================================================= -->
+  <header class="shrink-0 border-b border-hair bg-paper/95 backdrop-blur z-30">
+    <div class="h-16 px-3 sm:px-5 flex items-center gap-3 sm:gap-5">
+
+      <!-- brand -->
+      <div class="flex items-center gap-3 min-w-0 shrink-0">
+        <span class="inline-flex items-center justify-center w-9 h-9 border border-ink shrink-0" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M2 12h3.5l1.8-6 3 12 2.7-9 1.7 4H22" stroke="#2563EB" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <div class="leading-tight min-w-0">
+          <div class="grotesk text-base font-semibold tracking-tighter">CasesBasis</div>
+          <div class="text-[10px] num uppercase tracking-[0.18em] text-faint -mt-0.5">Live Simulation</div>
+        </div>
+      </div>
+
+      <!-- scenario selector -->
+      <div class="hidden md:flex items-center gap-2 shrink-0">
+        <span class="h-5 w-px bg-hair"></span>
+        <label for="scenarioSel" class="sr-only">Scenario</label>
+        <div class="relative">
+          <select id="scenarioSel" class="appearance-none bg-paper border border-hair hover:border-ink transition-colors text-sm font-medium pl-3 pr-8 py-2 cursor-pointer outline-none focus:border-accent">
+            <option>Acute Chest Pain</option>
+            <option>Acute Breathlessness</option>
+            <option>Altered Consciousness</option>
+            <option>Sepsis Screen</option>
+          </select>
+          <svg class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="#9A9A9A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <!-- center: scenario clock + pause -->
+      <div class="flex-1 flex justify-center">
+        <div class="flex items-stretch border border-hair">
+          <div class="hidden sm:flex flex-col justify-center px-3 border-r border-hair">
+            <span class="text-[9px] num uppercase tracking-[0.18em] text-faint leading-none">Scenario Time</span>
+            <span class="text-[9px] text-routine num leading-none mt-1 flex items-center gap-1"><span class="live-dot inline-block w-1.5 h-1.5 rounded-full bg-routine"></span>running</span>
+          </div>
+          <div class="flex items-center px-3 sm:px-4">
+            <span id="simClock" class="num text-lg sm:text-xl font-semibold tabular-nums tracking-tight" aria-label="Scenario elapsed time">00:14:32</span>
+          </div>
+          <button id="pauseBtn" aria-pressed="false" class="flex items-center gap-1.5 px-3 border-l border-hair hover:bg-mist transition-colors" aria-label="Pause scenario clock">
+            <svg id="pauseIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
+            <span id="pauseLabel" class="hidden sm:inline num text-xs uppercase tracking-[0.12em]">Pause</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- right cluster -->
+      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <button id="monitorBtn" aria-pressed="true" class="hidden sm:inline-flex items-center gap-1.5 border border-ink bg-ink text-paper px-2.5 py-2 text-xs transition-colors" aria-label="Patient monitor feed">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="13" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5 12h2l1.5-3.5 2 6 1.5-4 1 1.5H19" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="hidden lg:inline num">Monitor</span>
+        </button>
+        <button id="audioBtn" aria-pressed="true" class="inline-flex items-center gap-1.5 border border-hair px-2.5 py-2 text-xs hover:border-ink transition-colors" aria-label="Room audio">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M16 9a4 4 0 0 1 0 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span class="live-dot inline-block w-1.5 h-1.5 rounded-full bg-routine"></span>
+        </button>
+
+        <span class="hidden sm:block h-7 w-px bg-hair"></span>
+
+        <!-- profile (ACCOUNT) -->
+        <button class="flex items-center gap-2.5 pl-1 pr-1.5 py-1 border border-transparent hover:border-hair transition-colors" aria-label="Account menu for Dr Amelia Stone">
+          <span class="inline-flex items-center justify-center w-9 h-9 rounded-full border-2 border-accent text-accent num text-xs font-semibold shrink-0" style="background:rgba(37,99,235,0.07)">AS</span>
+          <span class="hidden lg:block text-left leading-tight">
+            <span class="block text-sm font-medium tracking-tight">Dr Amelia Stone</span>
+            <span class="block text-[10px] num uppercase tracking-[0.12em] text-faint -mt-0.5">FY2 · Attending sim</span>
+          </span>
+          <svg class="hidden lg:block" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="#9A9A9A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span id="syncChip" class="hidden xl:inline-flex items-center gap-1.5 text-[10px] num uppercase tracking-[0.12em] text-routine border border-routine/40 px-2 py-1">
+          <span id="syncDot" class="inline-block w-1.5 h-1.5 rounded-full bg-routine"></span><span id="syncText">Synced</span>
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================================================= -->
+  <!-- MIDDLE: left rail | center | right rail                        -->
+  <!-- ============================================================= -->
+  <div class="flex-1 lg:min-h-0 flex flex-col lg:flex-row">
+
+    <!-- ===================== LEFT RAIL ===================== -->
+    <aside class="lg:w-[300px] lg:shrink-0 border-b lg:border-b-0 lg:border-r border-hair bg-paper lg:min-h-0 lg:overflow-y-auto scroll-area" aria-label="Participants and room controls">
+
+      <!-- PARTICIPANTS -->
+      <details class="rail group" open>
+        <summary class="flex items-center justify-between px-4 h-11 border-b border-hair bg-mist/60 select-none">
+          <span class="text-[11px] num uppercase tracking-[0.2em] text-faint">Participants</span>
+          <span class="flex items-center gap-2">
+            <span class="text-[11px] num text-faint">5</span>
+            <svg class="chev lg:hidden" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="#9A9A9A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </summary>
+
+        <ul class="divide-y divide-hair">
+          <!-- Patient — active / speaking -->
+          <li class="px-4 py-3 border-l-2 border-ink bg-mist/50">
+            <div class="flex items-center gap-3">
+              <span class="inline-flex items-center justify-center w-9 h-9 rounded-full border-2 num text-[11px] font-semibold shrink-0" style="border-color:#7C3AED;color:#7C3AED;background:rgba(124,58,237,0.08)">JW</span>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-sm font-medium truncate">James Wilson</span>
+                  <span class="wave is-live shrink-0" style="color:#15803D" aria-hidden="true"><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span></span>
+                </div>
+                <div class="flex items-center justify-between gap-2 mt-0.5">
+                  <span class="text-[11px] text-muted">Patient</span>
+                  <span class="text-[10px] num uppercase tracking-[0.1em] text-routine font-medium">Speaking…</span>
+                </div>
+              </div>
+            </div>
+          </li>
+
+          <!-- Guardian -->
+          <li class="px-4 py-3">
+            <div class="flex items-center gap-3">
+              <span class="inline-flex items-center justify-center w-9 h-9 rounded-full border-2 num text-[11px] font-semibold shrink-0" style="border-color:#D97706;color:#D97706;background:rgba(217,119,6,0.07)">MW</span>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-sm font-medium truncate">Mary Wilson</span>
+                  <span class="wave shrink-0" style="color:#9A9A9A" aria-hidden="true"><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span></span>
+                </div>
+                <div class="flex items-center justify-between gap-2 mt-0.5">
+                  <span class="text-[11px] text-muted">Guardian (wife)</span>
+                  <span class="text-[10px] num uppercase tracking-[0.1em] text-faint">Listening</span>
+                </div>
+              </div>
+            </div>
+          </li>
+
+          <!-- Nurse -->
+          <li class="px-4 py-3">
+            <div class="flex items-center gap-3">
+              <span class="inline-flex items-center justify-center w-9 h-9 rounded-full border-2 num text-[11px] font-semibold shrink-0" style="border-color:#0891B2;color:#0891B2;background:rgba(8,145,178,0.07)">SJ</span>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-sm font-medium truncate">Sarah Johnson, RN</span>
+                  <span class="wave shrink-0" style="color:#9A9A9A" aria-hidden="true"><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span></span>
+                </div>
+                <div class="flex items-center justify-between gap-2 mt-0.5">
+                  <span class="text-[11px] text-muted">Nurse</span>
+                  <span class="text-[10px] num uppercase tracking-[0.1em] text-faint">Listening</span>
+                </div>
+              </div>
+            </div>
+          </li>
+
+          <!-- Respiratory Therapist -->
+          <li class="px-4 py-3">
+            <div class="flex items-center gap-3">
+              <span class="inline-flex items-center justify-center w-9 h-9 rounded-full border-2 num text-[11px] font-semibold shrink-0" style="border-color:#2563EB;color:#2563EB;background:rgba(37,99,235,0.07)">MD</span>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-sm font-medium truncate">Mark Davis, RRT</span>
+                  <span class="wave shrink-0" style="color:#9A9A9A" aria-hidden="true"><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span></span>
+                </div>
+                <div class="flex items-center justify-between gap-2 mt-0.5">
+                  <span class="text-[11px] text-muted">Respiratory Therapist</span>
+                  <span class="text-[10px] num uppercase tracking-[0.1em] text-faint">Listening</span>
+                </div>
+              </div>
+            </div>
+          </li>
+
+          <!-- Paramedic -->
+          <li class="px-4 py-3">
+            <div class="flex items-center gap-3">
+              <span class="inline-flex items-center justify-center w-9 h-9 rounded-full border-2 num text-[11px] font-semibold shrink-0" style="border-color:#EA580C;color:#EA580C;background:rgba(234,88,12,0.07)">BL</span>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-sm font-medium truncate">Brian Lee</span>
+                  <span class="wave shrink-0" style="color:#9A9A9A" aria-hidden="true"><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span></span>
+                </div>
+                <div class="flex items-center justify-between gap-2 mt-0.5">
+                  <span class="text-[11px] text-muted">Paramedic</span>
+                  <span class="text-[10px] num uppercase tracking-[0.1em] text-faint">Listening</span>
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </details>
+
+      <!-- ROOM CONTROLS -->
+      <div class="px-4 py-4 border-t border-hair">
+        <h3 class="text-[11px] num uppercase tracking-[0.2em] text-faint mb-3">Room controls</h3>
+        <div class="grid grid-cols-2 gap-px bg-hair border border-hair mb-3">
+          <button class="bg-paper hover:bg-mist transition-colors px-3 py-3 text-left flex items-center gap-2.5">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <span class="text-xs font-medium leading-tight">Add Participant</span>
+          </button>
+          <button class="bg-paper hover:bg-mist transition-colors px-3 py-3 text-left flex items-center gap-2.5">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5.5C4 14 10 20 18.5 20a1.5 1.5 0 0 0 1.5-1.3l.3-2a1.5 1.5 0 0 0-.9-1.6l-2.6-1a1.5 1.5 0 0 0-1.7.5l-.8 1a12 12 0 0 1-4.6-4.6l1-.8a1.5 1.5 0 0 0 .5-1.7l-1-2.6A1.5 1.5 0 0 0 7.6 3.6l-2 .3A1.5 1.5 0 0 0 4 5.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            <span class="text-xs font-medium leading-tight">Call Consultant</span>
+          </button>
+          <button class="bg-paper hover:bg-mist transition-colors px-3 py-3 text-left flex items-center gap-2.5 relative">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 19a2 2 0 0 0 4 0" stroke="currentColor" stroke-width="1.5"/></svg>
+            <span class="text-xs font-medium leading-tight">Nurse Call</span>
+            <span class="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-critical"></span>
+          </button>
+          <button class="bg-paper hover:bg-mist transition-colors px-3 py-3 text-left flex items-center gap-2.5 relative">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l9 16H3l9-16Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 9v4M12 16h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <span class="text-xs font-medium leading-tight">Room Events</span>
+            <span class="absolute top-1.5 right-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-critical text-paper num text-[10px] font-semibold">3</span>
+          </button>
+        </div>
+
+        <!-- End Scenario (danger) -->
+        <button class="w-full border border-critical text-critical hover:bg-critical hover:text-paper transition-colors px-4 py-3 text-left group">
+          <span class="flex items-center gap-2 font-medium text-sm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 21V4M5 4l9 2 5-1v9l-5 1-9-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            End Scenario
+          </span>
+          <span class="block text-[11px] num mt-1 ml-6 opacity-80 group-hover:opacity-100">Saved to your record</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ===================== CENTER + RIGHT WRAPPER ===================== -->
+    <div class="flex-1 flex flex-col xl:flex-row lg:min-h-0 lg:overflow-y-auto xl:overflow-hidden scroll-area">
+
+      <!-- ===================== CENTER ===================== -->
+      <main class="flex-1 xl:min-h-0 xl:overflow-hidden flex flex-col scroll-area" aria-label="Scene, vitals and conversation">
+        <div class="p-3 sm:p-5 flex flex-col gap-3 sm:gap-4 xl:flex-1 xl:min-h-0">
+
+          <!-- SCENE / ROOM STAGE -->
+          <section aria-label="Resus Bay 3 scene" class="relative border border-hair bg-mist overflow-hidden xl:flex-1 xl:min-h-0">
+            <div class="relative h-[220px] sm:h-[260px] xl:h-full">
+            <svg viewBox="0 0 800 260" preserveAspectRatio="xMidYMid slice" class="w-full h-full block" role="img" aria-label="Stylised view of Resus Bay 3: a patient on a trolley, a bedside cardiac monitor, an IV drip and an overhead exam light">
+              <defs>
+                <pattern id="roomGrid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#EDEDED" stroke-width="1"/></pattern>
+                <linearGradient id="lightCone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FCD34D" stop-opacity="0.18"/><stop offset="1" stop-color="#FCD34D" stop-opacity="0"/></linearGradient>
+              </defs>
+              <rect width="800" height="260" fill="url(#roomGrid)"/>
+              <!-- floor -->
+              <line x1="0" y1="212" x2="800" y2="212" stroke="#D4D4D4" stroke-width="1.5"/>
+              <!-- overhead light -->
+              <path d="M360 18 h80 l-6 70 h-68 Z" fill="url(#lightCone)"/>
+              <rect x="356" y="10" width="88" height="12" fill="#0A0A0A"/>
+              <ellipse cx="400" cy="26" rx="40" ry="7" fill="#fff" stroke="#0A0A0A" stroke-width="1.5"/>
+              <line x1="400" y1="0" x2="400" y2="10" stroke="#0A0A0A" stroke-width="1.5"/>
+
+              <!-- IV pole -->
+              <line x1="120" y1="70" x2="120" y2="212" stroke="#0A0A0A" stroke-width="2"/>
+              <path d="M120 70 h14" stroke="#0A0A0A" stroke-width="2" stroke-linecap="round"/>
+              <path d="M134 70 v6" stroke="#0A0A0A" stroke-width="2"/>
+              <rect x="124" y="78" width="22" height="34" rx="3" fill="#fff" stroke="#0A0A0A" stroke-width="1.5"/>
+              <rect x="124" y="94" width="22" height="18" rx="0" fill="rgba(37,99,235,0.12)"/>
+              <line x1="135" y1="112" x2="135" y2="150" stroke="#93C5FD" stroke-width="1.2"/>
+              <circle cx="100" cy="212" r="6" fill="#fff" stroke="#0A0A0A" stroke-width="1.5"/>
+              <circle cx="140" cy="212" r="6" fill="#fff" stroke="#0A0A0A" stroke-width="1.5"/>
+
+              <!-- trolley / bed -->
+              <!-- raised backrest -->
+              <path d="M196 118 L236 108 L236 168 L196 168 Z" fill="#fff" stroke="#0A0A0A" stroke-width="1.6"/>
+              <!-- mattress -->
+              <rect x="196" y="156" width="356" height="20" rx="4" fill="#fff" stroke="#0A0A0A" stroke-width="1.6"/>
+              <!-- patient head -->
+              <circle cx="252" cy="132" r="15" fill="#fff" stroke="#0A0A0A" stroke-width="1.6"/>
+              <!-- patient blanket -->
+              <path d="M270 156 C300 146 320 150 360 150 C430 150 500 152 540 156 L540 156 L270 156 Z" fill="rgba(37,99,235,0.06)" stroke="#0A0A0A" stroke-width="1.6"/>
+              <path d="M270 156 C300 144 330 148 370 148 C440 148 510 150 540 156" fill="none" stroke="#0A0A0A" stroke-width="1.6"/>
+              <path d="M330 150 q4 -8 8 0" fill="none" stroke="#9A9A9A" stroke-width="1.2"/>
+              <!-- frame + legs + wheels -->
+              <rect x="196" y="176" width="356" height="7" fill="#0A0A0A"/>
+              <line x1="232" y1="183" x2="232" y2="205" stroke="#0A0A0A" stroke-width="2.5"/>
+              <line x1="516" y1="183" x2="516" y2="205" stroke="#0A0A0A" stroke-width="2.5"/>
+              <circle cx="232" cy="212" r="7" fill="#fff" stroke="#0A0A0A" stroke-width="1.8"/>
+              <circle cx="516" cy="212" r="7" fill="#fff" stroke="#0A0A0A" stroke-width="1.8"/>
+
+              <!-- bedside monitor -->
+              <line x1="650" y1="100" x2="650" y2="212" stroke="#0A0A0A" stroke-width="2"/>
+              <circle cx="630" cy="212" r="6" fill="#fff" stroke="#0A0A0A" stroke-width="1.5"/>
+              <circle cx="670" cy="212" r="6" fill="#fff" stroke="#0A0A0A" stroke-width="1.5"/>
+              <rect x="592" y="58" width="116" height="78" rx="4" fill="#0A0A0A" stroke="#0A0A0A" stroke-width="2"/>
+              <svg x="592" y="58" width="116" height="78" viewBox="0 0 200 60" preserveAspectRatio="none">
+                <path d="M0,32 L18,32 L21,37 L25,12 L29,40 L32,32 L38,26 L43,32 L50,32 L68,32 L71,37 L75,12 L79,40 L82,32 L88,26 L93,32 L100,32 L118,32 L121,37 L125,12 L129,40 L132,32 L138,26 L143,32 L150,32 L168,32 L171,37 L175,12 L179,40 L182,32 L188,26 L193,32 L200,32 L218,32 L221,37 L225,12 L229,40 L232,32 L238,26 L243,32 L250,32"
+                      fill="none" stroke="#34D399" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round">
+                  <animateTransform attributeName="transform" type="translate" from="0 0" to="-50 0" dur="0.6s" repeatCount="indefinite"/>
+                </path>
+              </svg>
+              <rect x="592" y="58" width="116" height="78" rx="4" fill="none" stroke="#0A0A0A" stroke-width="2"/>
+              <text x="600" y="74" fill="#34D399" font-family="JetBrains Mono, monospace" font-size="9" font-weight="600">HR 102</text>
+              <text x="668" y="74" fill="#60A5FA" font-family="JetBrains Mono, monospace" font-size="9" font-weight="600">93%</text>
+              <text x="600" y="128" fill="#F87171" font-family="JetBrains Mono, monospace" font-size="9" font-weight="600">148/92</text>
+            </svg>
+            </div>
+
+            <!-- overlays -->
+            <div class="absolute top-3 left-3 flex items-center gap-2">
+              <span class="num text-[10px] uppercase tracking-[0.16em] bg-ink text-paper px-2 py-1">Resus Bay 3</span>
+            </div>
+            <div class="absolute top-3 right-3 flex items-center gap-1.5 bg-paper/90 border border-hair px-2 py-1">
+              <span class="live-dot inline-block w-2 h-2 rounded-full bg-critical"></span>
+              <span class="num text-[10px] uppercase tracking-[0.16em] text-critical font-medium">Live</span>
+            </div>
+            <div class="absolute bottom-3 left-3 bg-paper/92 border border-hair px-3 py-1.5">
+              <span class="text-sm font-medium">James Wilson</span>
+              <span class="num text-xs text-muted">· 58 · M</span>
+              <span class="text-xs text-urgent ml-1">Alert, anxious</span>
+            </div>
+          </section>
+
+          <!-- VITALS + PATIENT STATUS -->
+          <section class="flex flex-col sm:flex-row gap-4 shrink-0" aria-label="Live vitals and patient status">
+            <!-- vitals strip -->
+            <div class="flex-1">
+              <h3 class="text-[11px] num uppercase tracking-[0.2em] text-faint mb-2">Vital signs</h3>
+              <div class="grid grid-cols-3 md:grid-cols-6 gap-px bg-hair border border-hair">
+                <!-- HR -->
+                <div class="bg-paper px-3 py-2.5">
+                  <div class="flex items-center justify-between"><span class="text-[10px] num uppercase tracking-[0.12em] text-faint">HR</span><span class="w-1.5 h-1.5 rounded-full bg-urgent"></span></div>
+                  <div class="flex items-baseline gap-1 mt-1"><span class="num text-xl font-semibold text-urgent">102</span><span class="text-[10px] text-faint num">bpm</span></div>
+                </div>
+                <!-- BP -->
+                <div class="bg-paper px-3 py-2.5">
+                  <div class="flex items-center justify-between"><span class="text-[10px] num uppercase tracking-[0.12em] text-faint">BP</span><span class="w-1.5 h-1.5 rounded-full bg-critical"></span></div>
+                  <div class="flex items-baseline gap-1 mt-1"><span class="num text-xl font-semibold text-critical">148/92</span></div>
+                  <div class="text-[10px] text-faint num">mmHg</div>
+                </div>
+                <!-- RR -->
+                <div class="bg-paper px-3 py-2.5">
+                  <div class="flex items-center justify-between"><span class="text-[10px] num uppercase tracking-[0.12em] text-faint">RR</span><span class="w-1.5 h-1.5 rounded-full bg-urgent"></span></div>
+                  <div class="flex items-baseline gap-1 mt-1"><span class="num text-xl font-semibold text-urgent">22</span><span class="text-[10px] text-faint num">/min</span></div>
+                </div>
+                <!-- SpO2 -->
+                <div class="bg-paper px-3 py-2.5">
+                  <div class="flex items-center justify-between"><span class="text-[10px] num uppercase tracking-[0.12em] text-faint">SpO₂</span><span class="w-1.5 h-1.5 rounded-full bg-urgent"></span></div>
+                  <div class="flex items-baseline gap-1 mt-1"><span class="num text-xl font-semibold text-urgent">93</span><span class="text-[10px] text-faint num">%</span></div>
+                </div>
+                <!-- Temp -->
+                <div class="bg-paper px-3 py-2.5">
+                  <div class="flex items-center justify-between"><span class="text-[10px] num uppercase tracking-[0.12em] text-faint">Temp</span><span class="w-1.5 h-1.5 rounded-full bg-routine"></span></div>
+                  <div class="flex items-baseline gap-1 mt-1"><span class="num text-xl font-semibold">37.2</span><span class="text-[10px] text-faint num">°C</span></div>
+                </div>
+                <!-- Pain -->
+                <div class="bg-paper px-3 py-2.5">
+                  <div class="flex items-center justify-between"><span class="text-[10px] num uppercase tracking-[0.12em] text-faint">Pain</span><span class="w-1.5 h-1.5 rounded-full bg-urgent"></span></div>
+                  <div class="flex items-baseline gap-1 mt-1"><span class="num text-xl font-semibold text-urgent">6</span><span class="text-[10px] text-faint num">/10</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- patient status -->
+            <div class="sm:w-56 sm:shrink-0">
+              <h3 class="text-[11px] num uppercase tracking-[0.2em] text-faint mb-2">Patient status</h3>
+              <div class="border border-hair bg-paper p-4 h-[calc(100%-1.75rem)]">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="w-2 h-2 rounded-full bg-urgent"></span>
+                  <span class="grotesk text-base font-semibold tracking-tight">Alert, anxious</span>
+                </div>
+                <ul class="space-y-2 text-sm text-muted">
+                  <li class="flex items-start gap-2"><span class="mt-1.5 w-1 h-1 rounded-full bg-ink shrink-0"></span>Complaining of chest pain</li>
+                  <li class="flex items-start gap-2"><span class="mt-1.5 w-1 h-1 rounded-full bg-ink shrink-0"></span>Radiating to left arm</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- TABS: Conversation / Exam / Notes -->
+          <section class="border border-hair bg-paper flex flex-col shrink-0" aria-label="Encounter">
+            <div class="flex items-stretch border-b border-hair" role="tablist" aria-label="Encounter views">
+              <button class="tab-btn px-4 py-3 text-sm border-b-2 border-transparent text-faint hover:text-ink transition-colors -mb-px" role="tab" aria-selected="true" data-tab="conversation">Conversation</button>
+              <button class="tab-btn px-4 py-3 text-sm border-b-2 border-transparent text-faint hover:text-ink transition-colors -mb-px" role="tab" aria-selected="false" data-tab="exam">Exam findings</button>
+              <button class="tab-btn px-4 py-3 text-sm border-b-2 border-transparent text-faint hover:text-ink transition-colors -mb-px" role="tab" aria-selected="false" data-tab="notes">Notes</button>
+            </div>
+
+            <!-- PANELS WRAPPER -->
+            <div>
+
+            <!-- CONVERSATION -->
+            <div class="tab-panel p-4 sm:p-5" data-panel="conversation">
+              <div class="space-y-4 max-w-2xl max-h-[150px] sm:max-h-[170px] overflow-y-auto scroll-area">
+                <!-- 1 patient -->
+                <div class="flex flex-col items-start">
+                  <div class="flex items-center gap-2 mb-1"><span class="text-[11px] num uppercase tracking-[0.12em]" style="color:#7C3AED">James Wilson · Patient</span><span class="num text-[10px] text-faint">00:14:22</span></div>
+                  <div class="border border-hair bg-mist border-l-2 px-3.5 py-2.5 text-sm leading-relaxed max-w-[88%]" style="border-left-color:#7C3AED">It started about an hour ago while I was walking up the stairs. It's a tightness in my chest.</div>
+                </div>
+                <!-- 2 you -->
+                <div class="flex flex-col items-end">
+                  <div class="flex items-center gap-2 mb-1"><span class="num text-[10px] text-faint">00:14:28</span><span class="text-[11px] num uppercase tracking-[0.12em] text-accent">You</span></div>
+                  <div class="bg-ink text-paper px-3.5 py-2.5 text-sm leading-relaxed max-w-[88%]">Can you describe the pain in more detail?</div>
+                </div>
+                <!-- 3 patient -->
+                <div class="flex flex-col items-start">
+                  <div class="flex items-center gap-2 mb-1"><span class="text-[11px] num uppercase tracking-[0.12em]" style="color:#7C3AED">James Wilson · Patient</span><span class="num text-[10px] text-faint">00:14:32</span></div>
+                  <div class="border border-hair bg-mist border-l-2 px-3.5 py-2.5 text-sm leading-relaxed max-w-[88%]" style="border-left-color:#7C3AED">It feels like someone is sitting on my chest. It also goes down my left arm.</div>
+                </div>
+                <!-- 4 nurse -->
+                <div class="flex flex-col items-start">
+                  <div class="flex items-center gap-2 mb-1"><span class="text-[11px] num uppercase tracking-[0.12em]" style="color:#0891B2">Sarah Johnson, RN · Nurse</span><span class="num text-[10px] text-faint">00:14:35</span></div>
+                  <div class="border border-hair bg-mist border-l-2 px-3.5 py-2.5 text-sm leading-relaxed max-w-[88%]" style="border-left-color:#0891B2">Doctor, I've attached the monitor. His oxygen saturation is 93% on room air.</div>
+                </div>
+                <!-- typing -->
+                <div class="flex items-center gap-2 pt-1" aria-live="polite">
+                  <span class="wave is-live" style="color:#7C3AED" aria-hidden="true"><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span></span>
+                  <span class="text-xs text-muted italic">Patient is speaking</span>
+                  <span class="inline-flex gap-1 ml-0.5"><span class="dot w-1 h-1 rounded-full bg-faint"></span><span class="dot w-1 h-1 rounded-full bg-faint"></span><span class="dot w-1 h-1 rounded-full bg-faint"></span></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- EXAM -->
+            <div class="tab-panel hidden p-4 sm:p-5" data-panel="exam">
+              <p class="text-xs text-muted mb-4">Discoverable findings — revealed as you examine the patient.</p>
+              <ul class="divide-y divide-hair border-y border-hair max-w-2xl">
+                <li class="py-3 flex items-baseline gap-4"><span class="num text-[11px] uppercase tracking-[0.14em] text-faint w-20 shrink-0">General</span><span class="text-sm">Diaphoretic, anxious</span></li>
+                <li class="py-3 flex items-baseline gap-4"><span class="num text-[11px] uppercase tracking-[0.14em] text-faint w-20 shrink-0">CVS</span><span class="text-sm">HS I+II+0, no murmurs, no peripheral oedema</span></li>
+                <li class="py-3 flex items-baseline gap-4"><span class="num text-[11px] uppercase tracking-[0.14em] text-faint w-20 shrink-0">Resp</span><span class="text-sm">Bibasal fine crepitations</span></li>
+                <li class="py-3 flex items-baseline gap-4"><span class="num text-[11px] uppercase tracking-[0.14em] text-faint w-20 shrink-0">Pulse</span><span class="text-sm">102 regular</span></li>
+              </ul>
+            </div>
+
+            <!-- NOTES -->
+            <div class="tab-panel hidden p-4 sm:p-5" data-panel="notes">
+              <label for="notesArea" class="text-[11px] num uppercase tracking-[0.14em] text-faint mb-2 block">Working notes</label>
+              <textarea id="notesArea" rows="6" class="w-full border border-hair p-4 text-sm leading-relaxed bg-mist focus:bg-paper resize-y outline-none focus:border-ink transition-colors">58M central chest pain radiating to L arm, ~1h, exertional onset. HR 102, BP 148/92, SpO₂ 93% RA. ECG: sinus tach, ST depression inferolateral. Troponin elevated. Working dx: NSTEMI / ACS. Plan: MONA, serial troponin, cardiology referral.</textarea>
+              <div class="flex items-center gap-2 mt-2 text-[11px] num text-routine"><span class="inline-block w-1.5 h-1.5 rounded-full bg-routine"></span> Saved to your record</div>
+            </div>
+            </div>
+          </section>
+
+          <!-- MIC INPUT BAR -->
+          <section class="border border-hair bg-paper shrink-0" aria-label="Voice and command input">
+            <div class="flex items-center gap-3 p-3">
+              <button id="micOrb" aria-pressed="false" aria-label="Record your spoken response" class="inline-flex items-center justify-center w-11 h-11 rounded-full border-2 border-ink text-ink hover:bg-ink hover:text-paper transition-colors shrink-0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              </button>
+              <div class="flex-1 min-w-0">
+                <label for="micInput" class="sr-only">Speak your response or command</label>
+                <input id="micInput" type="text" placeholder="Speak your response or command…" class="w-full bg-transparent text-sm py-2 outline-none placeholder:text-faint" />
+                <span id="micState" class="hidden text-[11px] num uppercase tracking-[0.14em] text-critical">● Recording — listening to the room…</span>
+              </div>
+              <button aria-label="Toggle keyboard input" class="inline-flex items-center justify-center w-10 h-10 border border-hair hover:border-ink transition-colors shrink-0 text-muted hover:text-ink">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M6 13.5h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </section>
+
+        </div>
+      </main>
+
+      <!-- ===================== RIGHT RAIL: INVESTIGATIONS ===================== -->
+      <aside class="xl:w-[360px] xl:shrink-0 border-t xl:border-t-0 xl:border-l border-hair bg-paper xl:min-h-0 xl:overflow-y-auto scroll-area" aria-label="Investigations">
+        <details class="rail" open>
+          <summary class="flex items-center justify-between px-4 h-11 border-b border-hair bg-mist/60 select-none sticky top-0 bg-paper/95 backdrop-blur z-10">
+            <span class="text-[11px] num uppercase tracking-[0.2em] text-faint">Investigations</span>
+            <span class="flex items-center gap-2"><span class="text-[11px] num text-faint">4</span><svg class="chev lg:hidden xl:hidden" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="#9A9A9A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </summary>
+
+          <div class="p-3.5 space-y-3">
+            <!-- filter tabs -->
+            <div class="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter investigations">
+              <button class="filter-btn border border-hair text-xs px-2.5 py-1 num uppercase tracking-[0.1em] hover:border-ink transition-colors" role="tab" aria-selected="true" data-cat="all">All</button>
+              <button class="filter-btn border border-hair text-xs px-2.5 py-1 num uppercase tracking-[0.1em] hover:border-ink transition-colors" role="tab" aria-selected="false" data-cat="labs">Labs</button>
+              <button class="filter-btn border border-hair text-xs px-2.5 py-1 num uppercase tracking-[0.1em] hover:border-ink transition-colors" role="tab" aria-selected="false" data-cat="imaging">Imaging</button>
+              <button class="filter-btn border border-hair text-xs px-2.5 py-1 num uppercase tracking-[0.1em] hover:border-ink transition-colors" role="tab" aria-selected="false" data-cat="cardiac">Cardiac</button>
+              <button class="filter-btn border border-hair text-xs px-2.5 py-1 num uppercase tracking-[0.1em] hover:border-ink transition-colors" role="tab" aria-selected="false" data-cat="other">Other</button>
+            </div>
+
+            <!-- 1. ECG -->
+            <details class="inv-card border border-hair bg-paper" data-cat="cardiac" open>
+              <summary class="flex items-center justify-between px-3.5 py-3 hover:bg-mist transition-colors">
+                <div class="min-w-0">
+                  <div class="text-sm font-medium">ECG (12-Lead)</div>
+                  <div class="num text-[11px] text-faint mt-0.5">00:13:42 · Cardiac</div>
+                </div>
+                <span class="flex items-center gap-2 shrink-0">
+                  <span class="num text-[10px] uppercase tracking-[0.12em] text-routine border border-routine px-1.5 py-0.5">Completed</span>
+                  <svg class="chev text-faint" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+              </summary>
+              <div class="px-3.5 pb-3.5">
+                <div class="border border-hair overflow-hidden">
+                  <svg viewBox="0 0 480 180" class="w-full block" role="img" aria-label="12-lead ECG rhythm strip — sinus tachycardia, rate 102, with ST depression in II, III, aVF, V4–V6.">
+                    <defs>
+                      <pattern id="ecgPaperMinMX" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M10 0 H0 V10" fill="none" stroke="#F6C9C9" stroke-width="0.6"/></pattern>
+                      <pattern id="ecgPaperMajMX" width="50" height="50" patternUnits="userSpaceOnUse"><rect width="50" height="50" fill="url(#ecgPaperMinMX)"/><path d="M50 0 H0 V50" fill="none" stroke="#E79A9A" stroke-width="1.1"/></pattern>
+                    </defs>
+                    <rect width="480" height="180" fill="#FFF1F0"/>
+                    <rect width="480" height="180" fill="url(#ecgPaperMajMX)"/>
+                    <path d="M14,112 L22,112 L28,100 L34,112 L42,112 L45,118 L49,54 L53,132 L57,112 L64,120 L72,120 L78,96 L86,96 L92,112 L106,112 L114,112 L120,100 L126,112 L134,112 L137,118 L141,54 L145,132 L149,112 L156,120 L164,120 L170,96 L178,96 L184,112 L198,112 L206,112 L212,100 L218,112 L226,112 L229,118 L233,54 L237,132 L241,112 L248,120 L256,120 L262,96 L270,96 L276,112 L290,112 L298,112 L304,100 L310,112 L318,112 L321,118 L325,54 L329,132 L333,112 L340,120 L348,120 L354,96 L362,96 L368,112 L382,112 L390,112 L396,100 L402,112 L410,112 L413,118 L417,54 L421,132 L425,112 L432,120 L440,120 L446,96 L454,96 L460,112 L474,112 L480,112"
+                      fill="none" stroke="#C0271F" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+                    <text x="7" y="16" fill="#B5524B" font-size="11" font-family="ui-monospace,monospace" font-weight="700">II</text>
+                    <text x="428" y="16" fill="#B5524B" font-size="10" font-family="ui-monospace,monospace" font-weight="700">25mm/s</text>
+                  </svg>
+                </div>
+                <p class="text-xs leading-relaxed mt-3"><span class="font-medium">Sinus tachycardia, rate 102 bpm.</span></p>
+                <p class="text-xs leading-relaxed text-muted">ST depression in leads II, III, aVF, V4–V6.</p>
+              </div>
+            </details>
+
+            <!-- 2. CXR -->
+            <details class="inv-card border border-hair bg-paper" data-cat="imaging">
+              <summary class="flex items-center justify-between px-3.5 py-3 hover:bg-mist transition-colors">
+                <div class="min-w-0">
+                  <div class="text-sm font-medium">Chest X-Ray (Portable)</div>
+                  <div class="num text-[11px] text-faint mt-0.5">00:13:58 · Imaging</div>
+                </div>
+                <span class="flex items-center gap-2 shrink-0">
+                  <span class="num text-[10px] uppercase tracking-[0.12em] text-routine border border-routine px-1.5 py-0.5">Completed</span>
+                  <svg class="chev text-faint" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+              </summary>
+              <div class="px-3.5 pb-3.5">
+                <div class="border border-hair overflow-hidden">
+                  <svg viewBox="0 0 320 240" class="w-40 max-w-full h-auto block mx-auto" role="img" aria-label="Portable chest X-ray silhouette: clear lung fields, normal cardiac silhouette">
+                    <defs>
+                      <radialGradient id="cxrBg" cx="50%" cy="45%" r="70%"><stop offset="0" stop-color="#1c1c1f"/><stop offset="1" stop-color="#0A0A0A"/></radialGradient>
+                    </defs>
+                    <rect width="320" height="240" fill="url(#cxrBg)"/>
+                    <!-- lung fields -->
+                    <path d="M150 50 C120 48 92 70 86 120 C82 160 96 196 120 200 C144 200 150 168 150 120 Z" fill="#2a2a2e" opacity="0.85"/>
+                    <path d="M170 50 C200 48 228 70 234 120 C238 160 224 196 200 200 C176 200 170 168 170 120 Z" fill="#2a2a2e" opacity="0.85"/>
+                    <!-- spine -->
+                    <rect x="156" y="44" width="8" height="160" fill="#3f3f46" opacity="0.7"/>
+                    <g stroke="#52525b" stroke-width="1" opacity="0.6">
+                      <line x1="156" y1="60" x2="164" y2="60"/><line x1="156" y1="76" x2="164" y2="76"/><line x1="156" y1="92" x2="164" y2="92"/><line x1="156" y1="108" x2="164" y2="108"/><line x1="156" y1="124" x2="164" y2="124"/><line x1="156" y1="140" x2="164" y2="140"/><line x1="156" y1="156" x2="164" y2="156"/><line x1="156" y1="172" x2="164" y2="172"/>
+                    </g>
+                    <!-- clavicles -->
+                    <path d="M96 58 Q128 50 156 56" fill="none" stroke="#6b7280" stroke-width="2"/>
+                    <path d="M164 56 Q192 50 224 58" fill="none" stroke="#6b7280" stroke-width="2"/>
+                    <!-- ribs left -->
+                    <g fill="none" stroke="#71717a" stroke-width="1.4" opacity="0.75">
+                      <path d="M150 72 Q116 76 92 96"/><path d="M150 90 Q110 94 84 116"/><path d="M150 108 Q108 112 82 136"/><path d="M150 126 Q110 130 86 154"/><path d="M150 144 Q114 150 94 172"/>
+                    </g>
+                    <!-- ribs right -->
+                    <g fill="none" stroke="#71717a" stroke-width="1.4" opacity="0.75">
+                      <path d="M170 72 Q204 76 228 96"/><path d="M170 90 Q210 94 236 116"/><path d="M170 108 Q212 112 238 136"/><path d="M170 126 Q210 130 234 154"/><path d="M170 144 Q206 150 226 172"/>
+                    </g>
+                    <!-- heart shadow -->
+                    <path d="M150 130 C140 120 128 128 130 150 C132 172 150 186 162 190 C170 184 176 168 176 150 C176 132 168 124 150 130 Z" fill="#3f3f46" opacity="0.55"/>
+                    <!-- diaphragm -->
+                    <path d="M88 196 Q124 214 152 200" fill="none" stroke="#6b7280" stroke-width="2"/>
+                    <path d="M168 200 Q198 214 232 196" fill="none" stroke="#6b7280" stroke-width="2"/>
+                  </svg>
+                </div>
+                <p class="text-xs leading-relaxed mt-3 text-muted">No acute cardiopulmonary abnormality.</p>
+              </div>
+            </details>
+
+            <!-- 3. Troponin -->
+            <details class="inv-card border border-hair bg-paper" data-cat="cardiac" open>
+              <summary class="flex items-center justify-between px-3.5 py-3 hover:bg-mist transition-colors">
+                <div class="min-w-0">
+                  <div class="text-sm font-medium">High Sensitivity Troponin I</div>
+                  <div class="num text-[11px] text-faint mt-0.5">00:14:10 · Cardiac</div>
+                </div>
+                <span class="flex items-center gap-2 shrink-0">
+                  <span class="num text-[10px] uppercase tracking-[0.12em] text-routine border border-routine px-1.5 py-0.5">Completed</span>
+                  <svg class="chev text-faint" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+              </summary>
+              <div class="px-3.5 pb-3.5">
+                <div class="flex items-end justify-between gap-3 border border-critical/30 bg-critical/[0.04] px-4 py-3.5">
+                  <div>
+                    <div class="flex items-baseline gap-1.5">
+                      <span class="num text-3xl font-semibold text-critical">0.15</span>
+                      <span class="num text-xs text-faint">ng/mL</span>
+                    </div>
+                    <span class="inline-block mt-1 num text-[10px] uppercase tracking-[0.12em] text-critical border border-critical px-1.5 py-0.5">Elevated</span>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-[10px] num uppercase tracking-[0.12em] text-faint">Reference</div>
+                    <div class="num text-xs text-muted">&lt; 0.04 ng/mL</div>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <!-- 4. CBC -->
+            <details class="inv-card border border-hair bg-paper" data-cat="labs" open>
+              <summary class="flex items-center justify-between px-3.5 py-3 hover:bg-mist transition-colors">
+                <div class="min-w-0">
+                  <div class="text-sm font-medium">Complete Blood Count</div>
+                  <div class="num text-[11px] text-faint mt-0.5">00:14:05 · Labs</div>
+                </div>
+                <span class="flex items-center gap-2 shrink-0">
+                  <span class="num text-[10px] uppercase tracking-[0.12em] text-routine border border-routine px-1.5 py-0.5">Completed</span>
+                  <svg class="chev text-faint" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+              </summary>
+              <div class="px-3.5 pb-3.5">
+                <table class="w-full text-xs border border-hair">
+                  <thead>
+                    <tr class="bg-mist text-faint num uppercase tracking-[0.1em] text-[10px]">
+                      <th class="text-left font-medium px-2.5 py-1.5">Test</th>
+                      <th class="text-right font-medium px-2.5 py-1.5">Value</th>
+                      <th class="text-left font-medium px-2.5 py-1.5">Unit</th>
+                      <th class="text-right font-medium px-2.5 py-1.5">Range</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-hair">
+                    <tr><td class="px-2.5 py-1.5">WBC</td><td class="px-2.5 py-1.5 text-right num font-medium">9.8</td><td class="px-2.5 py-1.5 num text-faint">10³/µL</td><td class="px-2.5 py-1.5 text-right num text-faint">4.0–11.0</td></tr>
+                    <tr><td class="px-2.5 py-1.5">RBC</td><td class="px-2.5 py-1.5 text-right num font-medium">4.8</td><td class="px-2.5 py-1.5 num text-faint">10⁶/µL</td><td class="px-2.5 py-1.5 text-right num text-faint">4.2–5.9</td></tr>
+                    <tr><td class="px-2.5 py-1.5">Hgb</td><td class="px-2.5 py-1.5 text-right num font-medium">14.2</td><td class="px-2.5 py-1.5 num text-faint">g/dL</td><td class="px-2.5 py-1.5 text-right num text-faint">13.5–17.5</td></tr>
+                    <tr><td class="px-2.5 py-1.5">Hct</td><td class="px-2.5 py-1.5 text-right num font-medium">42.1</td><td class="px-2.5 py-1.5 num text-faint">%</td><td class="px-2.5 py-1.5 text-right num text-faint">41–53</td></tr>
+                  </tbody>
+                </table>
+                <button class="mt-2 text-[11px] num uppercase tracking-[0.12em] text-accent hover:text-accent-700 transition-colors">View all →</button>
+              </div>
+            </details>
+
+            <!-- empty state for filters with no matches -->
+            <p id="invEmpty" class="hidden text-xs text-faint text-center py-6 border border-dashed border-hair">No investigations in this category.</p>
+
+            <!-- add investigation -->
+            <button class="w-full border border-dashed border-hair hover:border-ink py-3 text-sm text-muted hover:text-ink transition-colors flex items-center justify-center gap-2">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              Add Investigation
+            </button>
+          </div>
+        </details>
+      </aside>
+
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- BOTTOM BAR: SCENARIO TIMELINE                                  -->
+  <!-- ============================================================= -->
+  <footer class="shrink-0 border-t border-hair bg-paper">
+    <div class="px-3 sm:px-5 py-2.5 flex items-center gap-4">
+      <!-- timeline -->
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1.5">
+          <span class="text-[10px] num uppercase tracking-[0.2em] text-faint">Scenario timeline</span>
+        </div>
+        <div class="relative overflow-x-auto scroll-area pb-1">
+          <!-- rail -->
+          <div class="relative min-w-[640px] h-9">
+            <div class="absolute left-0 right-0 top-[7px] h-px bg-hair"></div>
+            <div class="absolute left-0 top-[7px] h-px bg-accent" style="width:78%"></div>
+            <ol class="relative flex items-start justify-between">
+              <li class="flex flex-col items-start gap-1">
+                <span class="w-3.5 h-3.5 rounded-full bg-accent border-2 border-paper -ml-px"></span>
+                <span class="num text-[10px] text-muted">00:00</span><span class="text-[10px] text-faint -mt-0.5">Patient Arrival</span>
+              </li>
+              <li class="flex flex-col items-center gap-1">
+                <span class="w-3.5 h-3.5 rounded-full bg-accent border-2 border-paper"></span>
+                <span class="num text-[10px] text-muted">00:03</span><span class="text-[10px] text-faint -mt-0.5">Initial Assessment</span>
+              </li>
+              <li class="flex flex-col items-center gap-1">
+                <span class="w-3.5 h-3.5 rounded-full bg-accent border-2 border-paper"></span>
+                <span class="num text-[10px] text-muted">00:07</span><span class="text-[10px] text-faint -mt-0.5">Vitals Taken</span>
+              </li>
+              <li class="flex flex-col items-center gap-1">
+                <span class="w-3.5 h-3.5 rounded-full bg-accent border-2 border-paper"></span>
+                <span class="num text-[10px] text-muted">00:13</span><span class="text-[10px] text-faint -mt-0.5">ECG Ordered</span>
+              </li>
+              <li class="flex flex-col items-center gap-1">
+                <span class="w-3.5 h-3.5 rounded-full bg-accent border-2 border-paper"></span>
+                <span class="num text-[10px] text-muted">00:14</span><span class="text-[10px] text-faint -mt-0.5">X-Ray Ordered</span>
+              </li>
+              <li class="flex flex-col items-center gap-1">
+                <span class="w-3.5 h-3.5 rounded-full bg-accent border-2 border-paper"></span>
+                <span class="num text-[10px] text-muted">00:14</span><span class="text-[10px] text-faint -mt-0.5">Labs Ordered</span>
+              </li>
+              <li class="flex flex-col items-center gap-1">
+                <span class="relative w-3.5 h-3.5 rounded-full border-2 border-accent bg-paper">
+                  <span class="live-dot absolute inset-0.5 rounded-full bg-accent"></span>
+                </span>
+                <span class="num text-[10px] text-accent font-medium">now</span><span class="text-[10px] text-faint -mt-0.5">Working dx</span>
+              </li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <!-- right buttons -->
+      <div class="hidden sm:flex items-center gap-1.5 shrink-0 self-center">
+        <button class="inline-flex items-center gap-1.5 border border-hair px-3 py-2 text-xs hover:border-ink transition-colors">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 4h9l4 4v12H6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9 11h7M9 15h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span class="hidden md:inline">Scenario Brief</span>
+        </button>
+        <button class="inline-flex items-center justify-center w-9 h-9 border border-hair hover:border-ink transition-colors" aria-label="Help">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7M12 17h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+        <button class="inline-flex items-center justify-center w-9 h-9 border border-hair hover:border-ink transition-colors" aria-label="Settings">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2l-.3-2.5h-4l-.3 2.5a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.3 2.5h4l.3-2.5a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<!-- ===================== SCRIPT ===================== -->
+<script>
+(function () {
+  "use strict";
+  var $  = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- live scenario clock (HH:MM:SS, ticks up from 00:14:32) ---------- */
+  var seconds = 14 * 60 + 32, running = true, clockInt = null;
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function fmt(s) { var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60; return pad(h) + ':' + pad(m) + ':' + pad(ss); }
+  function paintClock() { var el = $('#simClock'); if (el) el.textContent = fmt(seconds); }
+  function startClock() { if (clockInt) return; clockInt = setInterval(function () { seconds++; paintClock(); }, 1000); }
+  function stopClock() { if (clockInt) { clearInterval(clockInt); clockInt = null; } }
+  paintClock();
+  startClock();
+
+  /* ---------- pause toggle (swaps icon + label + clock) ---------- */
+  var pauseBtn = $('#pauseBtn');
+  if (pauseBtn) {
+    pauseBtn.addEventListener('click', function () {
+      running = !running;
+      pauseBtn.setAttribute('aria-pressed', running ? 'false' : 'true');
+      var lbl = $('#pauseLabel'), ic = $('#pauseIcon');
+      if (running) {
+        startClock();
+        if (lbl) lbl.textContent = 'Pause';
+        if (ic) ic.innerHTML = '<rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/>';
+        pauseBtn.setAttribute('aria-label', 'Pause scenario clock');
+      } else {
+        stopClock();
+        if (lbl) lbl.textContent = 'Resume';
+        if (ic) ic.innerHTML = '<path d="M7 5l12 7-12 7V5Z" fill="currentColor"/>';
+        pauseBtn.setAttribute('aria-label', 'Resume scenario clock');
+      }
+    });
+  }
+
+  /* ---------- center tabs (Conversation / Exam / Notes) ---------- */
+  $$('.tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var name = btn.getAttribute('data-tab');
+      $$('.tab-btn').forEach(function (b) { b.setAttribute('aria-selected', b === btn ? 'true' : 'false'); });
+      $$('.tab-panel').forEach(function (p) { p.classList.toggle('hidden', p.getAttribute('data-panel') !== name); });
+    });
+  });
+
+  /* ---------- investigation filter tabs ---------- */
+  $$('.filter-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var cat = btn.getAttribute('data-cat');
+      $$('.filter-btn').forEach(function (b) { b.setAttribute('aria-selected', b === btn ? 'true' : 'false'); });
+      var shown = 0;
+      $$('.inv-card').forEach(function (card) {
+        var match = cat === 'all' || card.getAttribute('data-cat') === cat;
+        card.classList.toggle('hidden', !match);
+        if (match) shown++;
+      });
+      var empty = $('#invEmpty'); if (empty) empty.classList.toggle('hidden', shown !== 0);
+    });
+  });
+
+  /* ---------- mic orb recording-state toggle ---------- */
+  var micOrb = $('#micOrb'), micState = $('#micState'), micInput = $('#micInput');
+  if (micOrb) {
+    micOrb.addEventListener('click', function () {
+      var rec = micOrb.getAttribute('aria-pressed') === 'true';
+      rec = !rec;
+      micOrb.setAttribute('aria-pressed', rec ? 'true' : 'false');
+      if (rec) {
+        micOrb.classList.add('mic-live', 'bg-critical', 'text-paper');
+        micOrb.style.borderColor = '#B91C1C';
+        if (micState) micState.classList.remove('hidden');
+        if (micInput) micInput.classList.add('hidden');
+      } else {
+        micOrb.classList.remove('mic-live', 'bg-critical', 'text-paper');
+        micOrb.style.borderColor = '';
+        if (micState) micState.classList.add('hidden');
+        if (micInput) micInput.classList.remove('hidden');
+      }
+    });
+  }
+
+  /* ---------- top bar toggles (monitor / audio) ---------- */
+  function bindToggle(id, onCls, offCls) {
+    var b = $('#' + id); if (!b) return;
+    b.addEventListener('click', function () {
+      var on = b.getAttribute('aria-pressed') === 'true';
+      on = !on;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      onCls.forEach(function (c) { b.classList.toggle(c, on); });
+      offCls.forEach(function (c) { b.classList.toggle(c, !on); });
+    });
+  }
+  bindToggle('monitorBtn', ['bg-ink', 'text-paper', 'border-ink'], ['border-hair']);
+  bindToggle('audioBtn',   ['bg-ink', 'text-paper', 'border-ink'], ['border-hair']);
+
+  /* ---------- saving -> synced indicator ---------- */
+  var syncText = $('#syncText'), syncDot = $('#syncDot');
+  if (syncText && !prefersReduced) {
+    syncText.textContent = 'Saving';
+    if (syncDot) syncDot.classList.add('live-dot');
+    setTimeout(function () {
+      syncText.textContent = 'Synced';
+      if (syncDot) syncDot.classList.remove('live-dot');
+    }, 1500);
+  }
+})();
+</script>
+</body>
+</html>

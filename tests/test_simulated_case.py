@@ -119,17 +119,25 @@ def test_post_intubation_reaches_terminal_via_admission():
 
 def test_ct_chest_is_gated_so_it_cannot_leak_the_thymoma_early():
     engine = SimulationEngine(load_case("myasthenic_crisis"))
-    result = engine.order_investigation("ct_chest")          # at t=0
-    assert "thymoma" not in (result.revealed or "").lower()
-    assert "pending" in result.message.lower()
+    result = engine.order_investigation("ct_chest")          # at t=0 (gated to 300s)
+    assert result.revealed is None                            # nothing handed over early
+    assert "thymoma" not in (result.message or "").lower()    # and the message can't leak it
+    # The order is recorded and scheduled to report back, not silently dropped.
+    assert "ct_chest" in engine.run.ordered_investigations
+    assert any(ev["inv_id"] == "ct_chest" for ev in engine.run.deferred_events)
 
 
 def test_due_cues_fire_once_after_lingering():
     engine = SimulationEngine(load_case("myasthenic_crisis"))
     assert engine.due_cues() == []                            # nothing yet at t=0
-    engine.tick(engine.CUE_AFTER_SECONDS + 1)                 # linger in baseline
+    engine.goto("recognition")                                # the husband-cue state
+    # The cue references the husband, so it stays gated while he's en route even after
+    # the team has lingered (C1 — no "ask the husband" before he's actually here).
+    engine.tick(engine.CUE_AFTER_SECONDS + 1)
+    assert engine.due_cues() == []
+    engine.summon("husband")                                  # now at the bedside
     fired = engine.due_cues()
-    assert fired and fired[0]["actor_id"] == "nurse"          # baseline cue is the nurse's
+    assert fired and fired[0]["actor_id"] == "nurse"          # the nurse's husband cue
     assert engine.due_cues() == []                            # each cue fires only once
 
 
@@ -210,3 +218,83 @@ def test_legacy_snapshot_without_summoned_actors_restores_to_empty():
     restored = SimulationEngine(load_case("myasthenic_crisis"))
     restored.restore(snap)                                   # additive field → default []
     assert restored.run.summoned_actors == []
+
+
+# ── Arrival announcements (C1) ────────────────────────────────────────────────
+
+def test_arrival_announces_once_when_a_timed_actor_enters():
+    # No authored cue references him → the generic arrival line is the announcement.
+    case = load_case("myasthenic_crisis").model_copy(deep=True)   # load_case is cached
+    for state in case.states:
+        state.cues = [c for c in state.cues if "husband" not in c.requires_present]
+    engine = SimulationEngine(case)
+    assert engine.due_arrivals() == []                       # husband still en route at t=0
+    engine.tick(305)                                         # clock passes his 300s arrival
+    fired = engine.due_arrivals()
+    assert [a["actor_id"] for a in fired] == ["husband"]     # announced the moment he arrives
+    assert engine.due_arrivals() == []                       # exactly once
+    assert "husband" in engine.run.announced_arrivals
+
+
+def test_pending_authored_cue_replaces_the_generic_arrival_line():
+    # The gold case has an unfired nurse cue requiring the husband, so that cue is
+    # the arrival line — fired the same tick he arrives, not after the linger.
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    engine.tick(305)
+    assert engine.due_arrivals() == []                       # generic line suppressed
+    assert "husband" in engine.run.announced_arrivals        # ...but recorded as announced
+    cues = engine.due_cues()
+    assert len(cues) == 1 and cues[0]["actor_id"] == "nurse"
+    assert "husband" in cues[0]["text"].lower()
+
+
+def test_summon_suppresses_the_duplicate_clock_arrival_announce():
+    # A summon is announced by the nurse when it happens; the later clock arrival
+    # must not announce him a second time.
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    engine.summon("husband")
+    engine.tick(305)
+    assert engine.due_arrivals() == []
+
+
+def test_cue_referencing_an_absent_actor_stays_gated_until_present():
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    engine.goto("recognition")
+    engine.tick(80)                                          # lingered, but husband absent
+    assert engine.due_cues() == []                           # the husband cue can't fire yet
+    engine.tick(230)                                         # now past 300s — he's here
+    assert engine.due_cues()                                 # eligible once he's present
+
+
+# ── Deferred results: the room talks back (issues #4/#5) ──────────────────────
+
+def test_ordering_a_latency_test_schedules_a_callback_not_a_dead_pending():
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    step = engine.order_investigation("vital_capacity")      # RT bedside, 45s latency
+    assert step.revealed is None                             # not back instantly
+    assert "vital_capacity" in engine.run.ordered_investigations
+    ev = next(e for e in engine.run.deferred_events if e["inv_id"] == "vital_capacity")
+    assert ev["actor_id"] == "rt"                            # the RT will report it back
+    assert ev["fire_at"] == 45
+
+
+def test_deferred_result_fires_after_its_latency_with_the_holder_and_value():
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    engine.order_investigation("vital_capacity")
+    assert engine.due_deferred() == []                       # nothing yet
+    engine.tick(50)                                          # past the 45s turn-around
+    due = engine.due_deferred()
+    assert len(due) == 1
+    assert due[0]["actor_id"] == "rt"                        # the RT delivers it
+    assert "VC" in (due[0]["revealed"] or "")               # the grounded number
+    assert engine.due_deferred() == []                      # drained — fires once
+
+
+def test_deferred_events_survive_snapshot_roundtrip():
+    engine = SimulationEngine(load_case("myasthenic_crisis"))
+    engine.order_investigation("nif")
+    restored = SimulationEngine(load_case("myasthenic_crisis"))
+    restored.restore(engine.snapshot())
+    restored.tick(50)
+    due = restored.due_deferred()
+    assert len(due) == 1 and due[0]["actor_id"] == "rt"

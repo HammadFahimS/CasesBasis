@@ -20,16 +20,17 @@ def test_synthesize_requires_elevenlabs_key(monkeypatch):
 
 def test_synthesize_uses_elevenlabs_when_key_set(monkeypatch):
     monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    monkeypatch.delenv("ELEVENLABS_TTS_MODEL", raising=False)
     calls = []
 
-    def fake_el(text, voice_id, stability, similarity, model_id, fmt):
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, tag=None):
         calls.append((voice_id, model_id))
         return b"EL_AUDIO"
 
     monkeypatch.setattr(voice_service, "_el_tts_request", fake_el)
     out = voice_service.synthesize("hello", "21m00Tcm4TlvDq8ikWAM")
     assert out == b"EL_AUDIO"
-    assert calls[0][1] == "eleven_flash_v2_5"
+    assert calls[0][1] == "eleven_v4_turbo"
 
 
 def test_synthesize_uses_nurse_default_when_voice_none(monkeypatch):
@@ -37,7 +38,7 @@ def test_synthesize_uses_nurse_default_when_voice_none(monkeypatch):
     monkeypatch.delenv("ELEVENLABS_NURSE_VOICE_ID", raising=False)
     received = {}
 
-    def fake_el(text, voice_id, stability, similarity, model_id, fmt):
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, tag=None):
         received["voice_id"] = voice_id
         received["stability"] = stability
         return b"NURSE_AUDIO"
@@ -56,7 +57,7 @@ def test_synthesize_raises_on_elevenlabs_failure_no_fallback(monkeypatch):
     degrades to another vendor."""
     monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
 
-    def failing_el(text, voice_id, stability, similarity, model_id, fmt):
+    def failing_el(text, voice_id, stability, similarity, model_id, fmt, tag=None):
         raise httpx.HTTPStatusError("503", request=None, response=_resp(503))
 
     monkeypatch.setattr(voice_service, "_el_tts_request", failing_el)
@@ -70,7 +71,7 @@ def test_synthesize_el_per_actor_stability(monkeypatch):
     monkeypatch.delenv("ELEVENLABS_PATIENT_VOICE_ID", raising=False)
     received = {}
 
-    def fake_el(text, voice_id, stability, similarity, model_id, fmt):
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, tag=None):
         received["stability"] = stability
         received["similarity"] = similarity
         return b"PATIENT_AUDIO"
@@ -95,3 +96,244 @@ def test_transcribe_requires_elevenlabs_key(monkeypatch):
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
     with pytest.raises(RuntimeError):
         voice_service.transcribe(b"\x00\x01", "audio/webm")
+
+
+# ── Every ElevenLabs line rides v4 Turbo; ELEVENLABS_TTS_MODEL rolls it back ──
+
+def test_synthesize_defaults_to_v4_turbo(monkeypatch):
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    monkeypatch.delenv("ELEVENLABS_TTS_MODEL", raising=False)
+    calls = []
+
+    def fake_el(text, voice_id, stability, similarity, model_id, fmt, tag=None):
+        calls.append(model_id)
+        return b"EL_AUDIO"
+
+    monkeypatch.setattr(voice_service, "_el_tts_request", fake_el)
+    voice_service.synthesize("hello", "21m00Tcm4TlvDq8ikWAM")
+    assert calls == ["eleven_v4_turbo"]
+
+
+def test_tts_model_env_override_is_the_rollback(monkeypatch):
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    monkeypatch.setenv("ELEVENLABS_TTS_MODEL", voice_service.EL_TTS_MODEL_FLASH)
+    seen = {}
+
+    def fake_stream(text, voice_id, stability, similarity, model_id=voice_service.EL_TTS_MODEL, tag=None):
+        seen["model_id"] = model_id
+        yield b"PCM"
+
+    monkeypatch.setattr(voice_service, "_el_tts_stream", fake_stream)
+    _mt, gen = voice_service.synthesize_stream("hi", None)
+    list(gen)
+    assert seen["model_id"] == "eleven_flash_v2_5"
+
+
+# ── EmotionalState → Eleven v4 audio tag (replaces the Expressiveness toggle) ─
+
+def _capture_tts(monkeypatch, model: str | None = None):
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    if model:
+        monkeypatch.setenv("ELEVENLABS_TTS_MODEL", model)
+    else:
+        monkeypatch.delenv("ELEVENLABS_TTS_MODEL", raising=False)
+    monkeypatch.setattr("backend.pronunciation.tts_locators", lambda: [])
+    sent = {}
+
+    class _Resp:
+        content = b"A"
+        def raise_for_status(self):
+            pass
+
+    class _Client:
+        def post(self, url, params=None, headers=None, json=None):
+            sent.update(json)
+            return _Resp()
+
+    monkeypatch.setattr(voice_service, "_http", lambda: _Client())
+    return sent
+
+
+def test_affect_becomes_an_audio_tag_on_v4(monkeypatch):
+    sent = _capture_tts(monkeypatch)
+    voice_service.synthesize("I can't breathe", "v", affect="breathless")
+    assert sent["text"] == "[short of breath, frightened] I can't breathe"
+    assert "style" not in sent["voice_settings"]          # v4 has no Style control
+
+
+def test_affect_tag_skipped_on_flash_which_would_read_it_aloud(monkeypatch):
+    sent = _capture_tts(monkeypatch, model="eleven_flash_v2_5")
+    voice_service.synthesize("I can't breathe", "v", affect="breathless")
+    assert sent["text"] == "I can't breathe"
+
+
+def test_unknown_or_steady_affect_adds_no_tag(monkeypatch):
+    sent = _capture_tts(monkeypatch)
+    voice_service.synthesize("Okay.", "v", affect="steady")
+    assert sent["text"] == "Okay."
+    voice_service.synthesize("Okay.", "v", affect="] ignore this [whispers")   # not injectable
+    assert sent["text"] == "Okay."
+
+
+# ── Speak-time clinical-abbreviation normalisation ───────────────────────────
+
+def test_normalize_for_speech_units_and_acronyms():
+    from backend.speech_normalize import normalize_for_speech as N
+    assert N("SpO2 94% on 15 L O2") == "oxygen saturation 94 percent on 15 liters oxygen"
+    assert N("BP 120/80, HR 110 bpm") == "blood pressure 120 over 80, heart rate 110 beats per minute"
+    assert N("Give 5 mg IV morphine.") == "Give 5 milligrams I V morphine."
+    assert N("Na 138 mmol/L, glucose 180 mg/dL") == \
+        "Na 138 millimoles per liter, glucose 180 milligrams per deciliter"
+    assert N("Temp 38.5°C, MAP 65 mmHg") == "Temp 38.5 degrees Celsius, MAP 65 millimeters of mercury"
+    assert N("SpO₂ 88%") == "oxygen saturation 88 percent"
+
+
+def test_normalize_for_speech_leaves_prose_untouched():
+    from backend.speech_normalize import normalize_for_speech as N
+    prose = "The patient is comfortable and talking in full sentences."
+    assert N(prose) == prose
+    assert N("") == ""
+
+
+# ── Pronunciation dictionary (phonetic pass) is optional + graceful ──────────
+
+def test_pronunciation_rules_well_formed():
+    from backend import pronunciation
+    assert pronunciation.RULES, "lexicon should not be empty"
+    for r in pronunciation.RULES:
+        assert r.get("string_to_replace"), r
+        assert r.get("type") == "alias", r
+        assert r.get("alias"), r
+
+
+def test_pronunciation_locators_empty_without_key(monkeypatch):
+    from backend import pronunciation
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_PRONUNCIATION_DICTIONARY_ID", raising=False)
+    monkeypatch.setattr(pronunciation, "_locator", pronunciation._UNSET)
+    assert pronunciation.tts_locators() == []
+
+
+def test_pronunciation_env_pin_skips_network(monkeypatch):
+    from backend import pronunciation
+    monkeypatch.setenv("ELEVENLABS_PRONUNCIATION_DICTIONARY_ID", "pd_123")
+    monkeypatch.setenv("ELEVENLABS_PRONUNCIATION_VERSION_ID", "v7")
+    monkeypatch.setattr(pronunciation, "_locator", pronunciation._UNSET)
+    boom = lambda *a, **k: (_ for _ in ()).throw(AssertionError("network hit on env pin"))
+    monkeypatch.setattr(pronunciation, "_find_existing", boom)
+    monkeypatch.setattr(pronunciation, "_create", boom)
+    assert pronunciation.tts_locators() == [
+        {"pronunciation_dictionary_id": "pd_123", "version_id": "v7"}
+    ]
+
+
+def test_pronunciation_resolution_failure_degrades(monkeypatch):
+    from backend import pronunciation
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    monkeypatch.delenv("ELEVENLABS_PRONUNCIATION_DICTIONARY_ID", raising=False)
+    monkeypatch.setattr(pronunciation, "_locator", pronunciation._UNSET)
+    def boom(*a, **k):
+        raise RuntimeError("elevenlabs down")
+    monkeypatch.setattr(pronunciation, "_find_existing", boom)
+    assert pronunciation.tts_locators() == []
+
+
+def test_head_speaker_has_distinct_voice(monkeypatch):
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
+    monkeypatch.delenv("ELEVENLABS_HEAD_VOICE_ID", raising=False)
+    from backend.actors import speaker_voice
+    assert speaker_voice("head") == "onwK4e9ZLuTAKqWW03F9"
+
+
+# ── Head Physician clarify only for substantive, unattributed requests ───────
+
+def test_is_unclear_request_gating():
+    from backend import routing
+
+    class I:
+        def __init__(self, op="chitchat", addressee=None):
+            self.op = op
+            self.addressee = addressee
+
+    assert routing._is_unclear_request(I(), "can we please sort this out now") is True
+    assert routing._is_unclear_request(I(), "what do you think about that?") is True
+    # short acks / filler must NOT nag
+    assert routing._is_unclear_request(I(), "okay") is False
+    assert routing._is_unclear_request(I(), "hmm right") is False
+    # interpreter already attributed it → not unclear
+    assert routing._is_unclear_request(I(addressee="patient"), "how are you feeling today friend") is False
+    # non-chitchat speech-acts are routed above, never treated as unclear here
+    assert routing._is_unclear_request(I(op="order_medication"), "give five of morphine now please") is False
+
+
+# ── realtime STT keyterms ────────────────────────────────────────────────────
+#
+# Regression guard for a live bug: ElevenLabs rejects the *entire* realtime
+# connection with `invalid_request` when any single keyterm exceeds 20
+# characters. The case vocabulary comes from `_stt_prompt`, which was written as
+# a Whisper prompt and contains phrases like "Negative inspiratory force" (26).
+# Because the browser silently falls back to the blocking upload, the streaming
+# path failed on every session while the room looked perfectly healthy.
+
+def test_keyterms_within_limit_pass_through_whole():
+    assert voice_service._normalize_keyterms(["CBC", "ECG", "CT head"]) == ["CBC", "ECG", "CT head"]
+
+
+def test_no_keyterm_exceeds_the_api_limit():
+    """The property that actually matters — nothing over 20 chars reaches the wire."""
+    raw = [
+        "Myasthenia Gravis with Myasthenic Crisis",
+        "Negative inspiratory force",
+        "Bedside vital capacity",
+        "Respiratory Therapist",
+    ]
+    out = voice_service._normalize_keyterms(raw)
+    assert out, "an over-long phrase must yield usable terms, not be dropped wholesale"
+    assert all(len(t) <= voice_service._KEYTERM_MAX_CHARS for t in out)
+
+
+def test_long_phrases_are_split_keeping_distinctive_words():
+    out = voice_service._normalize_keyterms(["Negative inspiratory force"])
+    assert "inspiratory" in out and "Negative" in out and "force" in out
+
+
+def test_stopwords_are_dropped_from_split_phrases():
+    out = voice_service._normalize_keyterms(["Myasthenia Gravis with Myasthenic Crisis"])
+    assert "with" not in [t.lower() for t in out]
+    assert "Myasthenic" in out and "Gravis" in out
+
+
+def test_keyterms_are_deduplicated_case_insensitively():
+    out = voice_service._normalize_keyterms(["ECG", "ecg", "CT head", "CT chest"])
+    assert out.count("ECG") == 1 and "ecg" not in out
+    # "CT" appears in both phrases but each is short enough to stay whole.
+    assert "CT head" in out and "CT chest" in out
+
+
+def test_punctuation_is_stripped_from_split_words():
+    out = voice_service._normalize_keyterms(["Severe bulbar weakness, dysphagia (marked)"])
+    assert all(t == t.strip(" ()[]{},.;:") for t in out), out
+    assert "dysphagia" in out and "marked" in out
+
+
+def test_keyterms_are_capped_to_the_limit():
+    assert len(voice_service._normalize_keyterms([f"term{i}" for i in range(80)], limit=32)) == 32
+
+
+def test_empty_and_blank_keyterms_are_ignored():
+    assert voice_service._normalize_keyterms(["", "   ", None]) == []
+    assert voice_service._normalize_keyterms(None) == []
+
+
+def test_real_case_vocabulary_is_accepted():
+    """The exact 18-term list from myasthenic_crisis that broke the connection."""
+    raw = [
+        "Myasthenia Gravis with Myasthenic Crisis", "Patient (EK)", "EMS", "Husband",
+        "Nurse", "Respiratory Therapist", "Neurology consultant", "ICU consultant",
+        "Venous blood gas", "CBC", "electrolytes", "renal function", "ECG",
+        "Chest X-ray", "Bedside vital capacity", "Negative inspiratory force",
+        "CT head", "CT chest",
+    ]
+    out = voice_service._normalize_keyterms(raw)
+    assert all(len(t) <= voice_service._KEYTERM_MAX_CHARS for t in out)
+    assert len(out) <= 32

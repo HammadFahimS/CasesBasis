@@ -9,6 +9,9 @@ from urllib import error, request
 logger = logging.getLogger(__name__)
 
 from langsmith import traceable
+
+from utils.observability import span as lw_span
+from utils.observability import update_current_span
 from pydantic import BaseModel
 from schemas.clinical_case import ClinicalCase, normalize_case_data
 
@@ -20,11 +23,23 @@ DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_TOGETHER_MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
 DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
-DEFAULT_CEREBRAS_MODEL = "gpt-oss-120b"
+# qwen-3.8-27b is the general-purpose reasoning model for the live voice sim
+# (nurse brain, routing, actors, director — everything that flows through
+# agent_runtime.complete) and the default for anything that doesn't pin a model.
+# It is the default because it responds fast; zai-glm-4.7 is capable but too slow
+# for an interactive room. gpt-oss-120b is reserved for two things where a stronger
+# model is required and the latency is acceptable (off the conversational path):
+#   - ECG parameter generation (see CEREBRAS_ECG_MODEL + agents/ecg.py)
+#   - the manual case simulator, all of it (see CEREBRAS_MANUAL_MODEL +
+#     manual_sim_model() + backend/sim_core.py), because the fast live model
+#     can't reliably satisfy the strict ClinicalCase/MedicalFacts schemas.
+# (gemma-4-31b held this slot until Cerebras archived it in October 2026.)
+DEFAULT_CEREBRAS_MODEL = "qwen-3.8-27b"
+CEREBRAS_ECG_MODEL = "gpt-oss-120b"
+CEREBRAS_MANUAL_MODEL = "gpt-oss-120b"
 CEREBRAS_FALLBACK_MODELS = [
+    "qwen-3.8-27b",
     "gpt-oss-120b",
-    "zai-glm-4.7",
-    "llama3.1-8b",
 ]
 TOGETHER_BASE_URL = "https://api.together.xyz/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -69,12 +84,25 @@ def build_together_client() -> Any:
 
 def build_cerebras_client() -> Any:
     try:
+        import httpx
         from openai import OpenAI
     except ImportError as exc:
         raise RuntimeError("The openai package is not installed. Run: pip install openai") from exc
+    # A dedicated http client with a 5-minute keepalive so the TLS connection to
+    # Cerebras stays warm between voice turns. The OpenAI SDK's default pool uses
+    # httpx's 5 s keepalive_expiry, which drops the connection during the gap
+    # while the resident talks/listens — making the *first* LLM call of the next
+    # turn pay a full cold handshake (~1.8 s measured, vs ~150 ms warm).
+    http_client = httpx.Client(
+        limits=httpx.Limits(
+            max_keepalive_connections=4, max_connections=8, keepalive_expiry=300.0
+        ),
+        timeout=httpx.Timeout(60.0, connect=10.0),
+    )
     client = OpenAI(
         api_key=os.environ["CEREBRAS_API_KEY"],
         base_url=CEREBRAS_BASE_URL,
+        http_client=http_client,
     )
     return CerebrasClient(client)
 
@@ -118,6 +146,18 @@ def resolve_model(provider: str, model: str | None) -> str:
     if provider == "cerebras":
         return os.getenv("CEREBRAS_MODEL", DEFAULT_CEREBRAS_MODEL)
     return os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+
+
+def manual_sim_model(provider: str | None = None) -> str | None:
+    """The model the manual case simulator must use, or ``None`` to accept the
+    provider default.
+
+    On Cerebras the default (``zai-glm-4.7``) can't reliably satisfy the manual
+    sim's strict ClinicalCase/MedicalFacts/investigation schemas, so we pin
+    ``gpt-oss-120b`` for every manual-sim agent regardless of the ``CEREBRAS_MODEL``
+    env default. Other providers keep their own default (return ``None``)."""
+    provider = provider or get_llm_provider()
+    return CEREBRAS_MANUAL_MODEL if provider == "cerebras" else None
 
 
 def build_llm_client(provider: str | None = None) -> Any:
@@ -381,6 +421,13 @@ def decode_json_if_needed(raw_value: Any) -> Any:
     return json.loads(raw_value)
 
 
+def _chat_input(system_prompt: str, user_prompt: str) -> list[dict[str, str]]:
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
 class OpenAIJsonAgent:
     """Provider-aware base class for structured JSON and text LLM calls."""
 
@@ -394,6 +441,7 @@ class OpenAIJsonAgent:
         self.client = client or build_llm_client(self.provider)
         self.model = resolve_model(self.provider, model)
 
+    @lw_span("llm.parse_response", type="llm", capture_input=False)
     @traceable(run_type="llm")
     def parse_response(
         self,
@@ -402,6 +450,11 @@ class OpenAIJsonAgent:
         user_prompt: str,
         response_model: type[ResponseModel],
     ) -> ResponseModel:
+        update_current_span(
+            model=self.model,
+            input=_chat_input(system_prompt, user_prompt),
+            metadata={"provider": self.provider, "response_model": response_model.__name__},
+        )
         if self.provider in ("ollama", "groq", "together", "openrouter", "cerebras"):
             return self.client.parse_response(
                 model=self.model,
@@ -422,8 +475,14 @@ class OpenAIJsonAgent:
             raise ValueError("OpenAI response did not include parsed structured output")
         return safe_parse(response_model, parsed)
 
+    @lw_span("llm.text_response", type="llm", capture_input=False)
     @traceable(run_type="llm")
     def text_response(self, *, system_prompt: str, user_prompt: str) -> str:
+        update_current_span(
+            model=self.model,
+            input=_chat_input(system_prompt, user_prompt),
+            metadata={"provider": self.provider},
+        )
         if self.provider in ("ollama", "groq", "together", "openrouter", "cerebras"):
             return self.client.text_response(
                 model=self.model,

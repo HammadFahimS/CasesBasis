@@ -1,0 +1,140 @@
+"""Compare two latency runs and say whether the change was real.
+
+    python -m bench.compare bench/results/<before>.json bench/results/<after>.json
+
+The verdict is deliberately conservative. A bootstrap confidence interval on the
+median difference has to exclude zero *and* the shift has to clear an absolute
+effect floor before anything is called IMPROVED. Two runs of identical code on a
+shared network will differ; this is the guard against reading that as progress.
+
+Exit code is 1 if any probe REGRESSED, so this can gate a change.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+from bench.stats import judge
+
+_MARK = {
+    "IMPROVED": "✓", "REGRESSED": "✗", "NOISE": "·", "NEW": "+", "GONE": "-",
+}
+
+
+def _samples(run: dict[str, Any]) -> dict[str, list[float]]:
+    return {
+        p["name"]: p.get("samples", [])
+        for p in run.get("probes", [])
+        if p.get("samples")
+    }
+
+
+def compare(
+    before: dict, after: dict, min_effect_ms: float = 5.0,
+    rename: dict[str, str] | None = None,
+) -> list:
+    """Diff two runs probe-by-probe.
+
+    ``rename`` maps an old probe name to a new one, for the case where a change
+    *replaces* a leg rather than speeding it up — streaming STT retires
+    ``stt_blocking`` in favour of ``stt_realtime``. Without it both sides show up
+    as GONE/NEW and the comparison that actually matters never gets made.
+    """
+    from bench.stats import Verdict
+
+    b, a = _samples(before), _samples(after)
+    rename = rename or {}
+    verdicts = []
+    paired_new: set[str] = set()
+    paired_old: set[str] = set()
+
+    for old, new in rename.items():
+        if old in b and new in a:
+            v = judge(new, b[old], a[new], min_effect_ms=min_effect_ms)
+            v.probe = f"{old}→{new}"
+            v.note = (v.note + "; " if v.note else "") + "cross-probe"
+            verdicts.append(v)
+            paired_new.add(new)
+            paired_old.add(old)
+
+    for name in sorted(set(b) | set(a)):
+        if name in paired_new:
+            continue
+        # A mapped probe that survives on both sides keeps its own row — a retired
+        # leg is often still the fallback (stt_blocking backs up stt_realtime) and
+        # its own drift is worth seeing. One that is genuinely gone does not: the
+        # cross-probe row already accounts for it, and a GONE line would just be noise.
+        if name in paired_old and name not in a:
+            continue
+        if name not in b:
+            verdicts.append(Verdict(name, 0, 0, 0, 0, 0, 0, "NEW", "not in baseline"))
+        elif name not in a:
+            verdicts.append(Verdict(name, 0, 0, 0, 0, 0, 0, "GONE", "absent from new run"))
+        else:
+            verdicts.append(judge(name, b[name], a[name], min_effect_ms=min_effect_ms))
+    return verdicts
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(prog="bench.compare", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("before", type=Path)
+    ap.add_argument("after", type=Path)
+    ap.add_argument("--min-effect-ms", type=float, default=5.0,
+                    help="ignore shifts smaller than this (default 5)")
+    ap.add_argument("--json", action="store_true", help="emit JSON instead of a table")
+    ap.add_argument("--map", action="append", default=[], metavar="OLD=NEW",
+                    help="compare a retired probe against its replacement, e.g. "
+                         "--map stt_blocking=stt_realtime (repeatable)")
+    args = ap.parse_args(argv)
+
+    rename: dict[str, str] = {}
+    for pair in args.map:
+        if "=" not in pair:
+            ap.error(f"--map expects OLD=NEW, got {pair!r}")
+        old, new = pair.split("=", 1)
+        rename[old.strip()] = new.strip()
+
+    before = json.loads(args.before.read_text(encoding="utf-8"))
+    after = json.loads(args.after.read_text(encoding="utf-8"))
+    verdicts = compare(before, after, args.min_effect_ms, rename)
+
+    if args.json:
+        print(json.dumps([v.to_dict() for v in verdicts], indent=2))
+    else:
+        bl, al = before.get("label", "?"), after.get("label", "?")
+        bs, as_ = before.get("git", {}).get("sha", "?"), after.get("git", {}).get("sha", "?")
+        print(f"\n{bl} ({bs})  →  {al} ({as_})\n")
+        print(f"  {'probe':<16} {'before':>10} {'after':>10} {'delta':>11} {'':>8}  90% CI")
+        print(f"  {'-' * 72}")
+        for v in verdicts:
+            if v.label in ("NEW", "GONE"):
+                print(f"  {_MARK[v.label]} {v.probe:<14} {v.note}")
+                continue
+            print(
+                f"  {_MARK[v.label]} {v.probe:<14}"
+                f" {v.before_p50:>9.1f}ms {v.after_p50:>9.1f}ms"
+                f" {v.delta_ms:>+9.1f}ms {v.delta_pct:>+6.1f}%"
+                f"  [{v.ci_low:+.1f}, {v.ci_high:+.1f}]"
+                + (f"  {v.note}" if v.note else "")
+            )
+        real = [v for v in verdicts if v.label in ("IMPROVED", "REGRESSED")]
+        if not real:
+            print("\n  No probe moved beyond noise.")
+        else:
+            net = sum(v.delta_ms for v in real)
+            print(f"\n  Net across probes that actually moved: {net:+.1f} ms")
+
+        for run, name in ((before, "before"), (after, "after")):
+            if run.get("git", {}).get("dirty"):
+                print(f"  WARNING: '{name}' run was taken on a dirty tree")
+
+    return 1 if any(v.label == "REGRESSED" for v in verdicts) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

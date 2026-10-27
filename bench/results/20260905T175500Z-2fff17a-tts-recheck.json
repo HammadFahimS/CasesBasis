@@ -1,0 +1,64 @@
+{
+  "label": "tts-recheck",
+  "ts": "2026-09-05T17:46:01.834267+00:00",
+  "git": {
+    "sha": "2fff17a",
+    "branch": "low-latency-post-demo-1",
+    "dirty": true
+  },
+  "host": {
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "python": "3.11.15"
+  },
+  "config": {
+    "case_id": "myasthenic_crisis",
+    "n": 20,
+    "warmup": 1,
+    "llm_provider": "cerebras",
+    "tts_model": "eleven_flash_v2_5"
+  },
+  "elevenlabs_region": {
+    "x-region": "us-central1",
+    "status": 200
+  },
+  "notes": [],
+  "probes": [
+    {
+      "name": "tts_ttfb",
+      "tier": "network",
+      "samples": [
+        157.395,
+        208.651,
+        146.561,
+        154.822,
+        197.436,
+        149.964,
+        176.859,
+        163.509,
+        145.391,
+        144.803,
+        230.192,
+        150.813,
+        151.089,
+        149.606,
+        150.071,
+        164.85,
+        158.731,
+        175.215,
+        202.859,
+        145.582
+      ],
+      "stats": {
+        "n": 20,
+        "p50": 156.11,
+        "p95": 209.73,
+        "min": 144.8,
+        "max": 230.19,
+        "stdev": 24.13
+      },
+      "meta": {
+        "full_stream_p50_ms": 329.03
+      }
+    }
+  ]
+}

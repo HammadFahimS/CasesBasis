@@ -1,4 +1,9 @@
 .env
+# Real secret files — never commit. Only the *.example templates are tracked.
+.env.production
+.env.*
+!.env.example
+!.env.production.example
 .venv/
 __pycache__/
 .pytest_cache/
@@ -17,8 +22,13 @@ data/ptbxl_index/
 # Local / transient
 .claude/
 .DS_Store
+# graphify knowledge-graph output — generated, large (~11M), contains machine-specific paths
+graphify-out/
 # Runtime database — rebuilt from migrations + cases/*.json (seed_gold_cases) on startup.
 # Do not track: it's runtime state (sessions/evals), churns every run, and conflicts on merge.
 casesbasis.db
 *.db-wal
 *.db-shm
+
+# Latency bench: generated audio fixtures (results/ IS committed — it is the history)
+bench/fixtures/

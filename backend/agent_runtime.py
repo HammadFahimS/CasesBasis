@@ -45,8 +45,14 @@ except Exception:  # langsmith not installed / import error → tracing disabled
     _ls_run_tree = None
 
 
+from utils.observability import span as _lw_span
+from utils.observability import update_current_span as _lw_update_span
+
+
 def _traced(func):
-    """Wrap `complete` as a LangSmith LLM run when the SDK is available."""
+    """Wrap `complete` as a LangSmith LLM run when the SDK is available, and as a
+    LangWatch LLM span (its own trace for a standalone voice turn)."""
+    func = _lw_span("voice.complete", type="llm", capture_input=False)(func)
     if _ls_traceable is None:
         return func
     return _ls_traceable(run_type="llm", name="voice.complete")(func)
@@ -164,6 +170,15 @@ def complete(
 
     provider, client, model = _resolve()
     _annotate_run(kind, provider, model)
+    _lw_update_span(
+        name=f"voice.{kind or 'nurse'}",
+        model=model,
+        input=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        metadata={"kind": kind or "nurse", "provider": provider},
+    )
     started = time.monotonic()
     last_exc: Exception | None = None
 

@@ -23,6 +23,23 @@ _CXR_TERMS = ("chest x-ray", "chest xray", "cxr", "chest radiograph", "chest fil
 
 _ecg_service = None  # lazy singletons — building the FAISS/agent state is costly
 _cxr_service = None
+_lab_agent = None
+# Generated panels are memoised per (test id, authored text, age, sex) so a repeat
+# order shows the same numbers and we don't pay a second LLM call.
+_lab_value_cache: dict[tuple, list[dict]] = {}
+
+# Categories whose bare-prose result we expand into a structured value table when
+# the case didn't author one.
+_GENERATABLE = ("lab", "bedside")
+
+# URL prefix of the resident-only route that serves authored case assets
+# (``InvestigationDef.image_ref``, a path under ``cases/``). The route lives in
+# backend.routers.pages and uses this same constant.
+CASE_ASSET_PREFIX = "/cases/assets"
+
+
+def asset_url(ref: str) -> str:
+    return f"{CASE_ASSET_PREFIX}/{ref.lstrip('/')}"
 
 
 def _ecg():
@@ -31,6 +48,37 @@ def _ecg():
         from backend.ecg_service import ECGService
         _ecg_service = ECGService()
     return _ecg_service
+
+
+def _lab_values_agent():
+    global _lab_agent
+    if _lab_agent is None:
+        from agents.lab_values import LabValueAgent
+        _lab_agent = LabValueAgent()
+    return _lab_agent
+
+
+def _structured_values(inv: "InvestigationDef", authored: str, patient: "PatientProfile") -> list[dict]:
+    """The lab table for a card: authored ``values`` if present, else a generated
+    panel faithful to the authored prose (cached). Empty for non-lab categories or
+    on any failure — the text summary still carries the result."""
+    if inv.values:
+        return [v.model_dump() for v in inv.values]
+    if inv.category not in _GENERATABLE:
+        return []
+    key = (inv.id, authored, getattr(patient, "age", None), getattr(patient, "gender", None))
+    if key in _lab_value_cache:
+        return _lab_value_cache[key]
+    try:
+        gen = _lab_values_agent().generate(
+            inv.name, authored, age=patient.age, sex=patient.gender,
+        )
+        rows = [v.model_dump() for v in gen]
+    except Exception as exc:  # never let generation break the turn/card
+        logger.warning("lab value generation failed for %s: %s", inv.id, exc)
+        rows = []
+    _lab_value_cache[key] = rows
+    return rows
 
 
 def _cxr():
@@ -60,19 +108,32 @@ def build_investigation_card(
     vitals: VitalSigns,
     patient: PatientProfile,
     authored: str,
+    state_id: str | None = None,
 ) -> dict:
     """A drawer card for one ordered investigation.
 
     ``authored`` is the engine's revealed result text (kept as the clinical
-    content); a real ECG/CXR image is attached when one can be generated."""
+    content). An authored image (``image_ref`` / ``image_ref_by_state`` resolved
+    for ``state_id``) is attached as a URL payload; otherwise a real ECG/CXR image
+    is attached when one can be generated."""
+    image = inv.image_for(state_id) if state_id is not None else inv.image_ref
     card: dict = {
         "kind": "report",
         "id": inv.id,
         "title": inv.name,
         "category": inv.category,
         "summary": authored,
+        # Structured result lines for a proper lab table (authored or generated).
+        # A study whose result is a picture never gets a generated value table.
+        "values": [] if image else _structured_values(inv, authored, patient),
         "visual_payload": None,
     }
+    if image:
+        card.update(
+            kind="image",
+            visual_payload={"type": "image", "image": asset_url(image), "caption": inv.name},
+        )
+        return card
     try:
         if inv.category == "ecg":
             payload = _ecg().build_visual_payload(

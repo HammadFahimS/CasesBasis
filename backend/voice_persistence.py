@@ -194,3 +194,79 @@ def list_for_resident(resident_id: str, limit: int = 50) -> list[dict[str, Any]]
          "created_at": r[3], "updated_at": r[4], "ended_at": r[5]}
         for r in rows
     ]
+
+
+# ── Browser-side telemetry ───────────────────────────────────────────────────
+# The rooms post page errors and audio outcomes (watchdog fires, skipped lines,
+# play() rejections) here. Bounded per post and per event so a runaway page
+# can't fill the DB; best-effort like every other write in this module.
+
+MAX_CLIENT_EVENTS_PER_POST = 50
+MAX_CLIENT_DETAIL_CHARS = 2000
+MAX_CLIENT_KIND_CHARS = 64
+MAX_CLIENT_T_CHARS = 32
+
+
+def owns_session(session_id: str, resident_id: str) -> bool:
+    """True when ``session_id`` exists and belongs to ``resident_id`` (ended or not)."""
+    try:
+        row = get_db().execute(
+            "SELECT 1 FROM voice_sessions WHERE id=? AND resident_id=?",
+            (session_id, resident_id),
+        ).fetchone()
+    except sqlite3.Error as exc:
+        logger.warning("voice session ownership check failed: %s", exc)
+        return False
+    return row is not None
+
+
+def _clean_client_event(raw: Any) -> tuple[str, str, str] | None:
+    if not isinstance(raw, dict):
+        return None
+    kind = str(raw.get("kind") or "").strip()[:MAX_CLIENT_KIND_CHARS]
+    if not kind:
+        return None
+    detail = raw.get("detail")
+    if not isinstance(detail, str):
+        detail = json.dumps(detail, default=str) if detail is not None else ""
+    t = str(raw.get("t") or "")[:MAX_CLIENT_T_CHARS]
+    return kind, detail[:MAX_CLIENT_DETAIL_CHARS], t
+
+
+def record_client_events(session_id: str, resident_id: str, events: list) -> int:
+    """Store up to ``MAX_CLIENT_EVENTS_PER_POST`` browser events. Returns the count kept."""
+    rows = []
+    for raw in list(events or [])[:MAX_CLIENT_EVENTS_PER_POST]:
+        cleaned = _clean_client_event(raw)
+        if cleaned is not None:
+            rows.append(cleaned)
+    if not rows:
+        return 0
+    now = utcnow()
+    try:
+        with write_transaction() as conn:
+            conn.executemany(
+                "INSERT INTO voice_client_events "
+                "(session_id, resident_id, t, kind, detail, created_at) VALUES (?,?,?,?,?,?)",
+                [(session_id, resident_id, t, kind, detail, now) for kind, detail, t in rows],
+            )
+    except sqlite3.Error as exc:
+        logger.warning("voice client events not stored for %s: %s", session_id, exc)
+        return 0
+    return len(rows)
+
+
+def client_events(session_id: str, resident_id: str, limit: int = 500) -> list[dict[str, Any]]:
+    """The stored browser events for one owned session, oldest first."""
+    try:
+        rows = get_db().execute(
+            "SELECT t, kind, detail, created_at FROM voice_client_events "
+            "WHERE session_id=? AND resident_id=? ORDER BY id ASC LIMIT ?",
+            (session_id, resident_id, int(limit)),
+        ).fetchall()
+    except sqlite3.Error as exc:
+        logger.warning("voice client events unreadable for %s: %s", session_id, exc)
+        return []
+    return [
+        {"t": r[0], "kind": r[1], "detail": r[2], "created_at": r[3]} for r in rows
+    ]

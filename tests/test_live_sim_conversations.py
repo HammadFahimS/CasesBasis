@@ -261,6 +261,82 @@ def test_present_bystander_answers_even_when_interpreter_says_chitchat(db_path, 
     assert turn.speaker == "family"                               # not nurse
 
 
+def test_rt_is_not_a_phone_consultant_so_bedside_orders_reach_the_engine(db_path, monkeypatch):
+    """Regression for the playtest bug: 'RT, get me a vital capacity' was classified
+    request_consult(rt) and role-played into an empty 'I'll get it' that never reached
+    the engine — VC/NIF never came back. The RT must not be a pageable consultant."""
+    from backend.consult_voice import consultants
+    from backend.simulated_case_store import load_case
+    case = load_case("myasthenic_crisis")
+    ids = {a.id for a in consultants(case)}
+    assert "rt" not in ids
+    assert {"neuro", "icu"} <= ids                                # real consultants still listed
+
+
+def test_bedside_order_reports_back_later_with_the_rt_and_a_card(db_path, monkeypatch):
+    """Issues #4/#5: ordering bedside spirometry schedules a deferred result; once its
+    turn-around passes, the RT reports the number aloud and a card lands in the panel."""
+    stub = sim_harness.StubLLM()
+    sim_harness.install_stubs(monkeypatch, stub)
+    from backend.voice_session import start_session
+    session = start_session("myasthenic_crisis", "resident-1")
+
+    stub.intent_json = sim_harness._intent_json(
+        {"op": "order_investigation", "target": "vital_capacity"}
+    )
+    turn = sim_harness.run_turn(session, "RT, get me a vital capacity.")
+    assert turn.revealed is None                                  # not back instantly
+    assert turn.speaker == "rt"                                   # the RT acks the order in
+    assert session.history[-1]["role"] == "rt"                    # their own voice, not the nurse
+    assert any(ev["inv_id"] == "vital_capacity" for ev in session.engine.run.deferred_events)
+
+    # While in flight, the room shows the RT working — pending lists the order under
+    # the holder's speaker class so the front-end lights the right seat with a spinner.
+    from backend.director import fire_deferred, pending_deferred
+    pend = pending_deferred(session)
+    assert len(pend) == 1
+    assert pend[0]["speaker"] == "rt" and pend[0]["wait_seconds"] > 0
+
+    assert fire_deferred(session) == []                          # nothing due yet
+    assert pending_deferred(session)                             # still in flight
+    session.engine.tick(50)                                       # past the 45s turn-around
+    rows = fire_deferred(session)
+    assert len(rows) == 1
+    assert rows[0]["speaker"] == "rt"                            # the RT delivers it
+    assert "VC" in rows[0]["text"]                                # the grounded value
+    assert rows[0]["card"] and rows[0]["card"]["category"] == "bedside"
+    assert session.cards[-1]["id"] == "vital_capacity"           # card landed in the drawer
+    assert session.history[-1]["role"] == "rt"                   # spoken under the RT
+    assert pending_deferred(session) == []                       # drained — RT no longer working
+
+
+def test_arrival_is_announced_by_the_nurse_when_the_husband_walks_in(db_path, monkeypatch):
+    """The 'her husband's just arrived' line fires when presence actually flips true,
+    via the cue-firing path (so both the turn and the live WS surface it). The gold
+    case's authored husband cue is that line: the nurse voices it, with no second
+    generic 'just arrived' alongside."""
+    stub = sim_harness.StubLLM()
+    sim_harness.install_stubs(monkeypatch, stub)
+    from backend import actor_voice
+    directions: list[str] = []
+
+    def capture(system: str, user: str) -> str:
+        directions.append(user)
+        return stub.voice_complete(system, user)
+
+    monkeypatch.setattr(actor_voice, "_complete", capture)
+    from backend.voice_session import start_session
+    session = start_session("myasthenic_crisis", "resident-1")
+    session.engine.tick(305)                                      # husband arrives on the clock
+
+    from backend.director import fire_cues
+    rows = fire_cues(session)
+    assert len(rows) == 1 and rows[0]["speaker"] == "nurse"       # one line, from the nurse
+    assert len(directions) == 1 and "arrived" in directions[0].lower()
+    # A second pass never re-announces his arrival.
+    assert fire_cues(session) == []
+
+
 def test_s3_proceed_confirms_a_disposition_without_looping(db_path, monkeypatch):
     """A bare 'proceed' resolves a parked disposition (the ICU-admission loop)."""
     stub = sim_harness.StubLLM()
@@ -281,3 +357,44 @@ def test_s3_proceed_confirms_a_disposition_without_looping(db_path, monkeypatch)
     assert turn.speaker == "nurse"
     assert session.engine.run.pending_action is None
     assert session.engine.run.current_state_id == "disposition"
+
+
+# ── multi-beat patient channel ────────────────────────────────────────────────
+def test_patient_channel_honours_the_interpreters_beat_not_just_the_next_one(db_path, monkeypatch):
+    """A case with several patient-held beats: asking about medications reveals the
+    medications beat (the interpreter mapped it), not whichever beat is next; a
+    label-word question ("allergies?") grounds even when the interpreter says chitchat."""
+    stub = sim_harness.StubLLM()
+    sim_harness.install_stubs(monkeypatch, stub)
+    from backend.voice_session import start_session
+    session = start_session("foreign_body_airway", "resident-1")
+
+    stub.intent_json = sim_harness._intent_json({"op": "ask_history", "target": "medications"})
+    turn = sim_harness.run_turn(session, "What medications do you take?")
+    assert turn.speaker == "patient"
+    assert "medications" in session.engine.run.revealed_history
+    assert "onset_while_eating" not in session.engine.run.revealed_history
+
+    stub.intent_json = sim_harness._intent_json({"op": "chitchat"})
+    turn = sim_harness.run_turn(session, "Do you have any allergies?", forced_addressee="patient")
+    assert turn.speaker == "patient"
+    assert "past_history_allergy" in session.engine.run.revealed_history
+
+
+def test_turn_payload_hands_the_client_the_speakers_affect(db_path, monkeypatch):
+    """A breathless patient's turn carries ``affect`` (→ an Eleven v4 audio tag at
+    /tts) beside ``affect_stability``; the steady nurse's carries neither."""
+    stub = sim_harness.StubLLM()
+    sim_harness.install_stubs(monkeypatch, stub)
+    from backend.routers.voice import _run_grounded_turn
+    from backend.voice_session import start_session
+    session = start_session("myasthenic_crisis", "resident-1")
+    session.engine.run.vitals_override.update(oxygen_saturation=91)
+
+    patient = _run_grounded_turn(session, "How are you feeling?", forced_addressee="patient")
+    assert patient["speaker"] == "patient"
+    assert patient["affect"] == "breathless" and patient["affect_stability"] is not None
+
+    nurse = _run_grounded_turn(session, "Nurse, can you get a set of vitals?", forced_addressee="nurse")
+    assert nurse["speaker"] == "nurse"
+    assert "affect" not in nurse and "affect_stability" not in nurse
