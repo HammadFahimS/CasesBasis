@@ -99,6 +99,17 @@ SPEAKERS: tuple[SpeakerKind, ...] = (
         el_stability=0.70,   # high: authoritative, consistent
         el_similarity=0.80,
     ),
+    # The Head Physician — the orchestrator (Router/Director) given a spoken identity.
+    # Not a seated room actor: it only speaks to the resident to ask them to clarify an
+    # ambiguous request. A distinct, authoritative voice so it's unmistakable by ear.
+    SpeakerKind(
+        "head", ("attending",),
+        "TOGETHER_HEAD_TTS_VOICE", "professional man",
+        el_voice_env="ELEVENLABS_HEAD_VOICE_ID",
+        el_default_voice="onwK4e9ZLuTAKqWW03F9",   # Daniel — authoritative, senior; the head physician
+        el_stability=0.75,   # high: steady, in-charge
+        el_similarity=0.80,
+    ),
 )
 
 _BY_ID = {s.id: s for s in SPEAKERS}

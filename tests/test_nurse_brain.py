@@ -7,6 +7,7 @@ from backend.nurse_brain import (
     NurseIntent,
     dispatch,
     run_turn,
+    _build_card,
     _parse_intent,
 )
 from backend.simulated_case_store import load_seed_case
@@ -29,12 +30,15 @@ def test_dispatch_order_investigation_returns_real_result():
 
 
 def test_dispatch_gated_investigation_reports_pending():
-    # The venous gas is gated 120s; ordering it at t=0 must not leak a result.
+    # The venous gas is gated 120s; ordering it at t=0 must not leak a result — it
+    # schedules a callback (the room talks back) instead of a dead pending.
     engine = _engine()
     result = dispatch(NurseIntent(op="order_investigation", target="vbg"), engine, "get a gas")
     assert result is not None
-    assert "pH" not in (result.revealed or "")
-    assert "pending" in result.message.lower()
+    assert result.revealed is None                       # nothing handed over yet
+    assert "pH" not in (result.message or "")            # and the message can't leak it
+    assert "come back" in result.message.lower()         # it's coming, not dropped
+    assert any(ev["inv_id"] == "vbg" for ev in engine.run.deferred_events)
 
 
 def test_dispatch_ask_history_reveals_real_beat():
@@ -136,12 +140,81 @@ def test_dispatch_read_vitals_does_not_mutate():
     assert engine.run.current_state_id == "baseline"
 
 
+def test_read_vitals_reports_only_the_vitals_asked_for():
+    """The nurse's spoken brief must name only the vitals the resident asked for —
+    it used to dump the whole monitor, so 'BP and HR' recited RR/SpO2/Temp too."""
+    from backend.nurse_brain import _outcome_brief, _requested_vital_keys
+    vitals = {"heart_rate": 108, "blood_pressure": "126/85", "respiratory_rate": 18,
+              "oxygen_saturation": 98, "temperature_c": 37.1, "rhythm": "sinus tachycardia"}
+    # a specific ask (rhythm rides with heart rate); generic ask → None (full set)
+    assert _requested_vital_keys("nurse, get me BP and HR", vitals) == \
+        ["blood_pressure", "heart_rate", "rhythm"]
+    assert _requested_vital_keys("what are her vitals?", vitals) is None
+    # even when a generic word co-occurs, named specifics win
+    assert _requested_vital_keys("get me her obs, BP and HR", vitals) == \
+        ["blood_pressure", "heart_rate", "rhythm"]
+
+    brief = _outcome_brief(NurseIntent(op="read_vitals"), None, vitals, transcript="get me BP and HR")
+    assert "126/85" in brief and "108" in brief
+    # unrelated vitals must not leak into the report the model speaks
+    assert "respiratory_rate" not in brief and "oxygen_saturation" not in brief and "98" not in brief
+
+
+def test_read_vitals_generic_ask_asks_which_ones_but_an_explicit_all_reports_the_set():
+    """A bare "vitals?" gets a which-one back (the resident names what they want);
+    an explicit "all of them" / "full obs" reports the whole set."""
+    from backend.nurse_brain import _outcome_brief
+    vitals = {"heart_rate": 108, "respiratory_rate": 18, "oxygen_saturation": 98}
+    brief = _outcome_brief(NurseIntent(op="read_vitals"), None, vitals, transcript="what are her obs?")
+    assert "which" in brief.lower() and "108" not in brief
+    brief = _outcome_brief(NurseIntent(op="read_vitals"), None, vitals, transcript="give me all of them")
+    assert "108" in brief and "18" in brief and "98" in brief
+
+
 def test_dispatch_perform_exam_reveals_and_can_transition():
     engine = _engine()
     result = dispatch(NurseIntent(op="perform_exam", target="Neurological"), engine, "neuro exam")
     assert result is not None and result.revealed
     # A neuro exam in baseline is an expected action that advances the case.
     assert engine.run.current_state_id == "recognition"
+
+
+def test_exam_scope_is_decided_by_the_classifier_target():
+    """No transcript keyword matching: the classifier's target drives scope —
+    'all' → whole-body exam, a system name → that system only."""
+    full = dispatch(NurseIntent(op="perform_exam", target="all"),
+                    _engine(), "give her a once-over")
+    all_systems = {e.system for e in _engine().case.exam}
+    for system in all_systems:
+        assert system in full.revealed                 # 'all' covers every system
+    focused = dispatch(NurseIntent(op="perform_exam", target="Neurological"),
+                       _engine(), "check her neuro")
+    assert "Neurological" in focused.revealed
+    assert "Abdominal" not in focused.revealed          # a system target → just that system
+
+
+def test_generic_physical_exam_reveals_every_authored_system():
+    engine = _engine()
+    all_systems = {e.system for e in engine.case.exam}
+    assert len(all_systems) > 1  # guard: the case must have a multi-system exam
+    intent = NurseIntent(op="perform_exam", target=None)
+    result = dispatch(intent, engine, "do a full physical exam")
+    assert result is not None and result.revealed
+    # Every documented system appears in the one-shot full exam.
+    for system in all_systems:
+        assert system in result.revealed
+    card = _build_card(intent, engine, result)
+    assert card is not None and card["kind"] == "exam"
+    assert card["title"] == "Physical exam"
+
+
+def test_full_exam_target_all_reveals_every_system():
+    # target='all' reveals the whole exam; dispatch never re-parses the transcript.
+    engine = _engine()
+    intent = NurseIntent(op="perform_exam", target="all")
+    result = dispatch(intent, engine, "examine her")
+    revealed_systems = [e.system for e in engine.case.exam if e.system in (result.revealed or "")]
+    assert len(revealed_systems) == len({e.system for e in engine.case.exam})
 
 
 # ── LLM intent matcher (for soft action transitions) ─────────────────────────
@@ -202,7 +275,7 @@ def test_run_turn_grounds_reply_in_engine(db_path, monkeypatch):
     # Stub the image generator so the turn stays offline (real ECG = an LLM call).
     monkeypatch.setattr(
         nurse_brain, "build_investigation_card",
-        lambda inv, vitals, patient, authored: {
+        lambda inv, vitals, patient, authored, **kw: {
             "kind": "ecg", "id": inv.id, "title": inv.name,
             "summary": authored, "visual_payload": {"type": "svg", "svg": "<svg/>"},
         },
@@ -412,3 +485,33 @@ def test_run_turn_exam_produces_card(db_path, monkeypatch):
     assert turn.intent.op == "perform_exam"
     assert turn.diagnostic and turn.diagnostic["kind"] == "exam"
     assert turn.diagnostic["title"] == "Neurological exam"
+
+
+# ── clarify flag must not swallow cheap, unambiguous actions (regression) ──────
+def test_clarify_flag_does_not_swallow_a_full_physical_exam():
+    """Regression: a generic 'perform a physical exam' that the classifier flagged
+    clarify=true returned None from dispatch, so the nurse said 'nothing to note'
+    (then worked on retry when the LLM happened to return clarify=false). A full
+    exam is cheap and unambiguous — a low-confidence flag must not block it."""
+    engine = _engine()
+    intent = NurseIntent(op="perform_exam", target=None, clarify=True)
+    result = dispatch(intent, engine, "perform a physical exam")
+    assert result is not None                       # examine_all actually ran
+    assert result.revealed and "No specific" not in result.revealed  # real findings
+    # the nurse reports the exam as done — never the empty "nothing to note" fallback
+    brief = nurse_brain._outcome_brief(
+        intent, result, {}, engine=engine, transcript="perform a physical exam"
+    )
+    assert "nothing to note" not in brief.lower()
+
+
+def test_clarify_still_pauses_a_costly_order_to_confirm():
+    """The safety half: a low-confidence order/medication/action still parks for a
+    'did you mean X?' confirmation instead of firing on the best guess."""
+    engine = _engine()
+    intent = NurseIntent(op="order_investigation", target="ecg", clarify=True)
+    assert dispatch(intent, engine, "get the… thing") is None   # held, not executed
+    brief = nurse_brain._outcome_brief(
+        intent, None, {}, engine=engine, transcript="get the… thing"
+    )
+    assert "clarify" in brief.lower() or "did you mean" in brief.lower()

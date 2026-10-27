@@ -1,0 +1,264 @@
+{
+  "label": "baseline",
+  "ts": "2026-09-05T17:29:15.612725+00:00",
+  "git": {
+    "sha": "9fb71c0",
+    "branch": "low-latency-post-demo-1",
+    "dirty": true
+  },
+  "host": {
+    "platform": "macOS-26.3.1-arm64-arm-64bit",
+    "python": "3.11.15"
+  },
+  "config": {
+    "case_id": "myasthenic_crisis",
+    "n": 10,
+    "warmup": 1,
+    "llm_provider": "cerebras",
+    "tts_model": "eleven_flash_v2_5"
+  },
+  "elevenlabs_region": {
+    "x-region": "us-central1",
+    "status": 200
+  },
+  "notes": [],
+  "probes": [
+    {
+      "name": "route",
+      "tier": "pure",
+      "samples": [
+        0.005,
+        1.316,
+        0.009,
+        0.005,
+        0.013,
+        0.005,
+        0.008,
+        0.011,
+        0.004,
+        0.004
+      ],
+      "stats": {
+        "n": 10,
+        "p50": 0.01,
+        "p95": 0.73,
+        "min": 0.0,
+        "max": 1.32,
+        "stdev": 0.39
+      }
+    },
+    {
+      "name": "dispatch",
+      "tier": "pure",
+      "samples": [
+        0.001,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.001,
+        0.003,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stats": {
+        "n": 10,
+        "p50": 0.0,
+        "p95": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "stdev": 0.0
+      }
+    },
+    {
+      "name": "engine_tick",
+      "tier": "pure",
+      "samples": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.001,
+        0.001,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stats": {
+        "n": 10,
+        "p50": 0.0,
+        "p95": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "stdev": 0.0
+      }
+    },
+    {
+      "name": "llm_interpret",
+      "tier": "network",
+      "samples": [
+        185.462,
+        158.926,
+        210.604,
+        159.026,
+        400.586,
+        147.597,
+        168.823,
+        160.086,
+        189.241,
+        154.488
+      ],
+      "stats": {
+        "n": 10,
+        "p50": 164.45,
+        "p95": 315.09,
+        "min": 147.6,
+        "max": 400.59,
+        "stdev": 71.41
+      }
+    },
+    {
+      "name": "llm_speak",
+      "tier": "network",
+      "samples": [
+        588.659,
+        295.127,
+        277.855,
+        157.079,
+        250.838,
+        137.428,
+        160.698,
+        331.893,
+        130.476,
+        315.425
+      ],
+      "stats": {
+        "n": 10,
+        "p50": 264.35,
+        "p95": 473.11,
+        "min": 130.48,
+        "max": 588.66,
+        "stdev": 130.36
+      }
+    },
+    {
+      "name": "turn_total",
+      "tier": "network",
+      "samples": [
+        315.121,
+        388.418,
+        512.824,
+        653.099,
+        400.159,
+        422.564,
+        310.458,
+        505.801,
+        366.307,
+        789.63
+      ],
+      "stats": {
+        "n": 10,
+        "p50": 411.36,
+        "p95": 728.19,
+        "min": 310.46,
+        "max": 789.63,
+        "stdev": 145.83
+      },
+      "meta": {
+        "ops": [
+          "read_vitals",
+          "order_medication",
+          "order_investigation",
+          "ask_history",
+          "order_investigation",
+          "diagnose",
+          "read_vitals",
+          "order_medication",
+          "order_investigation",
+          "ask_history"
+        ]
+      }
+    },
+    {
+      "name": "tts_ttfb",
+      "tier": "network",
+      "samples": [
+        194.892,
+        157.285,
+        170.435,
+        154.056,
+        152.373,
+        155.227,
+        224.627,
+        156.965,
+        172.097,
+        157.585
+      ],
+      "stats": {
+        "n": 10,
+        "p50": 157.43,
+        "p95": 211.25,
+        "min": 152.37,
+        "max": 224.63,
+        "stdev": 22.08
+      },
+      "meta": {
+        "full_stream_p50_ms": 305.6
+      }
+    },
+    {
+      "name": "tts_ttfb_cold",
+      "tier": "network",
+      "samples": [
+        215.436,
+        194.665,
+        198.248,
+        209.412,
+        230.149,
+        273.499,
+        231.271,
+        302.814,
+        193.977,
+        190.97
+      ],
+      "stats": {
+        "n": 10,
+        "p50": 212.42,
+        "p95": 289.62,
+        "min": 190.97,
+        "max": 302.81,
+        "stdev": 35.43
+      }
+    },
+    {
+      "name": "stt_blocking",
+      "tier": "network",
+      "samples": [
+        506.013,
+        517.193,
+        777.721,
+        613.819,
+        759.698,
+        529.875,
+        482.346,
+        496.091,
+        625.564,
+        528.744
+      ],
+      "stats": {
+        "n": 10,
+        "p50": 529.31,
+        "p95": 769.61,
+        "min": 482.35,
+        "max": 777.72,
+        "stdev": 102.76
+      },
+      "meta": {
+        "last_transcript": "Give her two milligrams of lorazepam intravenously, please",
+        "audio_bytes": 51453
+      }
+    }
+  ]
+}

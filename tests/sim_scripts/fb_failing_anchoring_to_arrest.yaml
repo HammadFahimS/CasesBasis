@@ -1,0 +1,59 @@
+# FAILING (foreign body) — the resident anchors on anaphylaxis: three IM doses of
+# epinephrine with no airway reassessment. The third trial is the authored critical
+# error (hypoxic PEA). The resuscitation is then textbook — CPR, tube, two arrest
+# doses in any order — so ROSC and an ICU disposition follow, but the score carries
+# the safety penalty.
+case: foreign_body_airway
+name: fb_failing_anchoring_to_arrest
+turns:
+  - say: "EMS, what's the story?"
+    intent: { op: ask_history, target: ems_handover }
+    expect: { speaker: ems, op: ask_history }
+
+  - say: "Any allergies or medical history?"
+    intent: { op: ask_history, target: past_history_allergy }
+    expect: { speaker: patient, op: ask_history, state: checkpoint2, transitioned: true }
+
+  # Correct IM dose (the rubric credits it) — but the wrong diagnosis.
+  - say: "Food allergy, wheeze — this is anaphylaxis. Epinephrine 0.5 milligrams IM."
+    intent: { op: order_medication, target: epinephrine, action_text: "0.5 mg IM" }
+    expect: { speaker: nurse, op: order_medication, state: anaphylaxis_1, transitioned: true }
+
+  - say: "No change. Another 0.5 IM."
+    intent: { op: order_medication, target: epinephrine, action_text: "0.5 mg IM" }
+    expect: { speaker: nurse, op: order_medication, state: anaphylaxis_2, transitioned: true }
+
+  - say: "Third dose, 0.5 IM, and run fluids."
+    intent: { op: order_medication, target: epinephrine, action_text: "0.5 mg IM" }
+    expect: { speaker: nurse, op: order_medication, state: pea_arrest, transitioned: true, critical_error: true }
+
+  # The three clauses of the ROSC requirement, in the resident's own order.
+  - say: "Start CPR."
+    intent: { op: perform_action, action_text: "start CPR, compressions" }
+    expect: { speaker: nurse, op: perform_action, state: pea_arrest, transitioned: false }
+
+  - say: "Epinephrine 1 milligram IV."
+    intent: { op: order_medication, target: epinephrine, action_text: "1 mg IV" }
+    expect: { speaker: nurse, op: order_medication, state: pea_arrest, transitioned: false }
+
+  - say: "Intubate him."
+    intent: { op: perform_action, action_text: "intubate" }
+    expect: { speaker: nurse, op: perform_action, state: pea_arrest, transitioned: false }
+
+  - say: "Second epinephrine, 1 milligram IV."
+    intent: { op: order_medication, target: epinephrine, action_text: "1 mg IV" }
+    expect: { speaker: nurse, op: order_medication, state: rosc, transitioned: true }
+
+  - say: "Admit him to ICU."
+    intent: { op: perform_action, action_text: "admit to ICU" }
+    expect: { speaker: nurse, op: perform_action, state: rosc, transitioned: false }
+
+  - say: "Proceed."
+    intent: { op: confirm_pending }
+    expect: { speaker: nurse, op: confirm_pending, state: icu_disposition, transitioned: true, ended: true }
+
+final:
+  reached_state: icu_disposition
+  critical_error: true
+  ended: true
+  max_score: 70

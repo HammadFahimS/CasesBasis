@@ -29,6 +29,11 @@ _NON_CONSULT = (
     "patient", "nurse", "ems", "paramedic", "medic", "husband", "wife", "mother",
     "father", "son", "daughter", "family", "partner", "relative", "bystander",
     "friend", "carer", "caregiver",
+    # The RT is a bedside team member who *holds* orderable investigations (VC/NIF),
+    # not a phone consultant. Treating "RT, get me a vital capacity" as a consult
+    # role-played it into an empty "I'll get it" that never reached the engine — the
+    # decision-driving numbers never came back. Route it as an order instead.
+    "rt", "respiratory", "therapist",
 )
 
 
@@ -68,6 +73,16 @@ def find_consultant(case, target: str | None):
         if any(w and (w in a.role.lower() or w in a.id.lower()) for w in t.split()):
             return a
     return pool[0]
+
+
+def grounded_response(actor, state_id: str) -> str | None:
+    """What the case says this consultant tells the resident in ``state_id``: the
+    first ``responses`` entry scoped to it (empty scope = any state), else the
+    ``fallback``. ``None`` when the actor authors neither — free role-play."""
+    for resp in getattr(actor, "responses", None) or []:
+        if not resp.states or state_id in resp.states:
+            return resp.content
+    return getattr(actor, "fallback", "") or None
 
 
 def _persona(actor) -> str:
@@ -118,10 +133,17 @@ def consult_reply(session: VoiceSession, target: str | None, transcript: str) ->
         return ("There's no specialist available to take that consult right now.", None)
 
     label = actor.role or actor.id
+    grounded = grounded_response(actor, session.engine.run.current_state_id)
+    grounding = (
+        "\n\nWhat you actually tell them this call — say THIS in your own words, in "
+        "character, and add NO other advice, findings, offers or plans:\n"
+        f"{grounded}\n" if grounded else ""
+    )
     user = (
         f"{_persona(actor)}\n\n"
         f"Case so far:\n{_case_brief(session)}\n\n"
-        f"Recent bedside exchange:\n{_recent(session.history) or '(none)'}\n\n"
+        f"Recent bedside exchange:\n{_recent(session.history) or '(none)'}"
+        f"{grounding}\n\n"
         f'The resident pages you and says: "{transcript}"\n{label}:'
     )
     try:

@@ -62,11 +62,13 @@
   }
   .exit:hover { color: var(--teal-glow); border-color: rgba(95,216,230,0.3); }
 
-  /* ===== Freed central results space ===== */
+  /* ===== Status caption — retired: it printed over the address-to bar. Kept in the
+     DOM (hidden) so result/critical writes to #stageLabel/#stageHint never error. ===== */
   .stage-empty {
-    position: absolute; left: 50%; top: 47%; transform: translate(-50%,-50%);
+    display: none;
+    position: absolute; left: 50%; bottom: 118px; transform: translateX(-50%);
     text-align: center; pointer-events: none; z-index: 1;
-    max-width: 480px; padding: 0 20px;
+    max-width: 520px; padding: 0 20px;
   }
   .stage-empty .se-label {
     font-family:'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.26em; text-transform: uppercase;
@@ -78,10 +80,186 @@
   }
   @keyframes blip { 0%,100%{opacity:.3;} 50%{opacity:1;} }
   .stage-empty .se-hint {
-    margin-top: 16px; font-family:'Instrument Serif', Georgia, serif; font-style: italic;
-    font-size: 19px; line-height: 1.5; color: var(--ink-600);
+    margin-top: 10px; font-family:'Instrument Serif', Georgia, serif; font-style: italic;
+    font-size: 14px; line-height: 1.5; color: var(--ink-600);
   }
   .stage-empty .se-hint b { color: var(--ink-400); font-weight: 400; font-style: normal; }
+
+  /* ===== Circle conversation theater (centre) ===== */
+  .circle-stage {
+    position: absolute; left: 50%; top: 47%; transform: translate(-50%,-50%);
+    width: min(560px, 56vh); height: min(560px, 56vh); z-index: 2;
+    --ac: #5fd8e6;
+  }
+  .cs-ring {
+    position: absolute; inset: 9%; border-radius: 50%;
+    border: 1px dashed rgba(255,255,255,0.055);
+    box-shadow: inset 0 0 70px rgba(95,216,230,0.035);
+  }
+  .cs-ring::before {
+    content:''; position:absolute; inset: 18%; border-radius:50%;
+    border: 1px solid rgba(255,255,255,0.03);
+  }
+
+  /* central AI hub */
+  .hub {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    width: 116px; height: 116px; display: grid; place-items: center; z-index: 3;
+  }
+  .hub canvas { width: 100%; height: 100%; display: block; }
+  .hub-label {
+    position: absolute; bottom: -34px; left: 50%; transform: translateX(-50%);
+    text-align: center; white-space: nowrap;
+  }
+  .hl-eyebrow {
+    font-family:'JetBrains Mono', monospace; font-size: 7.5px; letter-spacing: 0.24em; text-transform: uppercase;
+    color: var(--ink-600);
+  }
+  .hl-state {
+    margin-top: 5px;
+    font-family:'JetBrains Mono', monospace; font-size: 12px; font-weight: 600;
+    letter-spacing: 0.34em; text-transform: uppercase; text-indent: 0.34em;
+    color: var(--teal-glow); transition: color 0.5s ease;
+  }
+
+  /* directional beam toward active speaker */
+  .beam {
+    position: absolute; left: 50%; top: 50%; width: 168px; height: 240px;
+    transform-origin: 50% 100%;
+    transform: translate(-50%,-100%) rotate(0deg);
+    transition: transform 0.7s cubic-bezier(.3,.7,.2,1), opacity 0.5s ease;
+    clip-path: polygon(50% 100%, 12% 0, 88% 0);
+    background: linear-gradient(to top,
+      color-mix(in srgb, var(--ac) 0%, transparent) 0%,
+      color-mix(in srgb, var(--ac) 26%, transparent) 72%,
+      color-mix(in srgb, var(--ac) 0%, transparent) 100%);
+    opacity: 0; pointer-events: none; z-index: 2; filter: blur(3px);
+  }
+  .circle-stage.talking .beam { opacity: 1; }
+
+  /* circle actor node — avatar centred on the ring point */
+  .ca {
+    position: absolute; width: 52px; height: 52px;
+    transform: translate(-50%,-50%); z-index: 4;
+    transition: opacity 0.5s ease;
+  }
+  .ca-ava {
+    width: 52px; height: 52px; border-radius: 50%; position: relative;
+    background: linear-gradient(140deg, var(--ac), var(--ac2));
+    display: grid; place-items: center;
+    font-family:'JetBrains Mono', monospace; font-size: 14px; font-weight: 700; color: #0b1119;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 15px -4px var(--ac);
+    transition: box-shadow 0.4s ease, transform 0.4s ease, filter 0.5s ease;
+    animation: breathe-soft 4.5s ease-in-out infinite;
+  }
+  .ca .nm {
+    position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
+    font-family:'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-400); white-space: nowrap; transition: color 0.4s ease;
+  }
+  .ca-badge {
+    position: absolute; right: -3px; bottom: -3px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #0c131e; border: 1px solid rgba(255,255,255,0.12);
+    display: grid; place-items: center; color: var(--ac);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  }
+
+  /* dialogue box beside the avatar */
+  .ca-bubble {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 186px; padding: 8px 12px 9px; border-radius: 13px;
+    background: rgba(13,20,31,0.6);
+    border: 1px solid rgba(255,255,255,0.07);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 26px rgba(0,0,0,0.4);
+    opacity: 0.55; transition: opacity 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease, background 0.4s ease;
+  }
+  .ca.side-r .ca-bubble { left: 66px; }
+  .ca.side-l .ca-bubble { right: 66px; text-align: right; }
+  .ca-bubble::before {
+    content:''; position: absolute; top: 50%; width: 9px; height: 9px;
+    transform: translateY(-50%) rotate(45deg);
+    background: rgba(13,20,31,0.6); border: 1px solid rgba(255,255,255,0.07);
+  }
+  .ca.side-r .ca-bubble::before { left: -5px; border-right: 0; border-top: 0; }
+  .ca.side-l .ca-bubble::before { right: -5px; border-left: 0; border-bottom: 0; }
+  .ca-bubble .who {
+    font-family:'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ac); margin-bottom: 4px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .ca.side-l .ca-bubble .who { flex-direction: row-reverse; }
+  /* While the diagnostics drawer is open it owns the left gutter, so flip the
+     left-arc bubbles to the inside (right of their avatar, pointing toward centre)
+     to clear it. Driven by body.drawer-open, synced to the drawer's collapsed state. */
+  body.drawer-open .ca.side-l .ca-bubble { left: 66px; right: auto; text-align: left; }
+  body.drawer-open .ca.side-l .ca-bubble .who { flex-direction: row; }
+  body.drawer-open .ca.side-l .ca-bubble::before {
+    left: -5px; right: auto; border-right: 0; border-top: 0;
+    border-left: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  body.drawer-open .ca.side-l .ca-bubble .spin { margin-right: 6px; margin-left: 0; }
+  .ca-bubble .say {
+    font-size: 12px; line-height: 1.42; color: var(--ink-300); min-height: 17px;
+    /* Fixed cap so a long line scrolls inside the bubble instead of growing the
+       bubble and overlapping the seat above/below it on the ring. */
+    max-height: 60px; overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent;
+  }
+  .ca-bubble .say::-webkit-scrollbar { width: 5px; }
+  .ca-bubble .say::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 3px; }
+  .ca-bubble .say::-webkit-scrollbar-track { background: transparent; }
+  .ca-bubble .spin {
+    display: inline-block; width: 9px; height: 9px; margin-right: 6px;
+    border-radius: 50%;
+    border: 1.5px solid color-mix(in srgb, var(--ac) 70%, transparent);
+    border-top-color: transparent; vertical-align: -1px;
+    animation: spin 0.8s linear infinite;
+  }
+  .ca.side-l .ca-bubble .spin { margin-right: 0; margin-left: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* — speaking — */
+  .ca.speaking .ca-ava {
+    transform: scale(1.1);
+    animation: ca-pulse 1.05s ease-in-out infinite;
+  }
+  .ca.speaking .nm { color: var(--ac); }
+  @keyframes ca-pulse {
+    0%,100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45), 0 0 18px 1px var(--ac); }
+    50%     { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.6), 0 0 34px 7px var(--ac); }
+  }
+  .ca.speaking .ca-bubble {
+    opacity: 1;
+    border-color: color-mix(in srgb, var(--ac) 45%, transparent);
+    background: rgba(16,26,40,0.85);
+    box-shadow: 0 10px 32px rgba(0,0,0,0.5), 0 0 26px -8px var(--ac);
+  }
+  .ca.speaking .ca-bubble::before { border-color: color-mix(in srgb, var(--ac) 45%, transparent); background: rgba(16,26,40,0.85); }
+  .ca.speaking .ca-bubble .say { color: #eaf3f6; }
+
+  /* — working on a task — */
+  .ca.working .ca-bubble { opacity: 0.96; background: rgba(15,23,35,0.78); }
+  .ca.working .ca-bubble .say { color: var(--ac); }
+
+  /* dim everyone else while one talks; keep workers legible */
+  .circle-stage.talking .ca:not(.speaking) { opacity: 0.5; }
+  .circle-stage.talking .ca:not(.speaking) .ca-bubble { opacity: 0.3; }
+  .circle-stage.talking .ca.working { opacity: 0.92; }
+  .circle-stage.talking .ca.working .ca-bubble { opacity: 0.92; }
+
+  /* — en route ghost — */
+  .ca.enroute .ca-ava { filter: grayscale(.7) brightness(.58); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07); animation: none; }
+  .ca.enroute { opacity: 0.5; }
+  .ca.enroute .nm { color: var(--ink-600); }
+  .ca.enroute .ca-bubble .say { font-style: italic; color: var(--ink-500); }
+  .ca.arriving .ca-ava { animation: ca-arrive 1.2s ease; }
+  @keyframes ca-arrive {
+    0%   { filter: grayscale(.7) brightness(.58); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07), 0 0 0 0 var(--ac); }
+    55%  { filter: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5), 0 0 32px 7px var(--ac); }
+    100% { filter: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 15px -4px var(--ac); }
+  }
 
   /* ===== Small live orb inside bottom panel ===== */
   .nurse { display:flex; align-items:center; gap:13px; padding: 0 18px 0 6px; }
@@ -464,6 +642,20 @@
   .dr-card-b .dr-img svg { width: 100%; height: auto; display:block; }
   .dr-card-b img { width: 100%; border-radius: 6px; display:block; }
   .dr-card-b .rep { font-size: 12.5px; line-height: 1.5; color: var(--ink-200); white-space: pre-line; margin-top: 8px; }
+  .dr-card-b .rep.hint { color: var(--ink-500); font-style: italic; }
+  /* pre-seeded, not-yet-run rows read as actionable sections */
+  .dr-card.pending .dr-card-h { cursor: pointer; }
+  .dr-card.pending .title { color: var(--ink-300); }
+  .dr-card-h .tag.act { color: var(--teal-2, #4fd1c5); border-color: rgba(79,209,197,0.4); }
+  .dr-card.working .tag.act { color: var(--ink-400); }
+  /* structured lab table */
+  .dr-card-b table.lab { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+  .dr-card-b table.lab td { padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,0.05); vertical-align: top; }
+  .dr-card-b table.lab td.k { color: var(--ink-300); }
+  .dr-card-b table.lab td.v { color: var(--ink-100); font-family:'JetBrains Mono', monospace; white-space: nowrap; }
+  .dr-card-b table.lab td.rng { color: var(--ink-500); text-align: right; font-family:'JetBrains Mono', monospace; white-space: nowrap; }
+  .dr-card-b table.lab tr.ab td.v { color: var(--caution, #f0b429); font-weight: 600; }
+  .dr-card-b table.lab tr.ab.critical td.v { color: var(--critical, #e5484d); }
   /* ===== Per-tab control strips (click-to-order, mirrors voice commands) ===== */
   .dr-ctl { flex-shrink: 0; margin-bottom: 11px; }
   .dr-ctl:empty { display: none; }
@@ -858,6 +1050,20 @@
   <div class="wash" id="wash"></div>
   <div class="vignette" id="vignette"></div>
 
+  <!-- Round-table theater: AI hub at centre, real cast laid out on the ring,
+       beam aimed at whoever is speaking (nodes built from the case roster). -->
+  <div class="circle-stage" id="circleStage">
+    <div class="cs-ring"></div>
+    <div class="beam" id="beam"></div>
+    <div class="hub">
+      <canvas id="hubCanvas"></canvas>
+      <div class="hub-label">
+        <div class="hl-eyebrow">AI · in the room</div>
+        <div class="hl-state" id="hubState">Listening</div>
+      </div>
+    </div>
+  </div>
+
   <div class="stage-empty">
     <div class="se-label" id="stageLabel">Awaiting results</div>
     <div class="se-hint" id="stageHint">Order anything by voice — <b>“show me the blood gas,”</b> <b>“pull up the chest film”</b> — and it appears here.</div>
@@ -953,7 +1159,7 @@
 </div>
 
 <!-- Push-to-talk -->
-<button class="talk" id="talkBtn" title="Tap to start hands-free listening (or press Space). Just speak — say “Nurse, …” for orders, anything else talks to the patient.">
+<button class="talk" id="talkBtn" title="Tap to start, then hold Space (or hold this button) while you speak and release to send. Say “Nurse, …” for orders; anything else talks to the patient.">
   <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="6" y="1.5" width="4" height="8.5" rx="2"/><path d="M3.5 7c0 2.6 2 4.5 4.5 4.5S12.5 9.6 12.5 7M8 11.5v3M5.5 14.5h5"/></svg>
   <span class="talk-label">Tap to start</span>
 </button>
@@ -985,7 +1191,7 @@
         </span>
         <span>
           <span class="vm-tt">Speech models</span>
-          <span class="vm-sub">Whisper transcription + studio voices. Best accuracy for clinical terms.</span>
+          <span class="vm-sub">ElevenLabs premium voice AI models. Best accuracy for clinical terms.</span>
         </span>
         <span class="vm-tag">Costly</span>
       </button>
@@ -994,9 +1200,8 @@
   </div>
 </div>
 
-<!-- State switcher -->
-<div class="switcher" id="switcher"></div>
-<div class="switcher-note">Tap the mic, then talk — address staff by name (“Nurse, …”, “Husband, …”, “RT, …”); anything else goes to the patient</div>
+<!-- Mic guidance (the manual state switcher was removed; the orb state is live) -->
+<div class="switcher-note">Tap the mic to start, then hold Space while you talk — address staff by name (“Nurse, …”, “Husband, …”, “RT, …”); anything else goes to the patient</div>
 
 <!-- Unified Room log (right edge): every voice in the room, tagged by speaker -->
 <div class="transcript ch-room collapsed" id="trRoom">
@@ -1315,43 +1520,40 @@
     }
   }
 
-  // ---------- Hero (docked nurse orb) ----------
+  // ---------- Hero (docked nurse orb) + Hub (central theater orb) ----------
   const hero = new Orb(document.getElementById('orb'), 'listening');
+  const hub = new Orb(document.getElementById('hubCanvas'), 'listening');
   let resizeRAF;
   window.addEventListener('resize', () => {
     cancelAnimationFrame(resizeRAF);
-    resizeRAF = requestAnimationFrame(() => { hero.resize(); thumbs.forEach(t=>t.resize()); });
+    resizeRAF = requestAnimationFrame(() => {
+      hero.resize(); hub.resize(); thumbs.forEach(t=>t.resize());
+      if (typeof layoutCircle === 'function') layoutCircle();
+    });
   });
 
   // ---------- Thumbnails / switcher ----------
-  const switcher = document.getElementById('switcher');
+  // The orb state is driven by real turns (listening/thinking/responding), so the
+  // manual idle/listening/thinking/responding switcher was removed. `thumbs` stays
+  // an empty array so the render loop / resize / selectState keep working unchanged.
   const thumbs = [];
   const stateName = document.getElementById('stateName');
   const micText = document.getElementById('micText');
-
-  ORDER.forEach(key => {
-    const btn = document.createElement('button');
-    btn.className = 'sw' + (key==='listening' ? ' active' : '');
-    btn.dataset.key = key;
-    const ring = document.createElement('div'); ring.className = 'sw-ring';
-    const cv = document.createElement('canvas');
-    ring.appendChild(cv);
-    const nm = document.createElement('div'); nm.className = 'sw-name'; nm.textContent = STATES[key].name;
-    btn.appendChild(ring); btn.appendChild(nm);
-    switcher.appendChild(btn);
-    const orb = new Orb(cv, key, { thumb:true });
-    thumbs.push(orb);
-    btn.addEventListener('click', () => selectState(key));
-  });
 
   function applyGlow(key) {
     const g = STATES[key].glow;
     document.documentElement.style.setProperty('--glow', g.join(','));
   }
+  const hubStateEl = document.getElementById('hubState');
   function selectState(key) {
     hero.setState(key);
+    hub.setState(key);
     stateName.textContent = STATES[key].name;
     if (micText) micText.textContent = STATES[key].mic;
+    if (hubStateEl){
+      hubStateEl.textContent = STATES[key].name;
+      hubStateEl.style.color = 'rgb(' + STATES[key].glow.join(',') + ')';
+    }
     applyGlow(key);
     document.querySelectorAll('.sw').forEach(b => b.classList.toggle('active', b.dataset.key===key));
     document.querySelector('.room').setAttribute('data-screen-label', 'Voice Room — ' + STATES[key].name);
@@ -1361,6 +1563,7 @@
   // ---------- single animation loop ----------
   function loop(now) {
     hero.step(now);
+    hub.step(now);
     thumbs.forEach(t => t.step(now));
     requestAnimationFrame(loop);
   }
@@ -1402,6 +1605,7 @@
       }
     });
     buildRosterStrip();   // the top-centre presence avatars
+    buildCircle();        // the round-table theater nodes (same cast, on the ring)
     buildAddresseeChips(); // addressee chip row below the talk button
   }
 
@@ -1479,6 +1683,96 @@
     head.innerHTML = '<span class="cnt">' + n + '</span> present' + (enr ? ' · ' + enr + ' en route' : '');
   }
 
+  // ---------- Round-table theater (centre stage) ----------
+  // Same cast as the top strip, seated around the ring. The hub orb sits at the
+  // centre; the beam aims at whoever is speaking; each seat carries a dialogue
+  // bubble that fills with the real spoken line. Built from the case roster so
+  // every case's actual actors appear and lay out dynamically.
+  const circleStage = document.getElementById('circleStage');
+  const beamEl = document.getElementById('beam');
+  const circleTokens = {};   // actor id → { el, sayEl, speaker, arrive, present, last, ang }
+
+  function buildCircle(){
+    circleStage.querySelectorAll('.ca').forEach(n => n.remove());
+    for (const k in circleTokens) delete circleTokens[k];
+    if (!ROSTER.length) return;
+    ROSTER.forEach(r => {
+      const ac = SPEAKER_AC[r.speaker]; if (!ac) return;   // 'res' never seats
+      const arrive = (r.available_after_seconds == null) ? 0 : r.available_after_seconds;
+      const present = secs >= arrive;
+      const el = document.createElement('div');
+      el.className = 'ca' + (present ? '' : ' enroute');
+      el.style.setProperty('--ac', ac[0]);
+      el.style.setProperty('--ac2', ac[1]);
+      const badge = (r.speaker === 'consult') ? '<span class="ca-badge">' + PHONE_SVG + '</span>' : '';
+      const first = present ? '' : 'En route to bedside';
+      el.innerHTML =
+        '<div class="ca-ava">' + escapeHtml(monogram(r)) + badge + '</div>' +
+        '<div class="nm">' + escapeHtml(shortLabel(r)) + '</div>' +
+        '<div class="ca-bubble"><div class="who">' + escapeHtml(r.role || r.speaker) + '</div>' +
+        '<div class="say">' + escapeHtml(first) + '</div></div>';
+      circleStage.appendChild(el);
+      circleTokens[r.id] = {
+        el, sayEl: el.querySelector('.say'),
+        speaker: r.speaker, arrive, present, last: first, ang: null,
+      };
+    });
+    layoutCircle();
+  }
+
+  // Curated seat angles (deg): right column top→bottom, then lower-left→mid-left.
+  // Leaves gaps at the top (roster), bottom (vitals dock) and upper-left (patient
+  // HUD card). Falls back to even spacing if a case has more actors than seats.
+  function layoutCircle(){
+    const ids = Object.keys(circleTokens);
+    if (!ids.length) return;
+    const W = circleStage.clientWidth || 560;
+    const Ra = W * 0.42;
+    if (beamEl) beamEl.style.height = Ra + 'px';
+    const DEG = [-58, -20, 20, 58, 110, 150, 190];
+    ids.forEach((id, i) => {
+      const t = circleTokens[id];
+      const deg = (ids.length <= DEG.length && DEG[i] != null) ? DEG[i] : (-90 + i * (360 / ids.length));
+      const ang = deg * Math.PI / 180;
+      t.ang = ang;
+      t.el.style.left = (W/2 + Math.cos(ang)*Ra) + 'px';
+      t.el.style.top  = (W/2 + Math.sin(ang)*Ra) + 'px';
+      const right = Math.cos(ang) >= -0.02;
+      t.el.classList.toggle('side-r', right);
+      t.el.classList.toggle('side-l', !right);
+    });
+  }
+
+  // ---------- "working" state (orders in flight) ----------
+  // The server reports the set of ordered results not yet back (`pending`); we light
+  // the holding actor's seat with a spinner + the test name until it lands. Declarative:
+  // each turn re-syncs the whole set, so a result reporting back simply drops out.
+  const workingMap = {};   // speaker class → in-flight test label
+  function applyPending(list){
+    for (const k in workingMap) delete workingMap[k];
+    (list || []).forEach(p => { if (p && p.speaker) workingMap[p.speaker] = p.label || 'Working…'; });
+    renderWorking();
+  }
+  function clearWorking(speaker){
+    if (speaker && workingMap[speaker]){ delete workingMap[speaker]; renderWorking(); }
+  }
+  function renderWorking(){
+    Object.entries(circleTokens).forEach(([id, t]) => {
+      if (!t.present) return;
+      const isSpeaking = (speakingCa === id);
+      const working = !!workingMap[t.speaker];
+      // While a seat is speaking, its bubble shows the spoken line — don't overwrite;
+      // the spinner re-appears when speech ends (clearSpeaking calls renderWorking).
+      t.el.classList.toggle('working', working && !isSpeaking);
+      if (isSpeaking) return;
+      if (working){
+        t.sayEl.innerHTML = '<span class="spin"></span>' + escapeHtml(workingMap[t.speaker]);
+      } else {
+        t.sayEl.textContent = t.last || '';
+      }
+    });
+  }
+
   // ---------- Addressee chips ----------
   const addrChipsEl  = document.getElementById('addrChips');
   const addrPromptEl = document.getElementById('addrPrompt');
@@ -1532,40 +1826,89 @@
     addrPromptEl.textContent = 'Address to:';
   }
 
-  // Illuminate the avatar of whoever just spoke (driven by real turns, one at a
-  // time). Resident lines don't light anyone — the resident isn't in the roster.
-  // hold=true: no auto-timeout — caller must call clearSpeaking() when audio ends.
-  let speakTokenTimer = null, speakingId = null;
-  function speakRoster(speaker, hold){
+  // Illuminate whoever just spoke in BOTH the top strip and the round-table ring,
+  // aim the beam at their seat, and drop the real spoken line into their bubble
+  // (driven by real turns, one at a time). Resident lines don't light anyone — the
+  // resident isn't seated. hold=true: no auto-timeout — caller must call
+  // clearSpeaking() when audio ends.
+  let speakTokenTimer = null, speakingId = null, speakingCa = null;
+  function speakRoster(speaker, hold, text){
     if (speaker === 'res') return;
+    // top presence strip
     if (speakingId && actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
     // first present token of this speaker class (cases have one each; consults rare)
     const hit = Object.entries(actorTokens).find(([,a]) => a.speaker === speaker && a.present);
-    if (!hit){ speakingId = null; return; }
-    speakingId = hit[0];
-    hit[1].el.classList.add('speaking');
+    speakingId = hit ? hit[0] : null;
+    if (hit) hit[1].el.classList.add('speaking');
+    // round-table ring (beam + bubble)
+    speakCircle(speaker, text);
     clearTimeout(speakTokenTimer);
-    if (!hold){
-      speakTokenTimer = setTimeout(() => {
-        if (actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
-        speakingId = null;
-      }, 2600);
-    }
-  }
-  function clearSpeaking(){
-    clearTimeout(speakTokenTimer);
-    if (speakingId && actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
-    speakingId = null;
+    if (!hold) speakTokenTimer = setTimeout(clearSpeaking, 2600);
   }
 
-  // Promote any en-route actor whose arrival time the case clock has now reached.
+  // Light the speaker's seat on the ring, swing the beam to it, and show the line.
+  // Typewriter reveal into a bubble's say line; one shared timer (a new speaker
+  // cancels the previous reveal). Keeps the latest text scrolled into view.
+  let caTypeTimer = null;
+  function typeInto(el, text){
+    clearTimeout(caTypeTimer);
+    let n = 0;
+    el.textContent = '';
+    (function step(){
+      n++;
+      el.textContent = text.slice(0, n);
+      el.scrollTop = el.scrollHeight;
+      if (n < text.length) caTypeTimer = setTimeout(step, 16 + Math.random()*22);
+    })();
+  }
+
+  function speakCircle(speaker, text){
+    const hit = Object.entries(circleTokens).find(([,t]) => t.speaker === speaker && t.present);
+    if (!hit) return;
+    if (speakingCa && circleTokens[speakingCa] && speakingCa !== hit[0]){
+      circleTokens[speakingCa].el.classList.remove('speaking');
+    }
+    speakingCa = hit[0];
+    const t = hit[1];
+    if (text){ t.last = text; typeInto(t.sayEl, text); }   // typewriter reveal of the line
+    t.el.classList.remove('working');
+    t.el.classList.add('speaking');
+    const ac = SPEAKER_AC[speaker];
+    if (ac) circleStage.style.setProperty('--ac', ac[0]);   // tint the beam to the speaker
+    if (beamEl && t.ang != null){
+      beamEl.style.transform = 'translate(-50%,-100%) rotate(' + (t.ang * 180 / Math.PI + 90) + 'deg)';
+    }
+    circleStage.classList.add('talking');
+  }
+
+  function clearSpeaking(){
+    clearTimeout(speakTokenTimer);
+    clearTimeout(caTypeTimer);                 // stop any in-progress reveal; renderWorking sets the final text
+    if (speakingId && actorTokens[speakingId]) actorTokens[speakingId].el.classList.remove('speaking');
+    speakingId = null;
+    if (speakingCa && circleTokens[speakingCa]) circleTokens[speakingCa].el.classList.remove('speaking');
+    speakingCa = null;
+    circleStage.classList.remove('talking');   // hides the beam
+    renderWorking();                           // a still-in-flight holder shows its spinner again
+  }
+
+  // Promote any en-route actor whose arrival time the case clock has now reached —
+  // in both the top strip and the ring.
   function checkArrivals(){
-    Object.values(actorTokens).forEach(a => {
+    Object.entries(actorTokens).forEach(([id, a]) => {
       if (!a.present && a.arrive && secs >= a.arrive){
         a.present = true;
         a.el.classList.remove('enroute');
         a.el.classList.add('arriving', 'idle');
         setTimeout(() => a.el.classList.remove('arriving'), 1300);
+        const ct = circleTokens[id];
+        if (ct){
+          ct.present = true;
+          ct.el.classList.remove('enroute');
+          ct.el.classList.add('arriving');
+          ct.last = ''; ct.sayEl.textContent = '';
+          setTimeout(() => ct.el.classList.remove('arriving'), 1200);
+        }
         arrivalName.textContent = a.role || 'Someone';
         arrivalToast.classList.add('show');
         setTimeout(() => arrivalToast.classList.remove('show'), 4200);
@@ -1586,7 +1929,7 @@
     ch.scroll.insertBefore(div, ch.now);
     ch.root.classList.remove('collapsed');
     ch.now.scrollIntoView({ block:'nearest' });
-    speakRoster(speaker);   // light the speaker's roster avatar
+    speakRoster(speaker, false, text);   // light the speaker (strip + ring) and show the line
   }
 
   // ---------- case clock ----------
@@ -1802,6 +2145,12 @@
   // ---------- diagnostics drawer (four functional panes) ----------
   const drawer = document.getElementById('drawer');
   document.getElementById('drTab').addEventListener('click', () => drawer.classList.toggle('collapsed'));
+  // Mirror the drawer's open/closed state onto <body> so the ring can flip its
+  // left-arc bubbles inward (out of the drawer's gutter). Observing the class
+  // attribute catches every toggle path — tab click, resume-collapse, auto-open.
+  function syncDrawerOpen(){ document.body.classList.toggle('drawer-open', !drawer.classList.contains('collapsed')); }
+  new MutationObserver(syncDrawerOpen).observe(drawer, { attributes: true, attributeFilter: ['class'] });
+  syncDrawerOpen();
   const KIND_LABEL = { ecg:'ECG', cxr:'X-ray', report:'Report', exam:'Exam', consult:'Consult', order:'Order' };
 
   // Route each result card to a pane by its category (set server-side).
@@ -1827,16 +2176,32 @@
   drTabBtns.forEach(b => b.addEventListener('click', () => showPane(b.dataset.tab)));
 
   function chevSvg(){ return '<svg class="chev" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6 L8 10 L12 6"/></svg>'; }
+  function valueTable(values){
+    if (!values || !values.length) return '';
+    const rows = values.map(v => {
+      const flag = (v.flag || '').toLowerCase();
+      const ab = (flag === 'low' || flag === 'high' || flag === 'critical' || flag === 'abnormal');
+      const val = escapeHtml(String(v.value != null ? v.value : '')) + (v.unit ? ' ' + escapeHtml(v.unit) : '');
+      return `<tr class="${ab ? 'ab ' + flag : ''}"><td class="k">${escapeHtml(v.name || '')}</td>` +
+             `<td class="v">${val}</td><td class="rng">${escapeHtml(v.reference_range || '')}</td></tr>`;
+    }).join('');
+    return `<table class="lab">${rows}</table>`;
+  }
   function diagBody(card){
     const vp = card.visual_payload;
+    const tbl = valueTable(card.values);
     const cap = card.summary ? `<div class="rep">${escapeHtml(card.summary)}</div>` : '';
     if (card.kind === 'ecg' && vp && vp.svg) return `<div class="dr-img">${vp.svg}</div>${cap}`;
     if (card.kind === 'cxr' && vp && vp.data) return `<img alt="Chest X-ray" src="data:image/${vp.format||'jpeg'};base64,${vp.data}">${cap}`;
-    return `<div class="rep">${escapeHtml(card.summary || 'No result.')}</div>`;
+    if (vp && vp.image) return `<img alt="${escapeHtml(vp.caption || card.title || '')}" src="${vp.image}">${cap}`;
+    // A lab shows its values, not an "all normal" sentence — the prose result only
+    // appears when there's no value table (e.g. a plain text report).
+    return tbl ? tbl : (cap || '<div class="rep">No result.</div>');
   }
   function updateTabCount(name){
     const btn = drTabBtns.find(b => b.dataset.tab === name); if (!btn) return;
-    const n = drPanes[name].querySelectorAll('.dr-card').length;
+    // Count completed results only — pre-seeded, not-yet-run rows don't inflate the badge.
+    const n = drPanes[name].querySelectorAll('.dr-card:not(.pending)').length;
     btn.classList.toggle('has', n > 0);
     btn.querySelector('.dr-t-n').textContent = n;
   }
@@ -1861,14 +2226,13 @@
     const paneEl = drPanes[pane] || drPanes.investigations;
     const host = paneEl.querySelector('.dr-list') || paneEl;
     const empty = host.querySelector('.dr-empty'); if (empty) empty.remove();
-    // Re-ordering the same drug upserts its card instead of stacking duplicates.
-    if (card.kind === 'order' && card.id){
-      const prev = host.querySelector(`.dr-card[data-card-id="${CSS.escape(card.id)}"]`);
-      if (prev) prev.remove();
-    }
-    host.querySelectorAll('.dr-card').forEach(c => c.classList.add('collapsed'));  // newest stays open
-    const el = document.createElement('div');
-    el.className = 'dr-card';
+    // Upsert by id: a pre-seeded row (or a prior result / re-ordered drug) is
+    // filled IN PLACE so each test/exam/consult stays a single section — the
+    // manual-sim accordion. No id → always a fresh card.
+    const existing = card.id ? host.querySelector(`.dr-card[data-card-id="${CSS.escape(card.id)}"]`) : null;
+    host.querySelectorAll('.dr-card').forEach(c => c.classList.add('collapsed'));  // the updated one re-opens
+    const el = existing || document.createElement('div');
+    el.className = 'dr-card';                 // clears pending/working/collapsed → the result row opens
     if (card.id) el.dataset.cardId = card.id;
     const body = card.kind === 'order' ? orderBody(card) : diagBody(card);
     el.innerHTML =
@@ -1892,7 +2256,7 @@
         if (e.key === 'Enter'){ e.preventDefault(); fire(); }
       });
     }
-    host.insertBefore(el, host.firstChild);
+    if (!existing) host.insertBefore(el, host.firstChild);  // new cards on top; seeded rows keep menu order
     updateTabCount(pane);
     showPane(pane);                 // surface the pane the newest result landed in
     drawer.classList.remove('collapsed');
@@ -1986,6 +2350,7 @@
     const vp = card.visual_payload || {};
     if (card.kind === 'ecg' && vp.svg) lbStage.innerHTML = vp.svg;
     else if (card.kind === 'cxr' && vp.data) lbStage.innerHTML = `<img alt="Chest X-ray" src="data:image/${vp.format||'jpeg'};base64,${vp.data}">`;
+    else if (vp.image) lbStage.innerHTML = `<img alt="${escapeHtml(vp.caption || card.title || '')}" src="${vp.image}">`;
     else return;
     lbStage.classList.toggle('ecg', card.kind === 'ecg');  // wide box for the 12-lead
     lbCap.textContent = card.summary || '';
@@ -2108,6 +2473,7 @@
     debriefShown = true;
     try { stopListening(); } catch(e){}
     stopAudio();
+    clientFlush();
     try {
       const d = await postJSON('/api/voice/debrief', { session_id: SESSION_ID });
       showDebrief(d);
@@ -2118,9 +2484,31 @@
     }
   }
   document.getElementById('ambienceBtn').addEventListener('click', _toggleAmbience);
+  // In-app confirm (native confirm() can be swallowed by browser extensions /
+  // hosted contexts, leaving OK unresponsive).
+  function openEndConfirm(){
+    let back = document.getElementById('endConfirmBack');
+    if (!back){
+      back = document.createElement('div');
+      back.className = 'modal-back'; back.id = 'endConfirmBack';
+      back.innerHTML = '<div class="modal" role="dialog" aria-modal="true">' +
+        '<h2>Conclude the case?</h2>' +
+        '<p>This stops the clock and generates your debrief. You won\'t be able to return to the case afterward.</p>' +
+        '<div style="display:flex; gap:10px; justify-content:flex-end; margin-top:4px;">' +
+          '<button type="button" id="ecCancel" style="padding:10px 16px; border-radius:10px; cursor:pointer; font:inherit; font-weight:600; font-size:12.5px; background:transparent; border:1px solid var(--line,#2a3648); color:var(--ink-200,#c7d1de);">Keep going</button>' +
+          '<button type="button" id="ecOk" style="padding:10px 18px; border-radius:10px; cursor:pointer; font:inherit; font-weight:700; font-size:12.5px; background:linear-gradient(180deg,#b3392b,#8f2b20); border:1px solid #c74537; color:#ffe9e5;">End &amp; debrief</button>' +
+        '</div></div>';
+      document.body.appendChild(back);
+      back.addEventListener('click', e => { if (e.target === back) back.classList.remove('open'); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') back.classList.remove('open'); });
+      back.querySelector('#ecCancel').addEventListener('click', () => back.classList.remove('open'));
+      back.querySelector('#ecOk').addEventListener('click', () => { back.classList.remove('open'); concludeCase(); });
+    }
+    back.classList.add('open');
+  }
   document.getElementById('endCaseBtn').addEventListener('click', () => {
     if (debriefShown) return;
-    if (confirm('Conclude the case and see your debrief?')) concludeCase();
+    openEndConfirm();
   });
   // Pause: freeze the clock, save the run, and raise the overlay. The resident
   // can resume in place or exit to home and pick it up later.
@@ -2141,7 +2529,7 @@
     try { await startListening(); } catch(e){}
   });
   document.getElementById('pmHome').addEventListener('click', () => { location.href = '/home'; });
-  document.getElementById('dbNew').addEventListener('click', () => { location.href = '/simulator'; });
+  document.getElementById('dbNew').addEventListener('click', () => { location.href = '/home?new=1'; });
   // The case is over and the debrief is the terminal screen — closing it returns
   // the resident home, not back into the finished room.
   document.getElementById('dbClose').addEventListener('click', () => { location.href = '/home'; });
@@ -2160,10 +2548,12 @@
   function renderPanels(menu){
     MENU = menu || {};
     const invs = MENU.investigations || [];
-    renderExamCtl(MENU.exam_systems || []);
-    renderOrderCtl('investigations', invs.filter(i => i.category !== 'imaging'));
-    renderOrderCtl('imaging', invs.filter(i => i.category === 'imaging'));
-    renderConsultCtl(MENU.consultants || []);
+    seedExamPane(MENU.exam_systems || []);
+    // cardPane() routes lab/ecg/bedside/other → investigations, imaging → imaging;
+    // seed each item into the same pane its result will land in.
+    seedOrderPane('investigations', invs.filter(i => i.category !== 'imaging'));
+    seedOrderPane('imaging', invs.filter(i => i.category === 'imaging'));
+    seedConsultPane(MENU.consultants || []);
     renderMedCtl();
   }
 
@@ -2177,66 +2567,73 @@
     inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fire(); } });
   }
 
-  function renderExamCtl(systems){
-    const ctl = document.querySelector('.dr-ctl[data-ctl="exam"]'); if (!ctl) return;
-    EXAM_SYS = systems; examSel.clear();
-    if (!systems.length){ ctl.innerHTML = ''; return; }
-    ctl.innerHTML =
-      '<div class="dr-ctl-h">Examine — select systems</div>' +
-      '<div class="ex-grid">' + systems.map((s, i) =>
-        `<div class="ex-row" data-idx="${i}"><span class="ex-box">${checkSvg()}</span><span>${escapeHtml(s)}</span></div>`
-      ).join('') + '</div>' +
-      '<div class="ex-foot"><span class="ex-n">0 selected</span><button class="ex-do" disabled>Examine</button></div>';
-    ctl.querySelectorAll('.ex-row').forEach(row => row.addEventListener('click', () => {
-      const s = EXAM_SYS[+row.dataset.idx];
-      if (examSel.has(s)){ examSel.delete(s); row.classList.remove('sel'); }
-      else { examSel.add(s); row.classList.add('sel'); }
-      updateExamFoot();
-    }));
-    ctl.querySelector('.ex-do').addEventListener('click', examineSelected);
-  }
-  function updateExamFoot(){
-    const ctl = document.querySelector('.dr-ctl[data-ctl="exam"]'); if (!ctl) return;
-    const n = ctl.querySelector('.ex-n'), btn = ctl.querySelector('.ex-do');
-    if (n) n.textContent = examSel.size + ' selected';
-    if (btn) btn.disabled = examSel.size === 0 || actionBusy;
-  }
-  async function examineSelected(){
-    if (!examSel.size) return;
-    const systems = [...examSel]; examSel.clear();
-    document.querySelectorAll('.dr-ctl[data-ctl="exam"] .ex-row.sel').forEach(r => r.classList.remove('sel'));
-    updateExamFoot();
-    for (const s of systems){ await sendAction('perform_exam', s, `Examine the ${s} system.`); }
-  }
+  // Pre-seed one collapsible row per orderable item (manual-sim style): each exam
+  // system / investigation / consultant is its own section. Tapping a pending row
+  // runs it through the engine; the result then fills that same row in place (see
+  // addDiagnostic's upsert-by-id). A spoken order lands in the same row too.
+  function drListFor(pane){ const p = drPanes[pane]; return p ? p.querySelector('.dr-list') : null; }
 
-  function renderOrderCtl(pane, invs){
+  // Request-driven drawer: when false, no exam/order/consult rows are pre-listed at
+  // launch — each appears only once the resident requests it (by voice, or via the
+  // free-text order box). Flip to true to restore the full pre-seeded menu.
+  const PRESEED_MENU = false;
+  function seedRow(host, { id, title, tag, kind, op }){
+    if (!PRESEED_MENU) return;
+    if (!host || !id) return;
+    if (host.querySelector(`.dr-card[data-card-id="${CSS.escape(id)}"]`)) return;  // already seeded/done
+    const empty = host.querySelector('.dr-empty'); if (empty) empty.remove();
+    const el = document.createElement('div');
+    el.className = 'dr-card pending collapsed';
+    el.dataset.cardId = id; el.dataset.op = op;
+    el.innerHTML =
+      `<div class="dr-card-h"><span class="dot ${kind}"></span>` +
+      `<span class="title">${escapeHtml(title)}</span>` +
+      `<span class="tag act">${escapeHtml(tag)}</span>${chevSvg()}</div>` +
+      `<div class="dr-card-b"><div class="rep hint">Tap to run — the result appears here.</div></div>`;
+    el.querySelector('.dr-card-h').addEventListener('click', () => onRowTap(el));
+    host.appendChild(el);
+  }
+  function onRowTap(el){
+    if (el.classList.contains('working')) return;         // already in flight
+    if (el.classList.contains('pending')){
+      el.classList.add('working');
+      const tag = el.querySelector('.tag'); if (tag) tag.textContent = '…';
+      sendAction(el.dataset.op, el.dataset.cardId);
+    } else {
+      el.classList.toggle('collapsed');                    // completed row → just expand/collapse
+    }
+  }
+  function seedExamPane(systems){
+    const host = drListFor('exam'); if (!host) return;
+    const ctl = document.querySelector('.dr-ctl[data-ctl="exam"]'); if (ctl) ctl.innerHTML = '';
+    systems.forEach(s => seedRow(host, { id: s, title: s, tag: 'Examine', kind: 'exam', op: 'perform_exam' }));
+    updateTabCount('exam');
+  }
+  function seedOrderPane(pane, invs){
+    const host = drListFor(pane); if (!host) return;
+    invs.forEach(i => seedRow(host, {
+      id: i.id, title: i.name, tag: pane === 'imaging' ? 'Image' : 'Order',
+      kind: i.category === 'ecg' ? 'ecg' : (i.category === 'imaging' ? 'cxr' : 'report'),
+      op: 'order_investigation',
+    }));
+    updateTabCount(pane);
+    // Keep a free-text order for anything the case doesn't list (investigations pane only).
     const ctl = document.querySelector(`.dr-ctl[data-ctl="${pane}"]`); if (!ctl) return;
-    const chips = invs.map(i =>
-      `<button class="chip" data-op="order_investigation" data-id="${escapeHtml(i.id)}" title="${escapeHtml(i.name)}">${escapeHtml(shortName(i.name))}</button>`
-    ).join('');
-    const free = pane === 'investigations'
-      ? '<div class="ord-row"><input type="text" placeholder="Order any test… e.g. troponin"><button class="ord-go">Order</button></div>'
-      : '';
-    ctl.innerHTML = `<div class="dr-ctl-h">${pane === 'imaging' ? 'Order imaging' : 'Quick order'}</div>` +
-      (chips ? `<div class="chip-row">${chips}</div>` : '') + free;
-    ctl.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => sendAction(c.dataset.op, c.dataset.id)));
-    const inp = ctl.querySelector('input'), go = ctl.querySelector('.ord-go');
-    if (go && inp){
+    if (pane === 'investigations'){
+      ctl.innerHTML = '<div class="ord-row"><input type="text" placeholder="Order any test… e.g. troponin"><button class="ord-go">Order</button></div>';
+      const inp = ctl.querySelector('input'), go = ctl.querySelector('.ord-go');
       const fire = () => { const t = inp.value.trim(); if (t){ inp.value = ''; sendFreeOrder(t); } };
       go.addEventListener('click', fire);
       inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); fire(); } });
-    }
+    } else { ctl.innerHTML = ''; }
   }
-
-  function renderConsultCtl(cons){
-    const ctl = document.querySelector('.dr-ctl[data-ctl="consults"]'); if (!ctl) return;
-    if (!cons.length){ ctl.innerHTML = ''; return; }
-    const chips = cons.map(c =>
-      `<button class="chip" data-op="request_consult" data-id="${escapeHtml(c.id)}">${escapeHtml(c.role || c.id)}</button>`
-    ).join('');
-    ctl.innerHTML = '<div class="dr-ctl-h">Call a specialist</div>' + `<div class="chip-row">${chips}</div>`;
-    ctl.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => sendAction(c.dataset.op, c.dataset.id)));
+  function seedConsultPane(cons){
+    const host = drListFor('consults'); if (!host) return;
+    const ctl = document.querySelector('.dr-ctl[data-ctl="consults"]'); if (ctl) ctl.innerHTML = '';
+    cons.forEach(c => seedRow(host, { id: c.id, title: c.role || c.id, tag: 'Call', kind: 'consult', op: 'request_consult' }));
+    updateTabCount('consults');
   }
+  function updateExamFoot(){}   // legacy no-op — the accordion replaced the select-and-examine footer
 
   function actionLabel(op, target){
     if (op === 'order_investigation'){ const i = (MENU.investigations || []).find(x => x.id === target); return `Order ${i ? i.name : target}.`; }
@@ -2249,15 +2646,16 @@
   async function applyNurseData(data){
     const reply = (data.reply || '').trim();
     const speaker = data.speaker || 'nurse';   // a click can be answered by RT / a consultant too
-    if (reply) addTurn(ROOM, speaker, reply);
-    applyEngine(data);
+    if (reply) safeUI('reply', () => addTurn(ROOM, speaker, reply));
+    safeUI('engine', () => applyEngine(data));
     if (reply && VOICE_BACKEND){            // speak only once a voice mode is chosen
       const native = VOICE_BACKEND === 'native' && recognition;
       if (native){ recoSuspend = true; try { recognition.stop(); } catch(e){} }
-      try { await playTTS(reply, speaker, data.affect_stability ?? null); } catch(e){}
+      try { await playTTS(reply, speaker, data.affect_stability ?? null, data.affect ?? null); } catch(e){}
       await deliverCues(data);              // room nudges after the reply
-      if (native && listening){ recoSuspend = false; try { recognition.start(); } catch(e){} }
+      if (native) recoSuspend = false;   // recognition only runs while Space is held
     }
+    await deliverDeferred(data);            // scheduled results reporting back (+ panel card)
     if (pendingEnd){ pendingEnd = false; concludeCase(); }
   }
 
@@ -2300,6 +2698,7 @@
   const stageHint  = document.getElementById('stageHint');
   function applyEngine(d){
     if (!d) return;
+    if ('pending' in d) applyPending(d.pending);   // in-flight orders → "working" seats
     applyVitals(d.vitals);
     if (d.working_dx) setWorkingDx(d.working_dx);
     if (d.diagnostic) addDiagnostic(d.diagnostic);
@@ -2323,8 +2722,19 @@
     const cues = (d && d.cues) || [];
     for (const c of cues){
       const speaker = c.speaker || 'nurse';
-      addTurn(ROOM, speaker, c.text);
+      safeUI('cue', () => addTurn(ROOM, speaker, c.text));
       if (c.text && VOICE_BACKEND){ try { await playTTS(c.text, speaker); } catch(e){} }
+    }
+  }
+
+  // Scheduled results that came back this turn — the holder (RT / nurse) reports the
+  // number aloud and the card lands in the diagnostics panel ("room talks back").
+  async function deliverDeferred(d){
+    const items = (d && d.deferred) || [];
+    for (const it of items){
+      const speaker = it.speaker || 'nurse';
+      safeUI('result', () => { if (it.card) addDiagnostic(it.card); if (it.text) addTurn(ROOM, speaker, it.text); });
+      if (it.text && VOICE_BACKEND){ try { await playTTS(it.text, speaker); } catch(e){} }
     }
   }
 
@@ -2362,8 +2772,20 @@
     const d = m.data || {};
     if (m.kind === 'cue'){
       const speaker = m.speaker || 'nurse';
-      addTurn(ROOM, speaker, m.text);
-      if (m.text && VOICE_BACKEND && !processing){ try { await playTTS(m.text, speaker); } catch(e){} }
+      // Shown *and* voiced even while a turn is in flight — the speak queue
+      // serialises it with the reply (it used to be silently dropped).
+      safeUI('live-cue', () => addTurn(ROOM, speaker, m.text));
+      if (m.text && VOICE_BACKEND){ try { await playTTS(m.text, speaker); } catch(e){} }
+      return;
+    }
+    if (m.kind === 'result'){               // a scheduled result reporting back (+ card)
+      const speaker = m.speaker || 'nurse';
+      safeUI('live-result', () => {
+        clearWorking(speaker);              // its order just landed — stop the spinner
+        if (d.card) addDiagnostic(d.card);
+        if (m.text) addTurn(ROOM, speaker, m.text);
+      });
+      if (m.text && VOICE_BACKEND){ try { await playTTS(m.text, speaker); } catch(e){} }
       return;
     }
     if (m.kind === 'state_change' || m.kind === 'condition'){
@@ -2400,19 +2822,50 @@
 
   // ---------- start the live engine-backed session ----------
   let SESSION_ID = null;
+
+  // ── client log: page errors + audio outcomes → /api/voice/client-log ────────
+  // The 2026-09-05 prod runs showed replies on screen with no audio and nothing on
+  // the server to say why. Every decision the speak queue makes (skipped, watchdog,
+  // rejected play, stuck AudioContext) and every UI error is batched here.
+  const clientBuf = []; let clientFlushT = 0;
+  function clientLog(kind, detail){
+    try {
+      const d = (detail && typeof detail === 'object') ? JSON.stringify(detail) : String(detail == null ? '' : detail);
+      clientBuf.push({ kind, detail: d.slice(0, 1000), t: (typeof clockStr === 'function') ? clockStr() : '' });
+      if (clientBuf.length > 200) clientBuf.splice(0, clientBuf.length - 200);
+      if (clientBuf.length >= 20) clientFlush(); else if (!clientFlushT) clientFlushT = setTimeout(clientFlush, 2000);
+    } catch(e){}
+  }
+  function clientFlush(useBeacon){
+    clearTimeout(clientFlushT); clientFlushT = 0;
+    if (!SESSION_ID || !clientBuf.length) return;
+    const payload = JSON.stringify({ session_id: SESSION_ID, events: clientBuf.splice(0, 50) });
+    try {
+      if (useBeacon && navigator.sendBeacon) navigator.sendBeacon('/api/voice/client-log', new Blob([payload], { type: 'application/json' }));
+      else fetch('/api/voice/client-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(() => {});
+    } catch(e){}
+    if (clientBuf.length) clientFlushT = setTimeout(clientFlush, 2000);
+  }
+  window.addEventListener('error', e => clientLog('js.error', ((e && e.message) || 'error') + ' @' + ((e && e.filename) || '') + ':' + ((e && e.lineno) || '')));
+  window.addEventListener('unhandledrejection', e => { const r = e && e.reason; clientLog('js.rejection', (r && (r.stack || r.message)) || String(r)); });
+  window.addEventListener('pagehide', () => clientFlush(true));
+  // A UI update that throws must never take the audio with it: run it in isolation.
+  function safeUI(what, fn){ try { fn(); } catch(e){ clientLog('ui.error', what + ': ' + ((e && (e.stack || e.message)) || e)); } }
   function titleCase(s){ return s ? s[0].toUpperCase()+s.slice(1) : s; }
   function shortId(id){ return (id||'').replace(/_/g,'-').slice(0,16) || 'session'; }
   async function startSession(){
     const params = new URLSearchParams(location.search);
     const resumeId = params.get('session') || params.get('resume');   // resume a parked run
-    const id = params.get('case') || 'myasthenic_crisis';
+    const id = params.get('case');
+    // No case and nothing to resume → back to the launcher, which lists the cases.
+    if (!id && !resumeId){ location.href = '/simulator/voice-room'; return; }
     let data;
     try {
       const res = resumeId
         ? await fetch('/api/voice/resume', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ session_id: resumeId }) })
         : await fetch('/api/voice/session', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ case_id: id }) });
       if (res.status === 401) { location.href = '/'; return; }
-      if (!res.ok){ if (resumeId) location.href = '/simulator'; return; }   // stale resume link → picker
+      if (!res.ok){ if (resumeId) location.href = '/home'; return; }   // stale resume link → home hub
       data = await res.json();
     } catch (e) { return; }
     if (!data) return;
@@ -2447,30 +2900,35 @@
     (data.history || []).forEach(t => addTurn(NURSE_CH, t.role === 'resident' ? 'res' : 'nurse', t.text));
     (data.patient_history || []).forEach(t => addTurn(PATIENT_CH, t.role === 'resident' ? 'res' : 'patient', t.text));
     (data.cards || []).forEach(c => addDiagnostic(c));
+    if ('pending' in data) applyPending(data.pending);   // restore in-flight "working" seats
     if (data.state && data.state.name) stageLabel.textContent = data.state.name;
     setNow(NURSE_CH, 'resumed — tap to continue');
     drawer.classList.add('collapsed');   // don't smother the room on load
   }
   let INTRO_TEXT = '', introPlayed = false;
-  startSession();
+  startSession().then(ensureMic);
 
   // ---------- real-time voice: hands-free VAD listening + barge-in ----------
   const talkBtn = document.getElementById('talkBtn');
   const talkLabel = talkBtn.querySelector('.talk-label');
   let stream = null, recorder = null, chunks = [];
-  let audioCtx = null, analyser = null, micSource = null, vadRaf = 0;
+  let audioCtx = null;
   let listening = false;     // hands-free mode engaged
   let capturing = false;     // recording the current utterance
   let processing = false;    // STT/LLM in flight (no audio yet)
   let curAudio = null, playResolve = null;          // playing TTS reply (for barge-in)
   let curAbortCtrl = null, curPCMGain = null;       // streaming PCM path: fetch abort + gain node
-  let voiced = false, voiceStart = 0, silenceAt = 0;
-  let vadGate = false;       // mute the VAD while a reply is speaking (half-duplex, kills self-capture)
-  let recentSpoken = [];     // last few things we spoke — to drop echo that leaks past the gate
+  let ptt = false, pttAt = 0, pttDrop = false;   // push-to-talk: held key/button, when it went down, tap-to-discard
 
   // Voice backend chosen at the start: 'native' (browser dictation + speech
   // synthesis, zero cost) or 'models' (Whisper STT + Cartesia TTS). Set once.
-  let VOICE_BACKEND = null;
+  // The pre-load chooser (voice_launch.html) may already have picked it and
+  // passed it as ?speech=native|models — honour that and skip the in-room modal.
+  const _speechParam = new URLSearchParams(location.search).get('speech');
+  // A legacy ?speech=extreme link (the retired frontier tier) rides 'models': every
+  // ElevenLabs line now uses the one expressive model.
+  let VOICE_BACKEND = (_speechParam === 'native' || _speechParam === 'models') ? _speechParam
+                    : (_speechParam === 'extreme' ? 'models' : null);
   let recognition = null;    // native SpeechRecognition (native mode)
   let recoSuspend = false;   // pause native recognition while the reply speaks (no AEC)
 
@@ -2496,42 +2954,10 @@
     return base[0];
   }
 
-  // VAD tuning (RMS on the mic's time-domain signal).
-  const SPEECH_THRESH = 0.020;   // above this counts as voice
-  const SILENCE_MS = 750;        // trailing silence that ends an utterance
-  const MIN_SPEECH_MS = 280;     // ignore shorter blips
-  const GATE_TAIL_MS = 280;      // keep the mic muted briefly after a reply so the room rings out
-
-  // Half-duplex gate: while a reply plays we stop listening, so the nurse/patient
-  // TTS coming out of the speakers can't trip the VAD and get transcribed back.
-  function gateVad(on){
-    vadGate = on;
-    voiced = false; silenceAt = 0;   // drop any half-formed utterance on either edge
-  }
-
-  // Echo guard: remember what we just spoke and drop a transcript that is mostly
-  // those same words — catches TTS that leaks past the gate's tail.
-  function normTokens(t){
-    return (t || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
-  }
-  function rememberSpoken(text){
-    const toks = normTokens(text);
-    if (!toks.length) return;
-    recentSpoken.push(toks);
-    if (recentSpoken.length > 3) recentSpoken.shift();
-  }
-  function looksLikeEcho(said){
-    const toks = normTokens(said);
-    if (toks.length < 2) return false;        // too short to judge — let it through
-    const set = new Set(toks);
-    for (const prev of recentSpoken){
-      if (prev.length < 2) continue;
-      const pset = new Set(prev);
-      let hit = 0; for (const w of set) if (pset.has(w)) hit++;
-      if (hit / Math.min(set.size, pset.size) >= 0.6) return true;   // mostly our own words
-    }
-    return false;
-  }
+  // Push-to-talk: the resident holds Space (or the mic button) while speaking and
+  // releases to send. No VAD end-pointing — a silence gate cut thinking pauses
+  // mid-sentence and every wrongly split order cost a clarification round.
+  const PTT_MIN_MS = 200;        // shorter than this is a tap, not an utterance
 
   function setMic(mode){ // off | listen | rec | busy
     talkBtn.classList.toggle('rec', mode==='rec');
@@ -2539,8 +2965,8 @@
     talkBtn.classList.toggle('live', mode==='listen' || mode==='rec');
     talkLabel.textContent =
       mode==='off'  ? 'Tap to start' :
-      mode==='rec'  ? 'Listening to you…' :
-      mode==='busy' ? 'Working…' : 'Live — tap to stop';
+      mode==='rec'  ? 'Listening — release to send' :
+      mode==='busy' ? 'Working…' : 'Hold Space to talk';
   }
 
   async function stt(blob){
@@ -2574,11 +3000,11 @@
   const captionBar = document.getElementById('captionBar');
   const captionWho = document.getElementById('captionWho');
   const captionText = document.getElementById('captionText');
-  const CAP_WHO_LABELS = { nurse:'RN Nurse', patient:'Patient', ems:'EMS', family:'Family', rt:'RT', consult:'Consultant' };
+  const CAP_WHO_LABELS = { nurse:'RN Nurse', patient:'Patient', ems:'EMS', family:'Family', rt:'RT', consult:'Consultant', head:'Head Physician' };
   function showCaption(text, speaker){
     if (!captionBar) return;
     captionWho.textContent = CAP_WHO_LABELS[speaker] || speaker;
-    captionWho.style.color = { nurse:'var(--teal-glow)', patient:'#e0a85f', ems:'#8ab4f0', family:'#e7b35a', rt:'#6fd3c2', consult:'#c08cf0' }[speaker] || 'var(--ink-400)';
+    captionWho.style.color = { nurse:'var(--teal-glow)', patient:'#e0a85f', ems:'#8ab4f0', family:'#e7b35a', rt:'#6fd3c2', consult:'#c08cf0', head:'#d8c48a' }[speaker] || 'var(--ink-400)';
     captionText.textContent = text;
     captionBar.classList.add('visible');
   }
@@ -2586,8 +3012,9 @@
     if (captionBar) captionBar.classList.remove('visible');
   }
 
-  function stopAudio(){ // halt any playing reply (barge-in / stop) and release the await
-    flushSpeak();        // drop anything queued behind the current line (barge-in wins)
+  // Kill whatever is playing right now and release its await. Leaves the queue
+  // alone — the watchdog uses it to unwedge one line without dropping the rest.
+  function killCurrent(){
     clearSpeaking();
     hideCaption();
     if (curAudio){ try { curAudio.pause(); } catch(e){} curAudio = null; }
@@ -2595,6 +3022,10 @@
     if (curPCMGain && audioCtx){ try { curPCMGain.gain.setValueAtTime(0, audioCtx.currentTime); } catch(e){} curPCMGain = null; }
     if (window.speechSynthesis){ try { speechSynthesis.cancel(); } catch(e){} }
     if (playResolve){ const r = playResolve; playResolve = null; r(); }
+  }
+  function stopAudio(){ // halt any playing reply (barge-in / stop) and release the await
+    flushSpeak();        // drop anything queued behind the current line (barge-in wins)
+    killCurrent();
   }
 
   // ── one speak queue so calls never overlap ───────────────────────────────────
@@ -2626,36 +3057,53 @@
     }, FILLER_DELAY_MS);
   }
   function cancelFiller(){ clearTimeout(fillerTimer); fillerTimer = 0; }
-  function playTTS(text, speaker, stabilityOverride){
+  // How long one line may take end-to-end (synthesis + playback) before the queue
+  // is freed. On 2026-09-05 one stalled line silently swallowed every reply queued
+  // behind it. Speech runs ~15 chars/s; v3 synthesis alone can take several seconds.
+  const TTS_WATCHDOG = Object.assign({ base: 6000, perChar: 90, max: 60000 }, window.__ttsWatchdog || {});
+  function ttsBudget(text){ return Math.min(TTS_WATCHDOG.max, TTS_WATCHDOG.base + TTS_WATCHDOG.perChar * ((text || '').length)); }
+  function playTTS(text, speaker, stabilityOverride, affect){
     const gen = speakGen;
+    const brief = speaker + ': ' + (text || '').slice(0, 80);
     const run = async () => {
-      if (gen !== speakGen) return;        // a barge-in invalidated this queued line
-      try { await _playTTSNow(text, speaker, stabilityOverride); }
-      catch(e){
-        if (e && e.name === 'AbortError') return;
-        // A real synthesis failure used to be swallowed by callers — retry once, then
-        // surface it instead of looking like a dropped reply with no audio.
-        try { await _playTTSNow(text, speaker, stabilityOverride); }
-        catch(e2){
-          if (e2 && e2.name === 'AbortError') return;
-          setNow(ROOM, 'audio unavailable for that line — tap to continue');
-          ROOM.root.classList.remove('collapsed');
+      if (gen !== speakGen){ clientLog('tts.skipped', brief); return; }   // a barge-in invalidated this queued line
+      const t0 = performance.now(); let timer = 0;
+      const guard = new Promise(resolve => { timer = setTimeout(() => { clientLog('tts.watchdog', Math.round(performance.now() - t0) + 'ms ' + brief); killCurrent(); resolve('watchdog'); }, ttsBudget(text)); });
+      const attempt = async () => {
+        try { await _playTTSNow(text, speaker, stabilityOverride, affect); return 'ok'; }
+        catch(e){
+          if (e && e.name === 'AbortError') return 'aborted';
+          clientLog('tts.error', ((e && e.message) || e) + ' ' + brief);
+          // A real synthesis failure used to be swallowed by callers — retry once, then
+          // surface it instead of looking like a dropped reply with no audio.
+          try { await _playTTSNow(text, speaker, stabilityOverride, affect); return 'ok'; }
+          catch(e2){
+            if (e2 && e2.name === 'AbortError') return 'aborted';
+            clientLog('tts.failed', ((e2 && e2.message) || e2) + ' ' + brief);
+            setNow(ROOM, 'audio unavailable for that line — tap to continue');
+            ROOM.root.classList.remove('collapsed');
+            return 'failed';
+          }
         }
-      }
+      };
+      try { await Promise.race([attempt(), guard]); }
+      finally { clearTimeout(timer); }
     };
     speakChain = speakChain.then(run, run);
     return speakChain;
   }
 
-  async function _playTTSNow(text, speaker, stabilityOverride){
+  async function _playTTSNow(text, speaker, stabilityOverride, affect){
     selectState('responding');
-    rememberSpoken(text);
     if (VOICE_BACKEND === 'native') return speakNative(text, speaker);
-    gateVad(true);
-    speakRoster(speaker, true);
+    speakRoster(speaker, true, text);
     showCaption(text, speaker);
     const body = { text, speaker };
     if (stabilityOverride != null) body.stability = stabilityOverride;
+    if (affect) body.affect = affect;     // EmotionalState descriptor → v4 audio tag
+    // A stuck AudioContext (suspended/interrupted, resume never lands) cannot
+    // schedule PCM; ask for a whole MP3 and play it through <audio> instead.
+    if (!(await audioContextReady())) body.format = 'mp3';
     const abortCtrl = new AbortController();
     curAbortCtrl = abortCtrl;
     try {
@@ -2663,29 +3111,44 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body), signal: abortCtrl.signal,
       });
-      if (!res.ok) throw new Error('synthesis failed');
+      if (!res.ok) throw new Error('synthesis failed (' + res.status + ')');
       const ct = res.headers.get('content-type') || '';
-      if (ct.includes('audio/pcm')) {
-        await _playPCMStream(res);
-      } else {
-        // MP3 blob path (Together fallback)
-        const url = URL.createObjectURL(await res.blob());
-        const audio = new Audio(url); curAudio = audio;
-        await new Promise(resolve => {
-          playResolve = resolve;
-          const done = () => { clearSpeaking(); hideCaption(); URL.revokeObjectURL(url); if (curAudio===audio) curAudio=null; if (playResolve){ playResolve=null; resolve(); } };
-          audio.onended = done; audio.onerror = done;
-          audio.play().catch(done);
-        });
-      }
+      if (ct.includes('audio/pcm')) await _playPCMStream(res);
+      else await _playBlob(res, speaker);
     } catch(e) {
       if (e.name !== 'AbortError') throw e;
     } finally {
-      curAbortCtrl = null;
+      if (curAbortCtrl === abortCtrl) curAbortCtrl = null;
       clearSpeaking();
       hideCaption();
-      setTimeout(() => gateVad(false), GATE_TAIL_MS);
     }
+  }
+  // Whole-file playback through <audio> (the MP3 fallback above). An element that
+  // cannot decode or start rejects, so playTTS retries and reports the line instead
+  // of counting silence as played; killCurrent (barge-in/watchdog) still resolves.
+  async function _playBlob(res, speaker){
+    const url = URL.createObjectURL(await res.blob());
+    const audio = new Audio(url); curAudio = audio;
+    await new Promise((resolve, reject) => {
+      playResolve = resolve;
+      const done = (err) => { clearSpeaking(); hideCaption(); URL.revokeObjectURL(url); if (curAudio===audio) curAudio=null; if (playResolve){ playResolve=null; err ? reject(err) : resolve(); } };
+      audio.onended = () => done();
+      audio.onerror = () => { const code = (audio.error && audio.error.code) || '?'; clientLog('tts.audio_error', speaker + ' code=' + code); done(new Error('audio element error code=' + code)); };
+      let p; try { p = audio.play(); } catch(e){ clientLog('tts.play_threw', speaker + ' ' + ((e && e.name) || e)); done(e); return; }
+      if (p && p.catch) p.catch(e => { clientLog('tts.play_rejected', speaker + ' ' + ((e && e.name) || e)); done(e); });
+    });
+  }
+  // The shared AudioContext must be running to schedule PCM. Resume it with a
+  // bounded wait and report — rather than hang — when it will not run.
+  async function audioContextReady(){
+    try {
+      const ctx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx = ctx;
+      if (ctx.state === 'running') return true;
+      await Promise.race([Promise.resolve(ctx.resume()).catch(() => {}), new Promise(r => setTimeout(r, 1500))]);
+      if (ctx.state === 'running') return true;
+      clientLog('audio.ctx', String(ctx.state));
+      return false;
+    } catch(e){ clientLog('audio.ctx', 'error ' + ((e && e.message) || e)); return false; }
   }
 
   // Play a server-sent PCM-16000 stream (16-bit signed LE mono) via Web Audio API.
@@ -2695,7 +3158,6 @@
     const SAMPLE_RATE = 16000;
     const ctx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     audioCtx = ctx;
-    if (ctx.state === 'suspended') await ctx.resume();
 
     const masterGain = ctx.createGain();
     masterGain.connect(ctx.destination);
@@ -2760,7 +3222,7 @@
   }
   // Native speech synthesis (zero-cost mode). Distinct voice + pitch per speaker.
   function speakNative(text, speaker){
-    speakRoster(speaker, true);
+    speakRoster(speaker, true, text);
     showCaption(text, speaker);
     return new Promise(resolve => {
       if (!window.speechSynthesis){ clearSpeaking(); hideCaption(); resolve(); return; }
@@ -2780,37 +3242,28 @@
   }
 
   // ---- voice-activity detection loop ----
-  function rmsLevel(){
-    const buf = new Uint8Array(analyser.fftSize);
-    analyser.getByteTimeDomainData(buf);
-    let sum = 0;
-    for (let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum += v*v; }
-    return Math.sqrt(sum/buf.length);
-  }
-  function vadTick(){
-    if (!listening){ return; }
-    if (vadGate){ vadRaf = requestAnimationFrame(vadTick); return; }   // muted while the reply speaks
-    const level = rmsLevel(), now = performance.now();
-    if (level > SPEECH_THRESH){
-      if (!voiced){ voiced = true; voiceStart = now; onVoiceStart(); }
-      silenceAt = 0;
-    } else if (voiced){
-      if (!silenceAt) silenceAt = now;
-      else if (now - silenceAt > SILENCE_MS){
-        voiced = false;
-        onVoiceEnd((silenceAt - voiceStart) >= MIN_SPEECH_MS);   // speech length before silence
-      }
-    }
-    vadRaf = requestAnimationFrame(vadTick);
-  }
-  function onVoiceStart(){
-    stopAudio();                 // barge-in: cut off the reply the instant you speak
-    if (processing) return;      // mid-fetch — let it resolve; ignore this blip
+  // ---- Push-to-talk ----
+  function pttDown(){
+    if (!listening || ptt || clockPaused) return;
+    ptt = true; pttAt = performance.now();
+    stopAudio();                 // barge-in: the resident is talking over the room
+    if (VOICE_BACKEND === 'native'){ if (!processing){ try { recognition.start(); } catch(e){} setMic('rec'); selectState('listening'); } return; }
+    if (processing) return;      // the last turn is still working; capture starts when it clears
     if (!capturing) startCapture();
   }
-  function onVoiceEnd(longEnough){
-    if (capturing){ capturing = false; try { recorder.stop(); } catch(e){} }
-    if (!longEnough){ chunks = []; }   // too short — drop it
+  function pttUp(){
+    if (!ptt) return;
+    ptt = false;
+    const held = performance.now() - pttAt;
+    if (VOICE_BACKEND === 'native'){ try { recognition.stop(); } catch(e){} return; }
+    if (!capturing) return;
+    capturing = false;
+    pttDrop = held < PTT_MIN_MS;   // a tap, not an utterance: the blob is discarded in onstop
+    try { recorder.stop(); } catch(e){}
+    if (pttDrop) setNow(NURSE_CH, 'hold Space (or the mic) while you talk');
+  }
+  function pttResume(){        // a press held through the previous turn starts capturing once it clears
+    if (ptt && listening && !processing && !capturing && VOICE_BACKEND !== 'native'){ pttAt = performance.now(); startCapture(); }
   }
 
   function startCapture(){
@@ -2821,9 +3274,9 @@
     recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
     recorder.onstop = () => {
       const parts = chunks; chunks = [];
-      if (parts.length) processUtterance(new Blob(parts, { type: parts[0].type || 'audio/webm' }));
+      if (parts.length && !pttDrop) processUtterance(new Blob(parts, { type: parts[0].type || 'audio/webm' }));
     };
-    recorder.start();
+    pttDrop = false; recorder.start();
     capturing = true; setMic('rec'); selectState('listening');
   }
 
@@ -2841,11 +3294,12 @@
     }
     if (!said){ processing = false; if (listening) setMic('listen'); selectState(listening ? 'listening' : 'idle'); return; }
     await handleSaid(said);
+    pttResume();
   }
 
   // Shared by both backends: a recognised utterance → routed, grounded, spoken reply.
   async function handleSaid(said, _forcedAddr){
-    if (looksLikeEcho(said)){                 // our own TTS bled into the mic — ignore it
+    if (clockPaused){                          // frozen: drop anything captured around a pause
       processing = false;
       if (!capturing) setMic(listening ? 'listen' : 'off');
       selectState(listening ? 'listening' : 'idle');
@@ -2855,69 +3309,102 @@
     const effectiveAddr = _forcedAddr || forcedAddressee || null;
     // Consume the chip selection so it doesn't bleed into subsequent turns.
     forcedAddressee = null;
-    addrChipsEl.querySelectorAll('.addr-chip').forEach(c => c.classList.remove('selected'));
-    leaveAskMode();
+    safeUI('chips', () => { addrChipsEl.querySelectorAll('.addr-chip').forEach(c => c.classList.remove('selected')); leaveAskMode(); });
 
+    let data;
     try {
-      addTurn(ROOM, 'res', said);
-
+      safeUI('transcript', () => addTurn(ROOM, 'res', said));
       // Single unified endpoint: the SERVER-SIDE Director decides who answers
       // (nurse / bystander / patient) from the utterance content. The browser no
       // longer pre-routes — it just sends the raw transcript and an optional chip.
       const body = { session_id: SESSION_ID, text: said };
       if (effectiveAddr) body.forced_addressee = effectiveAddr;
       scheduleFiller();                          // mask the dispatch latency if it's slow
-      let data;
       try { data = await postJSON('/api/voice/turn', body); }
       finally { cancelFiller(); }
-
-      const reply = (data.reply || '').trim();
-      const speaker = data.speaker || 'nurse';
-      const patientStability = data.affect_stability ?? null;
-      addTurn(ROOM, speaker, reply);
-      applyEngine(data);
-
-      // Director ask-back: store the utterance and illuminate the addressee chips.
-      if (data.needs_addressee){
-        pendingTranscript = said;
-        enterAskMode();
-      }
-
-      processing = false;
-      if (!capturing) setMic(listening ? 'listen' : 'off');
-      // affect_stability is the speaker's live EmotionalState (Phase 5): set for the
-      // patient and a frightened relative, absent for the steady professionals.
-      if (reply) await playTTS(reply, speaker, patientStability);
-      await deliverCues(data);
-      setNow(ROOM, 'listening for your next order…');
-      if (pendingEnd){ pendingEnd = false; concludeCase(); }
     } catch(e){
+      clientLog('turn.error', (e && e.message) || e);
       setNow(ROOM, (e && e.message) ? e.message : 'something went wrong');
       ROOM.root.classList.remove('collapsed');
-    } finally {
       processing = false;
       if (!capturing) setMic(listening ? 'listen' : 'off');
       selectState(listening ? 'listening' : 'idle');
+      return;
     }
+    await deliverTurn(data, said);
+  }
+  // Everything that happens once a turn's reply is in hand. The transcript, the
+  // engine update and the ask-back chips each run in isolation from the speech
+  // path — on 2026-09-05 a UI error here left replies on screen that were never
+  // heard. `processing` clears before playback so the resident can barge in.
+  async function deliverTurn(data, said){
+    const reply = (data.reply || '').trim();
+    const speaker = data.speaker || 'nurse';
+    const patientStability = data.affect_stability ?? null;
+    if (reply) safeUI('reply', () => addTurn(ROOM, speaker, reply));
+    safeUI('engine', () => applyEngine(data));
+    // Director ask-back: store the utterance and illuminate the addressee chips.
+    if (data.needs_addressee) safeUI('ask-mode', () => { pendingTranscript = said; enterAskMode(); });
+    processing = false;
+    if (!capturing) setMic(listening ? 'listen' : 'off');
+    // affect_stability / affect are the speaker's live EmotionalState (Phase 5): set
+    // for the patient and a frightened relative, absent for the steady professionals.
+    if (reply){ try { await playTTS(reply, speaker, patientStability, data.affect ?? null); } catch(e){} }
+    await deliverCues(data);
+    safeUI('now', () => setNow(ROOM, 'listening for your next order…'));
+    if (!capturing) setMic(listening ? 'listen' : 'off');
+    selectState(listening ? 'listening' : 'idle');
+    if (pendingEnd){ pendingEnd = false; concludeCase(); }
   }
 
   // Play the one-time spoken handoff before the floor opens (both backends).
   async function playHandoff(){
     if (INTRO_TEXT && !introPlayed){
       setMic('busy');
-      try {
-        await playTTS(INTRO_TEXT, 'nurse');
-        introPlayed = true;            // mark played ONLY after it actually played, so a
-      }                                // transient TTS failure doesn't silently swallow the
-      catch(e){                        // one-time briefing for the whole session.
-        setNow(NURSE_CH, (e && e.message) || 'voice service unavailable — tap again to hear the handoff');
+      // One automatic retry — the handoff is a one-time briefing, so a transient
+      // TTS failure shouldn't silently swallow it. introPlayed stays false on
+      // failure so a tap can still replay it.
+      let spoke = false;
+      for (let a = 0; a < 2 && !spoke; a++){
+        try { await playTTS(INTRO_TEXT, 'nurse'); spoke = true; }
+        catch(e){ if (a === 0) await new Promise(r => setTimeout(r, 400)); }
+      }
+      if (!spoke){
+        setNow(NURSE_CH, 'voice service unavailable — tap again to hear the handoff');
         NURSE_CH.root.classList.remove('collapsed');
         return true;                   // let the floor open; they can retry the tap
       }
+      introPlayed = true;
       if (!listening) return false;     // resident stopped during the handoff
       setMic('listen');
     }
     return true;
+  }
+
+  // Request microphone access as soon as the case loads (voice is the primary
+  // input). If already granted we leave the device closed until the resident taps
+  // to start; if blocked we surface a persistent prompt instead of failing on the
+  // first tap.
+  let micDenied = false;
+  async function ensureMic(){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      micDenied = true; setNow(NURSE_CH, 'this browser blocks microphone access — voice input won’t work'); NURSE_CH.root.classList.remove('collapsed'); return false;
+    }
+    try {
+      if (navigator.permissions && navigator.permissions.query){
+        try { const st = await navigator.permissions.query({ name:'microphone' }); if (st.state === 'granted') return true; } catch(e){}
+      }
+      const s = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
+      // Native dictation manages its own capture — release the device now; the
+      // server backend reuses this stream for VAD/recording.
+      if (VOICE_BACKEND === 'native'){ s.getTracks().forEach(t => t.stop()); } else { stream = s; }
+      return true;
+    } catch(e){
+      micDenied = true;
+      setNow(NURSE_CH, 'microphone access is needed — allow it in your browser and reload');
+      NURSE_CH.root.classList.remove('collapsed');
+      return false;
+    }
   }
 
   // ── server backend: getUserMedia + RMS VAD + MediaRecorder → Whisper ──
@@ -2930,21 +3417,9 @@
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') await audioCtx.resume();
     _initAmbience(audioCtx);
-    if (!analyser){
-      analyser = audioCtx.createAnalyser(); analyser.fftSize = 512;
-      micSource = audioCtx.createMediaStreamSource(stream);
-      // High-pass filter on VAD path only — cuts sub-250 Hz mechanical noise
-      // (table bumps, footsteps, mic handling) so they don't trip the RMS gate.
-      // The MediaRecorder captures the raw stream; Whisper still gets full audio.
-      const vadHp = audioCtx.createBiquadFilter();
-      vadHp.type = 'highpass'; vadHp.frequency.value = 250; vadHp.Q.value = 0.7;
-      micSource.connect(vadHp);
-      vadHp.connect(analyser);
-    }
-    listening = true; voiced = false; silenceAt = 0;
+    listening = true;
     setMic('listen'); selectState('listening');
-    if (!await playHandoff()) return;
-    vadRaf = requestAnimationFrame(vadTick);
+    await playHandoff();
   }
 
   // ── native backend: browser SpeechRecognition (half-duplex, no AEC) ──
@@ -2959,10 +3434,11 @@
     recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'en-US';
     recognition.onresult = onNativeResult;
     recognition.onerror = () => {};   // 'no-speech'/'aborted' are routine; ignore
-    recognition.onend = () => { if (listening && !recoSuspend){ try { recognition.start(); } catch(e){} } };
+    // Push-to-talk: recognition runs only while Space/the mic is held; release stops
+    // it and the final result (if any) reaches handleSaid. No auto-restart on end.
+    recognition.onend = () => { if (listening && !processing) setMic('listen'); };
     listening = true; setMic('listen'); selectState('listening');
-    if (!await playHandoff()) return;
-    try { recognition.start(); } catch(e){}
+    await playHandoff();
   }
   function onNativeResult(event){
     let finalText = '', interim = '';
@@ -2970,7 +3446,7 @@
       const r = event.results[i];
       if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
     }
-    if (interim){ stopAudio(); setNow(NURSE_CH, interim); }   // show live partial
+    if (interim && ptt) setNow(NURSE_CH, interim);   // show the live partial while held
     const said = finalText.trim();
     if (!said) return;
     // half-duplex: stop listening while we think + speak, so the reply isn't
@@ -2980,7 +3456,7 @@
     processing = true; setMic('busy'); selectState('thinking');
     handleSaid(said).finally(() => {
       recoSuspend = false;
-      if (listening){ try { recognition.start(); } catch(e){} setMic('listen'); }
+      if (listening) setMic('listen');
     });
   }
 
@@ -2989,8 +3465,7 @@
     return startServer();
   }
   function stopListening(){
-    listening = false; recoSuspend = false;
-    if (vadRaf){ cancelAnimationFrame(vadRaf); vadRaf = 0; }
+    listening = false; ptt = false; recoSuspend = false;
     if (recognition){ try { recognition.stop(); } catch(e){} }
     if (capturing){ capturing = false; try { recorder.stop(); } catch(e){} chunks = []; }
     stopAudio();
@@ -3011,16 +3486,66 @@
   voiceModal.addEventListener('click', e => { if (e.target === voiceModal) closeVoiceModal(); });
 
   function onBegin(){
-    if (listening){ stopListening(); return; }
+    if (listening) return;
     if (!VOICE_BACKEND){ openVoiceModal(); return; }   // first run → pick a mode
     startListening();
   }
 
+  // Mic button: tap to start; once live, press and hold to talk. Space does the
+  // same from the keyboard (ignored while typing in a field). A focused button is
+  // blurred first so Space can't re-fire it.
   setMic('off');
-  talkBtn.addEventListener('click', onBegin);
-  document.addEventListener('keydown', e => {
-    if (e.code==='Space' && !e.repeat && e.target===document.body){ e.preventDefault(); onBegin(); }
+  talkBtn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (!listening){ onBegin(); return; }
+    try { talkBtn.setPointerCapture(e.pointerId); } catch(err){}
+    pttDown();
   });
+  ['pointerup','pointercancel'].forEach(ev => talkBtn.addEventListener(ev, pttUp));
+  function typingTarget(e){ const t = e.target; return !!(t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable)); }
+  document.addEventListener('keydown', e => {
+    if (e.code!=='Space' || e.repeat || typingTarget(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+    e.preventDefault();
+    if (!listening){ if (e.target===document.body) onBegin(); return; }
+    if (document.activeElement && document.activeElement.tagName==='BUTTON') document.activeElement.blur();
+    pttDown();
+  });
+  document.addEventListener('keyup', e => { if (e.code!=='Space' || typingTarget(e)) return; if (ptt){ e.preventDefault(); pttUp(); } });
+  window.addEventListener('blur', pttUp);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pttUp(); });
+})();
+</script>
+
+<!-- arrival: continue the launch-page dive as an emerge-from-orb reveal (intro=1) -->
+<style>
+  /* First frame matches the launch dive's last frame exactly (a teal orb-core
+     over the same dark radial field), so the page swap is seamless; then it
+     fades to reveal the room. */
+  #cbEnterFx {
+    position:fixed; inset:0; z-index:99999; pointer-events:none;
+    background:
+      radial-gradient(closest-side at 50% 47%, rgba(127,233,242,0.24), rgba(42,166,189,0.10) 42%, transparent 66%),
+      radial-gradient(130% 120% at 50% 46%, #0e1622 0%, #080c14 55%, #04070c 100%);
+    will-change:opacity, transform;
+  }
+  #cbEnterFx.go { animation:cbEnterReveal .58s cubic-bezier(.33,0,.2,1) forwards; }
+  @keyframes cbEnterReveal {
+    0%   { opacity:1; transform:scale(1.04); }
+    100% { opacity:0; transform:scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) { #cbEnterFx { display:none; } }
+</style>
+<div id="cbEnterFx" aria-hidden="true"></div>
+<script>
+(function(){
+  var q = new URLSearchParams(location.search);
+  var fx = document.getElementById('cbEnterFx');
+  if (!fx) return;
+  if (q.get('intro') !== '1') { fx.remove(); return; }
+  requestAnimationFrame(function(){ fx.classList.add('go'); });
+  fx.addEventListener('animationend', function(){ fx.remove(); });
+  q.delete('intro');   // don't replay the arrival on refresh
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString() : '') + location.hash);
 })();
 </script>
 

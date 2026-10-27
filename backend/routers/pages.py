@@ -12,12 +12,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+
+from backend.sim_diagnostics import CASE_ASSET_PREFIX
+from backend.web_deps import require_resident
 
 router = APIRouter()
 
 _STATIC = Path(__file__).parent.parent / "static"
+# Authored case assets (images a study can show the resident) live beside the
+# case JSON under ``cases/``. Only media is served — the JSON there holds the
+# hidden diagnosis and must never be reachable through this route.
+_CASES_DIR = _STATIC.parent.parent / "cases"
+_ASSET_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".mp3", ".wav"}
 
 
 def _serve_with_chrome(filename: str) -> str:
@@ -48,6 +56,20 @@ def body_image() -> FileResponse:
     return FileResponse(str(img_path), media_type="image/png")
 
 
+@router.get(f"{CASE_ASSET_PREFIX}/{{path:path}}")
+def case_asset(path: str, request: Request) -> FileResponse:
+    """Serve one authored case asset to a signed-in resident (see
+    ``InvestigationDef.image_ref``). Path-traversal safe: the resolved file must sit
+    under ``cases/`` and carry a media suffix."""
+    require_resident(request)
+    root = _CASES_DIR.resolve()
+    target = (root / path).resolve()
+    if root not in target.parents or target.suffix.lower() not in _ASSET_SUFFIXES \
+            or not target.is_file():
+        raise HTTPException(status_code=404, detail="asset not found")
+    return FileResponse(str(target), headers={"Cache-Control": "private, max-age=604800"})
+
+
 @router.get("/static/favicon.svg")
 def favicon() -> FileResponse:
     return FileResponse(str(_STATIC / "favicon.svg"), media_type="image/svg+xml")
@@ -75,12 +97,20 @@ def simulated_intro_page() -> str:
 
 
 @router.get("/simulator/voice-room", response_class=HTMLResponse)
-def voice_room_page() -> str:
+def voice_room_page(ui: str | None = None) -> str:
     """Full-screen voice-driven simulation room (the simulated-case runtime UI).
 
-    Standalone immersive page; the case id is read from ?case= in JS and the
-    patient HUD + vitals are seeded from the loaded simulated case."""
-    return (_STATIC / "voice_room.html").read_text()
+    Entry is gated by a pre-load chooser: with no ``?ui=`` the resident first
+    picks a speech mode and interface style (``voice_launch.html``), which then
+    re-enters this route with ``ui=functional`` (the dark cockpit, default) or
+    ``ui=cool`` (the round-table orb room). The case id / session id and the
+    chosen speech mode ride along in the query string and are read in JS."""
+    if ui == "cool":
+        return (_STATIC / "voice_room.html").read_text()
+    if ui == "functional":
+        return (_STATIC / "voice_room_functional.html").read_text()
+    # no interface chosen yet → show the pre-load chooser popup
+    return (_STATIC / "voice_launch.html").read_text()
 
 
 @router.get("/crud-simulations", response_class=HTMLResponse)
@@ -108,6 +138,12 @@ def home_page() -> str:
 def analytics_page() -> str:
     """The dense analytics & performance view (was /dashboard)."""
     return _serve_with_chrome("analytics.html")
+
+
+@router.get("/qbank", response_class=HTMLResponse)
+def qbank_page() -> str:
+    """Question Bank — UWorld-style practice over the seeded qbank cases."""
+    return _serve_with_chrome("qbank.html")
 
 
 @router.get("/dashboard")

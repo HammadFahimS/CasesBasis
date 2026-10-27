@@ -1,0 +1,2674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CasesBasis — Live Simulation Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   CasesBasis — Live Simulation Room (Functional cockpit)
+   Dark clinical theme + orbital agent stage.
+   ============================================================ */
+
+:root {
+  --bg-0:#080c14; --bg-1:#0b111b; --panel:#101826; --panel-2:#131d2c;
+  --raise:#182236; --line:#1e2a3d; --line-soft:#182233;
+  --ink-50:#eef3f9; --ink-100:#dbe3ee; --ink-200:#c2cddc; --ink-300:#9aa8bd;
+  --ink-400:#7887a0; --ink-500:#586780; --ink-600:#3f4d64;
+  --teal:#3aa7ba; --teal-deep:#0e8a9e; --teal-glow:#5fd8e6;
+  --green:#4fce8f; --amber:#e0a94a; --red:#e5604a; --red-soft:#ef6a54;
+  --radius:16px;
+  --shadow:0 18px 46px -18px rgba(0,0,0,0.7);
+}
+
+* { box-sizing:border-box; }
+html,body { margin:0; height:100%; }
+body {
+  font-family:'Inter', system-ui, sans-serif;
+  background:
+    radial-gradient(120% 90% at 50% -10%, #0f1826 0%, transparent 55%),
+    var(--bg-0);
+  color:var(--ink-200);
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+}
+.mono { font-family:'JetBrains Mono', ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+.serif { font-family:'Instrument Serif', Georgia, serif; }
+button { font-family:inherit; }
+:focus-visible { outline:2px solid var(--teal-glow); outline-offset:2px; border-radius:6px; }
+
+.app { height:100vh; height:100dvh; display:grid; grid-template-rows:auto 1fr auto; overflow:hidden; }
+.body-grid { display:grid; grid-template-columns:296px minmax(0,1fr) 344px; gap:14px; padding:14px; min-height:0; overflow:hidden; }
+.col { min-height:0; display:flex; flex-direction:column; gap:12px; }
+.col.center { overflow:hidden; }
+.col.rail { overflow:hidden; }
+
+.scroll { overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
+.scroll::-webkit-scrollbar { width:8px; }
+.scroll::-webkit-scrollbar-thumb { background:var(--line); border-radius:8px; }
+.scroll::-webkit-scrollbar-track { background:transparent; }
+
+.card { background:linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); }
+.eyebrow { font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--ink-500); font-weight:600; }
+
+/* TOP BAR */
+.topbar { display:flex; align-items:center; gap:16px; padding:12px 18px; background:linear-gradient(180deg, rgba(16,24,38,0.9), rgba(11,17,27,0.9)); border-bottom:1px solid var(--line); backdrop-filter:blur(8px); }
+.brand { display:flex; align-items:center; gap:11px; padding-right:6px; }
+.brand .orb-mark { width:34px; height:34px; position:relative; flex-shrink:0; }
+.brand .orb-mark canvas { width:100%; height:100%; display:block; }
+.brand .bt { line-height:1.1; }
+.brand .bt .n { font-size:15px; font-weight:700; letter-spacing:0.01em; color:var(--ink-50); }
+.brand .bt .n .lc { color:var(--teal-glow); font-weight:600; }
+.brand .bt .s { font-size:10.5px; color:var(--ink-500); letter-spacing:0.02em; }
+
+.scenario-sel { display:flex; align-items:center; gap:12px; background:var(--raise); border:1px solid var(--line); border-radius:11px; padding:8px 12px 8px 15px; min-width:230px; cursor:pointer; transition:border-color .2s; }
+.scenario-sel:hover { border-color:var(--teal-deep); }
+.scenario-sel .lbl { font-size:14px; font-weight:600; color:var(--ink-100); }
+.scenario-sel .sub { font-size:10.5px; color:var(--ink-500); margin-top:2px; }
+.scenario-sel svg { color:var(--ink-500); margin-left:auto; }
+
+.spacer { flex:1; }
+
+.clock { display:flex; align-items:center; gap:14px; background:var(--raise); border:1px solid var(--line); border-radius:12px; padding:7px 8px 7px 16px; }
+.clock .ct { text-align:left; }
+.clock .ct .cl { font-family:'JetBrains Mono', monospace; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color:var(--ink-500); }
+.clock .ct .cv { font-family:'JetBrains Mono', monospace; font-size:20px; font-weight:600; color:var(--ink-50); letter-spacing:0.03em; line-height:1.1; }
+.clock.paused .ct .cv { color:var(--amber); }
+.btn-pause { display:flex; align-items:center; gap:7px; background:var(--panel); border:1px solid var(--line); color:var(--ink-200); border-radius:9px; padding:8px 13px; font-size:12.5px; font-weight:600; cursor:pointer; transition:all .2s; }
+.btn-pause:hover { border-color:var(--teal-deep); color:var(--ink-50); }
+
+.toggle { display:flex; align-items:center; gap:8px; background:var(--raise); border:1px solid var(--line); color:var(--ink-300); border-radius:10px; padding:9px 13px; font-size:12.5px; font-weight:500; cursor:pointer; transition:all .2s; }
+.toggle svg { color:var(--ink-400); }
+.toggle.on { border-color:var(--teal-deep); color:var(--ink-50); background:rgba(14,138,158,0.12); }
+.toggle.on svg { color:var(--teal-glow); }
+.toggle .live-dot { width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); }
+
+.account { display:flex; align-items:center; gap:10px; padding:5px 10px 5px 6px; border-radius:11px; border:1px solid var(--line); background:var(--raise); cursor:pointer; }
+.account:hover { border-color:var(--teal-deep); }
+.account .ava { width:32px; height:32px; border-radius:9px; background:linear-gradient(140deg,#2f4a6b,#1b2c42); display:grid; place-items:center; font-size:12px; font-weight:700; color:var(--ink-100); font-family:'JetBrains Mono',monospace; }
+.account .who { line-height:1.15; }
+.account .who .nm { font-size:12.5px; font-weight:600; color:var(--ink-50); }
+.account .who .rl { font-size:10px; color:var(--ink-500); }
+.sync { display:flex; align-items:center; gap:6px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:0.06em; color:var(--ink-500); padding-left:10px; border-left:1px solid var(--line); margin-left:2px; }
+.sync .sd { width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 7px var(--green); }
+.sync.saving .sd { background:var(--amber); box-shadow:0 0 7px var(--amber); animation:blink 1s ease-in-out infinite; }
+@keyframes blink { 50% { opacity:0.3; } }
+
+/* LEFT RAIL — PARTICIPANTS */
+.rail-head { display:flex; align-items:center; justify-content:space-between; padding:2px 4px; }
+.rail-head .cnt { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--ink-500); }
+.rail-head .cnt b { color:var(--teal-glow); }
+
+.participants { display:flex; flex-direction:column; gap:8px; padding:2px; }
+.pcard { display:flex; align-items:center; gap:11px; padding:11px 12px; border-radius:13px; background:var(--panel); border:1px solid var(--line); transition:border-color .3s, background .3s; position:relative; }
+.pcard .pv { width:42px; height:42px; border-radius:50%; flex-shrink:0; position:relative; background:linear-gradient(140deg, var(--ac), var(--ac2)); display:grid; place-items:center; font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:#0a1017; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.18); }
+.pcard .pv .ring { position:absolute; inset:-4px; border-radius:50%; border:1.5px solid var(--ac); opacity:0; }
+.pcard .pv .ph { position:absolute; right:-2px; bottom:-2px; width:16px; height:16px; border-radius:50%; background:var(--bg-1); border:1px solid var(--line); display:grid; place-items:center; color:var(--ac); }
+.pcard .pinfo { flex:1; min-width:0; }
+.pcard .pinfo .role { font-size:13px; font-weight:600; color:var(--ink-50); }
+.pcard .pinfo .who { font-size:11px; color:var(--ink-400); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pcard .pinfo .st { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.05em; color:var(--ink-500); margin-top:4px; }
+
+.wave { display:flex; align-items:flex-end; gap:2px; height:20px; flex-shrink:0; opacity:0.4; }
+.wave i { width:2.5px; border-radius:2px; background:var(--ink-500); height:25%; }
+.pcard.speaking { border-color:var(--ac); background:linear-gradient(180deg, color-mix(in srgb,var(--ac) 12%, var(--panel)), var(--panel)); }
+.pcard.speaking .pv { animation:pspeak 1.1s ease-in-out infinite; }
+.pcard.speaking .pv .ring { animation:pring 1.1s ease-out infinite; }
+.pcard.speaking .pinfo .st { color:var(--ac); }
+.pcard.speaking .wave { opacity:1; }
+.pcard.speaking .wave i { background:var(--ac); box-shadow:0 0 6px color-mix(in srgb,var(--ac) 70%, transparent); animation:eq 0.85s ease-in-out infinite; }
+.pcard.speaking .wave i:nth-child(1){ animation-delay:0s; height:40%; }
+.pcard.speaking .wave i:nth-child(2){ animation-delay:.1s; height:85%; }
+.pcard.speaking .wave i:nth-child(3){ animation-delay:.2s; height:55%; }
+.pcard.speaking .wave i:nth-child(4){ animation-delay:.3s; height:100%; }
+.pcard.speaking .wave i:nth-child(5){ animation-delay:.4s; height:60%; }
+.pcard.speaking .wave i:nth-child(6){ animation-delay:.5s; height:80%; }
+@keyframes eq { 0%,100%{ transform:scaleY(0.4);} 50%{ transform:scaleY(1);} }
+@keyframes pspeak { 0%,100%{ box-shadow:inset 0 0 0 1px rgba(255,255,255,0.35), 0 0 14px 0 var(--ac);} 50%{ box-shadow:inset 0 0 0 1px rgba(255,255,255,0.5), 0 0 26px 4px var(--ac);} }
+@keyframes pring { 0%{ transform:scale(0.85); opacity:.7;} 100%{ transform:scale(1.4); opacity:0;} }
+.pcard.enroute { opacity:0.55; }
+.pcard.enroute .pv { filter:grayscale(0.6) brightness(0.7); }
+.pcard.enroute .pinfo .st { color:var(--amber); }
+.pcard.arriving { animation:arrive 1.2s cubic-bezier(.2,.75,.15,1); }
+@keyframes arrive { 0%{ opacity:.4; transform:translateY(6px);} 100%{ opacity:1; transform:none;} }
+
+.roomctl { display:flex; flex-direction:column; gap:8px; padding:2px; }
+.rc-btn { display:flex; align-items:center; gap:12px; width:100%; padding:12px 14px; border-radius:12px; cursor:pointer; background:var(--panel); border:1px solid var(--line); color:var(--ink-200); font-size:13px; font-weight:500; text-align:left; transition:all .2s; }
+.rc-btn:hover { border-color:var(--teal-deep); background:var(--raise); color:var(--ink-50); }
+.rc-btn svg { color:var(--ink-400); flex-shrink:0; }
+.rc-btn:hover svg { color:var(--teal-glow); }
+.rc-btn .rc-badge { margin-left:auto; min-width:20px; height:20px; padding:0 6px; border-radius:10px; background:var(--red); color:#fff; font-size:11px; font-weight:700; display:grid; place-items:center; }
+.rc-btn .rc-dot { margin-left:auto; width:8px; height:8px; border-radius:50%; background:var(--red); box-shadow:0 0 8px var(--red); }
+.case-actions { display:flex; gap:9px; margin-top:auto; }
+.btn-start, .btn-end { flex:1; min-width:0; display:flex; align-items:center; justify-content:center; gap:7px; padding:13px 8px; border-radius:12px; cursor:pointer; font-size:12.5px; font-weight:700; letter-spacing:0.01em; transition:all .2s; white-space:nowrap; }
+.btn-start { background:linear-gradient(180deg,#4fce8f,#2fa76c); border:1px solid #57d99a; color:#06231a; box-shadow:0 10px 24px -10px rgba(79,206,143,0.6); }
+.btn-start:hover { background:linear-gradient(180deg,#5bd89a,#37b476); }
+.btn-start.done, .btn-start:disabled { background:linear-gradient(180deg,#212d3d,#19232f); border-color:var(--line); color:var(--ink-500); box-shadow:none; cursor:default; }
+.btn-end { background:linear-gradient(180deg, #b3392b, #8f2b20); border:1px solid #c74537; color:#ffe9e5; box-shadow:0 10px 24px -10px rgba(199,69,55,0.6); }
+.btn-end:hover { background:linear-gradient(180deg,#c74537,#a0342a); }
+
+/* CENTER — STAGE */
+.stage { position:relative; flex:1; min-height:0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--line); background: radial-gradient(120% 110% at 50% 42%, #12203040 0%, transparent 60%), radial-gradient(140% 120% at 50% 120%, #0e1a2680, transparent 55%), linear-gradient(180deg, #0a1119, #070c13); }
+.stage-overlay { position:absolute; inset:0; pointer-events:none; z-index:6; }
+.ov-tl { position:absolute; top:14px; left:16px; display:flex; align-items:center; gap:9px; }
+.ov-rec { display:inline-flex; align-items:center; gap:7px; font-family:'JetBrains Mono',monospace; font-size:10.5px; font-weight:700; letter-spacing:0.14em; color:var(--red-soft); }
+.ov-rec .d { width:8px; height:8px; border-radius:50%; background:var(--red-soft); box-shadow:0 0 0 0 rgba(229,96,74,.5); animation:rec 1.8s ease-out infinite; }
+@keyframes rec { 0%{ box-shadow:0 0 0 0 rgba(229,96,74,.5);} 70%,100%{ box-shadow:0 0 0 7px rgba(229,96,74,0);} }
+.ov-loc { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.1em; color:var(--ink-500); padding-left:10px; border-left:1px solid var(--line); }
+.ov-tr { position:absolute; top:14px; right:16px; text-align:right; }
+.ov-tr .aisrc { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:0.2em; text-transform:uppercase; color:var(--ink-600); }
+.ov-tr .aist { font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; letter-spacing:0.16em; text-transform:uppercase; color:var(--teal-glow); margin-top:3px; transition:color .5s; }
+.ov-caption { display:none; }   /* bottom reply caption removed — the single active bubble carries the line */
+.ov-caption .cid { font-family:'JetBrains Mono',monospace; font-weight:600; color:var(--ink-200); }
+.ov-caption .cc { color:var(--ink-400); font-style:italic; font-family:'Instrument Serif',serif; font-size:15px; }
+
+.circle-stage { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); --ac:#5fd8e6; }
+.cs-ring { position:absolute; inset:6%; border-radius:50%; border:1px dashed rgba(255,255,255,0.06); }
+.cs-ring::before { content:''; position:absolute; inset:16%; border-radius:50%; border:1px solid rgba(255,255,255,0.03); }
+.hub { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:120px; height:120px; z-index:3; }
+.hub canvas { width:100%; height:100%; display:block; }
+.hub-label { position:absolute; bottom:-30px; left:50%; transform:translateX(-50%); text-align:center; white-space:nowrap; }
+.hl-eyebrow { font-family:'JetBrains Mono',monospace; font-size:7.5px; letter-spacing:0.24em; text-transform:uppercase; color:var(--ink-600); }
+.hl-state { margin-top:4px; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:600; letter-spacing:0.3em; text-indent:0.3em; text-transform:uppercase; color:var(--teal-glow); transition:color .5s; }
+
+.beam { position:absolute; left:50%; top:50%; width:150px; transform-origin:50% 100%; transform:translate(-50%,-100%) rotate(0deg); transition:transform .7s cubic-bezier(.3,.7,.2,1), opacity .5s; clip-path:polygon(50% 100%, 14% 0, 86% 0); background:linear-gradient(to top, transparent, color-mix(in srgb,var(--ac) 24%, transparent) 72%, transparent); opacity:0; pointer-events:none; z-index:2; filter:blur(3px); }
+.circle-stage.talking .beam { opacity:1; }
+
+.ca { position:absolute; width:50px; height:50px; transform:translate(-50%,-50%); z-index:4; transition:opacity .5s; }
+.ca-ava { width:50px; height:50px; border-radius:50%; position:relative; background:linear-gradient(140deg, var(--ac), var(--ac2)); display:grid; place-items:center; font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:#0a1017; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 14px -4px var(--ac); transition:box-shadow .4s, transform .4s, filter .5s; animation:breathe 4.5s ease-in-out infinite; }
+@keyframes breathe { 0%,100%{ box-shadow:inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 11px -4px var(--ac);} 50%{ box-shadow:inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 17px -2px var(--ac);} }
+.ca .nm { position:absolute; top:56px; left:50%; transform:translateX(-50%); font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-400); white-space:nowrap; transition:color .4s; }
+.ca-badge { position:absolute; right:-3px; bottom:-3px; width:18px; height:18px; border-radius:50%; background:var(--bg-1); border:1px solid var(--line); display:grid; place-items:center; color:var(--ac); }
+/* Single-bubble model: every actor's bubble is hidden; only the current bubble
+   owner (`.ca.show-bubble`, set by the engine) is visible — exactly one at a time. */
+.ca-bubble { display:none; position:absolute; top:50%; transform:translateY(-50%); width:184px; padding:8px 12px 9px; border-radius:13px; background:rgba(16,26,40,0.9); border:1px solid rgba(255,255,255,0.07); backdrop-filter:blur(8px); box-shadow:0 8px 26px rgba(0,0,0,0.4); opacity:1; transition:border-color .4s, box-shadow .4s, background .4s; z-index:5; }
+.ca.show-bubble .ca-bubble { display:block; }
+.ca.side-r .ca-bubble { left:62px; }
+.ca.side-l .ca-bubble { right:62px; text-align:right; }
+.ca-bubble::before { content:''; position:absolute; top:50%; width:9px; height:9px; transform:translateY(-50%) rotate(45deg); background:rgba(13,20,31,0.62); border:1px solid rgba(255,255,255,0.07); }
+.ca.side-r .ca-bubble::before { left:-5px; border-right:0; border-top:0; }
+.ca.side-l .ca-bubble::before { right:-5px; border-left:0; border-bottom:0; }
+.ca-bubble .who { font-family:'JetBrains Mono',monospace; font-size:8px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ac); margin-bottom:4px; display:flex; align-items:center; gap:6px; }
+.ca.side-l .ca-bubble .who { flex-direction:row-reverse; }
+.ca-bubble .say { font-size:12px; line-height:1.42; color:#eaf3f6; min-height:17px; max-height:150px; overflow-y:auto; scrollbar-width:thin; }
+.ca-bubble .spin { display:inline-block; width:9px; height:9px; margin-right:6px; border-radius:50%; border:1.5px solid color-mix(in srgb,var(--ac) 70%, transparent); border-top-color:transparent; vertical-align:-1px; animation:spin .8s linear infinite; }
+.ca.side-l .ca-bubble .spin { margin-right:0; margin-left:6px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.ca.speaking .ca-ava { transform:scale(1.1); animation:caspeak 1.05s ease-in-out infinite; }
+.ca.speaking .nm { color:var(--ac); }
+@keyframes caspeak { 0%,100%{ box-shadow:inset 0 0 0 1px rgba(255,255,255,0.45), 0 0 18px 1px var(--ac);} 50%{ box-shadow:inset 0 0 0 1px rgba(255,255,255,0.6), 0 0 32px 6px var(--ac);} }
+.ca.speaking .ca-bubble { opacity:1; border-color:color-mix(in srgb,var(--ac) 45%, transparent); background:rgba(16,26,40,0.85); box-shadow:0 10px 32px rgba(0,0,0,0.5), 0 0 24px -8px var(--ac); }
+.ca.speaking .ca-bubble::before { border-color:color-mix(in srgb,var(--ac) 45%, transparent); background:rgba(16,26,40,0.85); }
+.ca.speaking .ca-bubble .say { color:#eaf3f6; }
+.ca.working .ca-bubble { opacity:0.95; background:rgba(15,23,35,0.78); }
+.ca.working .ca-bubble .say { color:var(--ac); }
+.circle-stage.talking .ca:not(.speaking) { opacity:0.5; }
+.circle-stage.talking .ca:not(.speaking) .ca-bubble { opacity:0.3; }
+.circle-stage.talking .ca.working { opacity:0.9; }
+.circle-stage.talking .ca.working .ca-bubble { opacity:0.9; }
+.ca.enroute .ca-ava { filter:grayscale(.7) brightness(.58); box-shadow:inset 0 0 0 1px rgba(255,255,255,0.07); animation:none; }
+.ca.enroute { opacity:0.5; }
+.ca.enroute .nm { color:var(--ink-600); }
+.ca.enroute .ca-bubble .say { font-style:italic; color:var(--ink-500); }
+.ca.arriving .ca-ava { animation:caarrive 1.2s ease; }
+@keyframes caarrive { 0%{ filter:grayscale(.7) brightness(.58); box-shadow:inset 0 0 0 1px rgba(255,255,255,0.07);} 55%{ filter:none; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.5), 0 0 30px 6px var(--ac);} 100%{ filter:none; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 14px -4px var(--ac);} }
+
+/* VITALS ROW */
+.vrow { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(0,1fr); gap:12px; }
+/* Vitals stay hidden until the resident asks for them (or toggles the monitor) */
+.vrow.vitals-hidden { grid-template-columns:1fr; }
+.vrow.vitals-hidden .vitals-card { display:none; }
+.vitals-card, .status-card { padding:13px 15px 14px; }
+.vitals-grid { display:flex; flex-wrap:wrap; gap:0; margin-top:11px; }
+.vital { flex:1 1 0; min-width:64px; padding:0 13px; position:relative; }
+.vital.vhidden { display:none; }   /* each vital stays hidden until the resident asks for it */
+.vital + .vital:not(.vhidden)::before { content:''; position:absolute; left:0; top:6%; bottom:6%; width:1px; background:var(--line); }
+.vital .vl { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-500); font-weight:600; display:flex; align-items:center; gap:5px; }
+.vital .vl sub { font-size:7px; }
+.vital .vv { font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:600; color:var(--ink-50); line-height:1.05; margin-top:5px; white-space:nowrap; }
+/* BP carries two numbers + a slash — size it to fit the cell so it can't overflow into the next vital */
+.vital .vv#vBp { font-size:22px; letter-spacing:-0.4px; }
+.vital .vu { font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-500); margin-top:2px; }
+.vital.g .vl, .vital.g .vv { color:var(--green); }
+.vital.a .vl, .vital.a .vv { color:var(--amber); }
+.vital.r .vl, .vital.r .vv { color:var(--red-soft); }
+.vital .band { height:3px; border-radius:2px; margin-top:8px; background:var(--line); position:relative; overflow:hidden; }
+.vital .band i { position:absolute; inset:0; width:var(--pct,50%); border-radius:2px; background:var(--ink-500); }
+.vital.g .band i { background:var(--green); }
+.vital.a .band i { background:var(--amber); }
+.vital.r .band i { background:var(--red-soft); }
+
+.status-card .st-title { font-size:15px; font-weight:700; color:var(--ink-50); margin-top:10px; }
+.status-card .st-line { font-size:12.5px; color:var(--ink-300); margin-top:6px; line-height:1.5; }
+.status-card .st-tag { display:inline-flex; align-items:center; gap:6px; margin-top:11px; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--amber); padding:4px 9px; border-radius:20px; background:rgba(224,169,74,0.12); border:1px solid rgba(224,169,74,0.25); }
+
+/* CONVERSATION PANEL */
+.conv { display:flex; flex-direction:column; min-height:0; flex:1; }
+.tabs { display:flex; gap:0; border-bottom:1px solid var(--line); padding:0 6px; }
+.tab { background:none; border:0; padding:13px 16px 12px; cursor:pointer; font-size:12px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--ink-500); position:relative; transition:color .2s; font-family:'JetBrains Mono',monospace; }
+.tab:hover { color:var(--ink-300); }
+.tab.active { color:var(--ink-50); }
+.tab.active::after { content:''; position:absolute; left:14px; right:14px; bottom:-1px; height:2px; background:var(--teal-glow); border-radius:2px; }
+.tab .tb { margin-left:7px; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--raise); color:var(--ink-400); font-size:9.5px; display:inline-grid; place-items:center; }
+
+.tabpane { display:none; flex:1; min-height:0; flex-direction:column; }
+.tabpane.active { display:flex; }
+.transcript-list { padding:14px 16px; }
+.turn { display:flex; gap:11px; margin-bottom:15px; }
+.turn .tav { width:30px; height:30px; border-radius:50%; flex-shrink:0; background:linear-gradient(140deg,var(--ac,#5b6b85),var(--ac2,#3b4a63)); display:grid; place-items:center; font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700; color:#0a1017; }
+.turn .tbody { flex:1; min-width:0; }
+.turn .thead { display:flex; align-items:baseline; gap:8px; }
+.turn .tname { font-size:12px; font-weight:600; color:var(--ink-100); }
+.turn .ttime { font-family:'JetBrains Mono',monospace; font-size:9.5px; color:var(--ink-600); margin-left:auto; }
+.turn .tline { font-size:13px; line-height:1.5; color:var(--ink-300); margin-top:4px; }
+.turn.you { flex-direction:row-reverse; }
+.turn.you .tav { background:linear-gradient(140deg,var(--teal-glow),var(--teal-deep)); color:#062028; }
+.turn.you .tbody { text-align:right; }
+.turn.you .thead { flex-direction:row-reverse; }
+.turn.you .ttime { margin-left:0; margin-right:auto; }
+.turn.you .tline { display:inline-block; text-align:left; background:linear-gradient(180deg, rgba(14,138,158,0.2), rgba(14,138,158,0.1)); border:1px solid rgba(95,216,230,0.22); color:#dff4f7; padding:8px 12px; border-radius:12px 12px 3px 12px; margin-top:5px; }
+.typing { display:flex; align-items:center; gap:9px; padding:2px 16px 10px 57px; font-family:'Instrument Serif',serif; font-style:italic; font-size:14px; color:var(--ink-500); }
+.typing .dots { display:inline-flex; gap:3px; }
+.typing .dots i { width:4px; height:4px; border-radius:50%; background:var(--teal-glow); animation:td 1.2s infinite; }
+.typing .dots i:nth-child(2){ animation-delay:.2s; }
+.typing .dots i:nth-child(3){ animation-delay:.4s; }
+@keyframes td { 0%,60%,100%{ opacity:.3;} 30%{ opacity:1;} }
+
+.exam-list { padding:14px 16px; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.exam-item { padding:11px 13px; border-radius:11px; background:var(--panel); border:1px solid var(--line); }
+.exam-item .ex-sys { font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--teal-glow); }
+.exam-item .ex-find { font-size:12.5px; color:var(--ink-200); margin-top:5px; line-height:1.45; }
+
+.notes-pane { padding:14px 16px; flex:1; display:flex; flex-direction:column; }
+.notes-ta { flex:1; min-height:120px; width:100%; resize:none; background:var(--bg-1); border:1px solid var(--line); border-radius:11px; padding:12px 14px; color:var(--ink-200); font-family:inherit; font-size:13px; line-height:1.6; }
+.notes-ta:focus { border-color:var(--teal-deep); outline:none; }
+
+.micbar { display:flex; align-items:center; gap:12px; padding:12px 14px; border-top:1px solid var(--line); }
+.mic-orb { width:44px; height:44px; border-radius:50%; flex-shrink:0; cursor:pointer; position:relative; background:radial-gradient(circle at 40% 35%, #1a3742, #0e2830); border:1px solid var(--teal-deep); display:grid; place-items:center; color:var(--teal-glow); transition:all .25s; }
+.mic-orb:hover { border-color:var(--teal-glow); }
+.mic-orb.rec { background:radial-gradient(circle at 40% 35%, #b3392b, #7a271d); border-color:var(--red); color:#ffe9e5; animation:micpulse 1.3s ease-out infinite; }
+@keyframes micpulse { 0%{ box-shadow:0 0 0 0 rgba(229,96,74,.5);} 70%,100%{ box-shadow:0 0 0 12px rgba(229,96,74,0);} }
+.mic-input { flex:1; background:var(--bg-1); border:1px solid var(--line); border-radius:12px; padding:12px 15px; color:var(--ink-200); font-family:inherit; font-size:13.5px; }
+.mic-input:focus { border-color:var(--teal-deep); outline:none; }
+.mic-input::placeholder { color:var(--ink-600); }
+.kb-btn { width:42px; height:42px; border-radius:11px; flex-shrink:0; background:var(--raise); border:1px solid var(--line); color:var(--ink-400); display:grid; place-items:center; cursor:pointer; }
+.kb-btn:hover { color:var(--ink-100); border-color:var(--teal-deep); }
+
+/* RIGHT RAIL — INVESTIGATIONS */
+.inv-head { display:flex; align-items:center; justify-content:space-between; padding:2px 4px; }
+.filters { display:flex; gap:6px; padding:2px; flex-wrap:wrap; }
+.filter { background:var(--panel); border:1px solid var(--line); color:var(--ink-400); border-radius:20px; padding:6px 13px; font-size:11.5px; font-weight:600; cursor:pointer; transition:all .2s; }
+.filter:hover { color:var(--ink-100); }
+.filter.active { background:rgba(14,138,158,0.15); border-color:var(--teal-deep); color:var(--teal-glow); }
+
+.inv-list { display:flex; flex-direction:column; gap:11px; padding:2px; }
+.inv-card { padding:13px 14px; cursor:pointer; }
+.inv-top { display:flex; align-items:center; gap:9px; }
+.inv-top .it { font-size:13.5px; font-weight:700; color:var(--ink-50); }
+.inv-top .itime { font-family:'JetBrains Mono',monospace; font-size:9.5px; color:var(--ink-500); margin-left:auto; }
+.inv-top .ist { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:3px 8px; border-radius:20px; }
+.ist.done { background:rgba(79,206,143,0.14); color:var(--green); border:1px solid rgba(79,206,143,0.3); }
+.ist.pending { background:rgba(224,169,74,0.14); color:var(--amber); border:1px solid rgba(224,169,74,0.3); }
+.inv-body { margin-top:11px; }
+.inv-chev { color:var(--ink-500); transition:transform .3s; }
+.inv-card.collapsed .inv-detail { display:none; }
+.inv-card.collapsed .inv-chev { transform:rotate(-90deg); }
+.inv-note { font-size:11.5px; color:var(--ink-400); margin-top:9px; line-height:1.5; white-space:pre-line; }
+.inv-note b { color:var(--red-soft); font-weight:600; }
+.inv-note.hint { color:var(--ink-500); font-style:italic; }
+/* pre-seeded, not-yet-run sections read as actionable rows */
+.inv-card.pending .it { color:var(--ink-300); }
+.inv-card.pending .inv-top { cursor:pointer; }
+.ist.act { color:var(--teal-glow); background:transparent; }
+.inv-card.working .ist.act { color:var(--ink-400); }
+
+.ecg-strip { width:100%; height:82px; border-radius:8px; overflow:hidden; background:#0d0708; border:1px solid #2a1414; position:relative; }
+.ecg12 { width:100%; border-radius:8px; overflow:hidden; background:#fff; border:1px solid var(--line); cursor:zoom-in; }
+.ecg12 svg { width:100%; height:auto; display:block; }
+
+/* continuous lead-II bedside monitor (green sweep) */
+.ecg-mon { position:relative; height:56px; padding:0; overflow:hidden; background:radial-gradient(120% 140% at 50% 0%, #0b1a12, #060d0a); border:1px solid rgba(57,233,143,0.18); flex-shrink:0; }
+.ecg-mon canvas { width:100%; height:100%; display:block; }
+.ecg-mon-lbl { position:absolute; top:6px; left:12px; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:0.16em; text-transform:uppercase; color:#39e98f; opacity:0.8; }
+
+/* click-to-enlarge lightbox for ECG / imaging cards */
+.lightbox { position:fixed; inset:0; z-index:60; display:none; place-items:center; padding:40px; background:rgba(4,7,12,0.9); backdrop-filter:blur(4px); }
+.lightbox.open { display:grid; }
+.lb-inner { position:relative; max-width:94vw; max-height:92vh; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px 18px 14px; box-shadow:0 30px 90px -20px rgba(0,0,0,0.8); overflow:auto; }
+.lb-title { font-size:14px; font-weight:700; color:var(--ink-50); margin-bottom:12px; }
+.lb-stage { background:#fff; border-radius:10px; overflow:hidden; }
+.lb-stage.ecg svg { width:min(1100px, 90vw); height:auto; display:block; }
+.lb-stage img { display:block; max-width:88vw; max-height:78vh; }
+.lb-cap { font-size:12px; color:var(--ink-300); margin-top:10px; line-height:1.5; max-width:800px; }
+.lb-close { position:absolute; top:10px; right:12px; width:30px; height:30px; border-radius:8px; background:var(--raise); border:1px solid var(--line); color:var(--ink-300); cursor:pointer; display:grid; place-items:center; font-size:16px; }
+.lb-close:hover { color:var(--ink-50); border-color:var(--teal-deep); }
+/* case-name dropdown menu */
+.scenario-sel svg { transition:transform .2s; }
+.scenario-sel[aria-expanded="true"] svg { transform:rotate(180deg); }
+.sc-menu { position:fixed; z-index:80; display:none; background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 24px 60px -18px rgba(0,0,0,0.8); padding:6px; }
+.sc-menu.open { display:block; animation:scMenuIn .14s ease; }
+@keyframes scMenuIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+.sc-item { display:flex; align-items:center; gap:11px; width:100%; padding:9px 11px; border-radius:9px; cursor:pointer; background:transparent; border:0; color:var(--ink-200); text-align:left; transition:background .15s, color .15s; }
+.sc-item:hover { background:var(--raise); color:var(--ink-50); }
+.sc-item svg { color:var(--ink-400); flex-shrink:0; }
+.sc-item:hover svg { color:var(--teal-glow); }
+.sc-item .txt { display:flex; flex-direction:column; line-height:1.25; }
+.sc-item .txt b { font-size:13px; font-weight:600; }
+.sc-item .txt i { font-size:10.5px; color:var(--ink-500); font-style:normal; margin-top:1px; }
+.sc-empty { padding:12px 13px; font-size:12px; color:var(--ink-500); max-width:230px; line-height:1.4; }
+.sc-menu { max-height:60vh; overflow-y:auto; }
+.sc-item.done { opacity:0.55; }
+.sc-item .tag { margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-500); border:1px solid var(--line); border-radius:5px; padding:2px 5px; flex-shrink:0; }
+.sc-item .done-mark { margin-left:auto; color:var(--green); font-size:12px; flex-shrink:0; }
+/* room events slide-over */
+.ev-drawer { position:fixed; top:0; right:0; bottom:0; width:340px; max-width:88vw; z-index:75; background:var(--panel); border-left:1px solid var(--line); box-shadow:-24px 0 60px -20px rgba(0,0,0,0.7); transform:translateX(100%); transition:transform .26s cubic-bezier(.4,0,.2,1); display:flex; flex-direction:column; }
+.ev-drawer.open { transform:none; }
+.ev-head { display:flex; align-items:center; gap:10px; padding:16px 16px 13px; border-bottom:1px solid var(--line); flex-shrink:0; }
+.ev-head .t { font-size:14px; font-weight:600; color:var(--ink-50); }
+.ev-head .n { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--ink-500); }
+.ev-head .x { margin-left:auto; width:28px; height:28px; border-radius:8px; background:var(--raise); border:1px solid var(--line); color:var(--ink-300); cursor:pointer; display:grid; place-items:center; font-size:16px; }
+.ev-head .x:hover { color:var(--ink-50); border-color:var(--teal-deep); }
+.ev-body { flex:1; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+.ev-item { display:flex; gap:10px; padding:10px 11px; border-radius:10px; background:var(--raise); border:1px solid var(--line); }
+.ev-item .ic { width:24px; height:24px; border-radius:7px; flex-shrink:0; display:grid; place-items:center; font-size:13px; line-height:1; }
+.ev-item .b { min-width:0; }
+.ev-item .ttl { font-size:9.5px; letter-spacing:0.1em; text-transform:uppercase; font-family:'JetBrains Mono',monospace; font-weight:700; }
+.ev-item .msg { font-size:12.5px; color:var(--ink-200); line-height:1.42; margin-top:2px; }
+.ev-item .tm { font-size:9.5px; color:var(--ink-500); font-family:'JetBrains Mono',monospace; margin-top:3px; }
+.ev-empty { padding:44px 22px; text-align:center; color:var(--ink-500); font-size:12.5px; line-height:1.5; }
+/* shared modal (scenario brief / help / settings) */
+.fmodal-backdrop { position:fixed; inset:0; z-index:85; display:none; align-items:center; justify-content:center; padding:5vh 20px; background:rgba(4,7,12,0.86); backdrop-filter:blur(6px); overflow-y:auto; }
+.fmodal-backdrop.open { display:flex; }
+.fmodal { width:100%; max-width:520px; background:rgba(13,20,31,0.97); border:1px solid var(--line); border-radius:16px; box-shadow:0 40px 120px rgba(0,0,0,0.6); padding:24px 26px 22px; }
+.fmodal-head { display:flex; align-items:flex-start; gap:14px; margin-bottom:16px; }
+.fmodal-head .tt { flex:1; min-width:0; }
+.fmodal-kick { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--teal-glow); }
+.fmodal-title { font-family:'Instrument Serif',Georgia,serif; font-size:24px; color:var(--ink-100); margin-top:5px; line-height:1.2; }
+.fmodal-x { width:30px; height:30px; border-radius:8px; background:var(--raise); border:1px solid var(--line); color:var(--ink-300); cursor:pointer; display:grid; place-items:center; font-size:16px; flex-shrink:0; }
+.fmodal-x:hover { color:var(--ink-50); border-color:var(--teal-deep); }
+.fmodal-body { display:flex; flex-direction:column; gap:15px; }
+.bf-row { display:flex; flex-wrap:wrap; gap:8px; }
+.bf-chip { padding:6px 11px; border-radius:8px; background:var(--raise); border:1px solid var(--line); font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--ink-300); }
+.bf-chip b { color:var(--ink-50); font-weight:600; }
+.bf-sec-h { font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-500); margin-bottom:7px; }
+.bf-quote { font-family:'Instrument Serif',serif; font-size:17px; color:var(--ink-100); line-height:1.5; border-left:2px solid var(--teal-glow); padding:3px 0 3px 14px; }
+.bf-text { font-size:13.5px; color:var(--ink-200); line-height:1.6; }
+.bf-note { font-size:12px; color:var(--ink-500); line-height:1.55; }
+/* help list */
+.hl-item { display:flex; gap:11px; align-items:flex-start; }
+.hl-item .k { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--teal-glow); background:var(--raise); border:1px solid var(--line); border-radius:6px; padding:3px 8px; flex-shrink:0; white-space:nowrap; }
+.hl-item .d { font-size:13px; color:var(--ink-200); line-height:1.5; }
+/* settings rows */
+.st-row { display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--line-soft); }
+.st-row:last-child { border-bottom:0; }
+.st-row .lab { flex:1; }
+.st-row .lab b { font-size:13.5px; color:var(--ink-100); font-weight:600; display:block; }
+.st-row .lab i { font-size:11.5px; color:var(--ink-500); font-style:normal; }
+.st-seg { display:flex; gap:4px; background:var(--bg-1); border:1px solid var(--line); border-radius:9px; padding:3px; }
+.st-seg button { background:transparent; border:0; color:var(--ink-300); font:inherit; font-size:12px; font-weight:600; padding:6px 12px; border-radius:6px; cursor:pointer; }
+.st-seg button.on { background:var(--teal-deep); color:#04221c; }
+.st-switch { width:44px; height:25px; border-radius:999px; background:var(--bg-1); border:1px solid var(--line); position:relative; cursor:pointer; transition:background .18s; flex-shrink:0; }
+.st-switch::after { content:''; position:absolute; top:2px; left:2px; width:19px; height:19px; border-radius:50%; background:var(--ink-300); transition:transform .18s, background .18s; }
+.st-switch.on { background:var(--teal-deep); }
+.st-switch.on::after { transform:translateX(19px); background:#04221c; }
+.ecg-strip svg { width:100%; height:100%; display:block; }
+.xray { width:100%; height:120px; border-radius:8px; overflow:hidden; background:radial-gradient(120% 120% at 50% 45%, #23303f, #0b1219); border:1px solid var(--line); display:grid; place-items:center; position:relative; }
+.xray svg { height:112px; opacity:0.85; }
+.xray .xtag { position:absolute; bottom:6px; right:8px; font-family:'JetBrains Mono',monospace; font-size:8px; color:var(--ink-500); letter-spacing:0.1em; }
+.trop { display:flex; align-items:baseline; gap:14px; }
+.trop .tv { font-family:'JetBrains Mono',monospace; font-size:34px; font-weight:700; color:var(--red-soft); line-height:1; }
+.trop .tunit { font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--red-soft); }
+.trop .tflag { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--red-soft); font-weight:700; margin-top:4px; }
+.trop .tref { margin-left:auto; text-align:right; }
+.trop .tref .rl { font-size:10px; color:var(--ink-500); }
+.trop .tref .rv { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--ink-300); margin-top:2px; }
+.cbc { width:100%; border-collapse:collapse; font-family:'JetBrains Mono',monospace; font-size:11.5px; }
+.cbc td { padding:5px 2px; border-bottom:1px solid var(--line-soft); }
+.cbc td.k { color:var(--ink-400); }
+.cbc td.v { color:var(--ink-100); text-align:right; font-weight:600; }
+.cbc td.u { color:var(--ink-500); font-size:10px; }
+.cbc td.rng { color:var(--ink-600); font-size:10px; text-align:right; }
+.cbc tr.hi td.v, .cbc tr.hi td.u { color:var(--red-soft); }
+.cbc tr:last-child td { border-bottom:0; }
+.cbc-viewall { display:block; width:100%; text-align:center; background:none; border:0; color:var(--teal-glow); font-size:11.5px; font-weight:600; padding:9px 0 2px; cursor:pointer; }
+
+.btn-addinv { display:flex; align-items:center; justify-content:center; gap:9px; width:100%; padding:14px; border-radius:12px; cursor:pointer; background:var(--panel); border:1px dashed var(--line-soft); color:var(--teal-glow); font-size:13px; font-weight:600; transition:all .2s; }
+.btn-addinv:hover { border-color:var(--teal-deep); background:var(--raise); }
+
+/* BOTTOM — TIMELINE */
+.footer { display:flex; align-items:center; gap:20px; padding:12px 20px; border-top:1px solid var(--line); background:linear-gradient(0deg, rgba(16,24,38,0.9), rgba(11,17,27,0.9)); }
+.tl-label { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--ink-500); font-weight:600; white-space:nowrap; }
+.timeline { flex:1; position:relative; height:38px; }
+.tl-track { position:absolute; left:0; right:0; top:19px; height:2px; background:var(--line); border-radius:2px; }
+.tl-fill { position:absolute; left:0; top:19px; height:2px; background:linear-gradient(90deg,var(--teal-deep),var(--teal-glow)); border-radius:2px; box-shadow:0 0 10px rgba(95,216,230,0.4); transition:width .6s; }
+.tl-tick { position:absolute; top:14px; width:2px; height:12px; margin-left:-1px; background:var(--teal-glow); border-radius:1px; box-shadow:0 0 6px rgba(95,216,230,0.55); }
+.tl-head { position:absolute; top:15px; width:10px; height:10px; margin-left:-5px; border-radius:50%; background:var(--teal-glow); box-shadow:0 0 10px rgba(95,216,230,0.7); transition:left .6s; }
+.tl-node { position:absolute; top:0; transform:translateX(-50%); text-align:center; }
+.tl-node .dot { width:11px; height:11px; border-radius:50%; margin:14px auto 0; background:var(--bg-0); border:2px solid var(--ink-600); position:relative; z-index:2; }
+.tl-node.done .dot { background:var(--green); border-color:var(--green); box-shadow:0 0 8px rgba(79,206,143,0.5); }
+.tl-node.now .dot { background:var(--teal-glow); border-color:var(--teal-glow); animation:nowpulse 1.6s ease-out infinite; }
+@keyframes nowpulse { 0%{ box-shadow:0 0 0 0 rgba(95,216,230,.5);} 70%,100%{ box-shadow:0 0 0 9px rgba(95,216,230,0);} }
+.tl-node .tt { font-family:'JetBrains Mono',monospace; font-size:9.5px; color:var(--ink-500); position:absolute; top:-2px; left:50%; transform:translateX(-50%); white-space:nowrap; }
+.tl-node.done .tt { color:var(--green); }
+.tl-node.now .tt { color:var(--teal-glow); }
+.tl-node .tn { font-size:10.5px; color:var(--ink-400); margin-top:26px; white-space:nowrap; }
+.tl-node.now .tn { color:var(--ink-100); font-weight:600; }
+.foot-actions { display:flex; gap:8px; }
+.foot-btn { display:flex; align-items:center; gap:8px; background:var(--raise); border:1px solid var(--line); color:var(--ink-300); border-radius:10px; padding:9px 13px; font-size:12px; font-weight:500; cursor:pointer; transition:all .2s; white-space:nowrap; }
+.foot-btn svg { color:var(--ink-500); }
+.foot-btn:hover { border-color:var(--teal-deep); color:var(--ink-50); }
+
+/* RESPONSIVE */
+.mobile-only { display:none; }
+@media (max-width:1200px) { .body-grid { grid-template-columns:250px minmax(0,1fr) 300px; } }
+@media (max-width:980px) {
+  body { overflow:auto; }
+  .app { height:auto; min-height:100vh; }
+  .body-grid { grid-template-columns:1fr; overflow:visible; }
+  .col { overflow:visible; }
+  .stage { min-height:420px; }
+  .topbar { flex-wrap:wrap; }
+  .spacer { display:none; }
+  .footer { flex-wrap:wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.05ms !important; }
+}
+
+/* ===== End-of-case debrief overlay (parity with the cool room) ===== */
+.debrief { position:fixed; inset:0; z-index:70; display:none; background:rgba(4,7,12,0.93); backdrop-filter:blur(8px); align-items:flex-start; justify-content:center; padding:5vh 20px; overflow-y:auto; }
+.debrief.open { display:flex; }
+.db-card { width:100%; max-width:720px; background:rgba(13,20,31,0.96); border:1px solid rgba(255,255,255,0.08); border-radius:16px; box-shadow:0 40px 120px rgba(0,0,0,0.6); padding:28px 30px 24px; }
+.db-head-row { display:flex; align-items:flex-start; gap:20px; }
+.db-head-text { flex:1; min-width:0; }
+.db-kicker { font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--teal-glow); }
+.db-title { font-family:'Instrument Serif', Georgia, serif; font-size:27px; color:var(--ink-100); margin-top:6px; line-height:1.2; }
+.db-outcome { margin-top:10px; display:inline-block; padding:5px 11px; border-radius:999px; font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.04em; background:rgba(90,214,160,0.12); color:#5ad6a0; border:1px solid rgba(90,214,160,0.3); }
+.db-outcome.bad { background:rgba(224,108,95,0.12); color:#e06c5f; border-color:rgba(224,108,95,0.3); }
+.db-outcome.early { background:rgba(217,154,60,0.12); color:var(--amber); border-color:rgba(217,154,60,0.3); }
+.db-donut { flex-shrink:0; width:76px; height:76px; display:none; position:relative; }
+.db-donut.visible { display:block; }
+.db-donut svg { width:100%; height:100%; }
+.db-donut-num { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:'JetBrains Mono', monospace; font-size:18px; font-weight:700; color:var(--ink-100); line-height:1; }
+.db-donut-num span { font-size:8px; color:var(--ink-500); letter-spacing:0.08em; text-transform:uppercase; margin-top:1px; }
+.db-body { margin-top:22px; display:flex; flex-direction:column; gap:20px; }
+.db-sec-h { font-family:'JetBrains Mono', monospace; font-size:9.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-500); margin-bottom:9px; display:flex; align-items:center; gap:8px; }
+.db-coach-wrap { position:relative; }
+.db-coach { font-size:14.5px; line-height:1.6; color:var(--ink-100); background:rgba(45,212,191,0.06); border-left:2px solid var(--teal-glow); border-radius:0 8px 8px 0; padding:13px 15px; }
+.db-coach-play { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; border:1px solid rgba(95,216,230,0.3); background:rgba(95,216,230,0.08); cursor:pointer; color:var(--teal-glow); margin-left:auto; flex-shrink:0; transition:background .15s, border-color .15s; }
+.db-coach-play:hover { background:rgba(95,216,230,0.18); border-color:var(--teal-glow); }
+.db-coach-play.playing { background:rgba(95,216,230,0.22); border-color:var(--teal-glow); }
+.db-stats { display:flex; flex-wrap:wrap; gap:7px; }
+.db-stat { padding:6px 11px; border-radius:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--ink-200); }
+.db-stat b { color:var(--ink-100); font-weight:600; }
+.db-timeline { display:flex; flex-direction:column; gap:0; }
+.db-tl-item { display:flex; align-items:flex-start; gap:10px; }
+.db-tl-spine { display:flex; flex-direction:column; align-items:center; flex-shrink:0; width:20px; }
+.db-tl-dot { width:8px; height:8px; border-radius:50%; background:var(--teal-glow); border:2px solid var(--bg-1); flex-shrink:0; margin-top:3px; }
+.db-tl-item:last-child .db-tl-dot { background:#5ad6a0; }
+.db-tl-line { width:1px; background:rgba(255,255,255,0.08); flex:1; min-height:16px; }
+.db-tl-item:last-child .db-tl-line { display:none; }
+.db-tl-label { font-size:12.5px; color:var(--ink-200); padding-bottom:14px; line-height:1.3; }
+.db-tl-label b { font-family:'JetBrains Mono', monospace; font-size:9px; color:var(--ink-500); display:block; margin-bottom:1px; }
+.db-tl-more { font-family:'JetBrains Mono', monospace; font-size:10px; color:var(--teal-glow); cursor:pointer; letter-spacing:0.05em; padding:2px 0 0 30px; }
+.db-tl-more:hover { text-decoration:underline; }
+.db-crits { display:flex; flex-direction:column; gap:7px; }
+.db-crit { display:flex; align-items:baseline; gap:9px; padding:9px 12px; border-radius:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); }
+.db-crit-mark { font-size:13px; flex-shrink:0; width:14px; text-align:center; }
+.db-crit.met { border-color:rgba(45,212,191,0.3); }
+.db-crit.met .db-crit-mark { color:var(--teal-glow); }
+.db-crit.miss { border-color:rgba(224,108,95,0.28); }
+.db-crit.miss .db-crit-mark { color:#e89a90; }
+.db-crit-label { font-size:13px; color:var(--ink-100); flex-shrink:0; }
+.db-crit-detail { font-size:11.5px; color:var(--ink-500); margin-left:auto; text-align:right; }
+.db-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.db-chip { padding:5px 10px; border-radius:999px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); font-size:11.5px; color:var(--ink-200); }
+.db-chip.none { color:var(--ink-500); font-style:italic; }
+.db-chip.err { background:rgba(224,108,95,0.1); border-color:rgba(224,108,95,0.3); color:#e89a90; }
+.db-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:7px; }
+.db-list li { font-size:13.5px; line-height:1.5; color:var(--ink-200); padding-left:16px; position:relative; }
+.db-list li::before { content:'›'; position:absolute; left:0; color:var(--teal-glow); }
+.db-list.errs li::before { content:'!'; color:#e06c5f; }
+.db-refs { font-size:12px; color:var(--ink-500); line-height:1.6; }
+.db-foot { margin-top:26px; display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
+.db-new, .db-close, .db-print { padding:9px 16px; border-radius:9px; cursor:pointer; font-size:12.5px; font-family:inherit; }
+.db-new { background:var(--teal-glow); border:0; color:#04221c; font-weight:600; }
+.db-new:hover { filter:brightness(1.08); }
+.db-close { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); color:var(--ink-200); }
+.db-close:hover { background:rgba(255,255,255,0.1); }
+.db-print { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.10); color:var(--ink-300); margin-right:auto; }
+.db-print:hover { background:rgba(255,255,255,0.09); }
+@media print {
+  body > *:not(.debrief) { display:none !important; }
+  .debrief { position:static; background:#fff; display:block !important; padding:0; }
+  .db-card { box-shadow:none; border:none; background:#fff; color:#111; max-width:100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="app" data-screen-label="Live Simulation Room">
+
+  <!-- ============================ TOP BAR ============================ -->
+  <header class="topbar" role="banner">
+    <div class="brand">
+      <div class="orb-mark"><canvas id="brandOrb"></canvas></div>
+      <div class="bt">
+        <div class="n">Cases<span class="lc">Basis</span></div>
+        <div class="s">Live Simulation Room</div>
+      </div>
+    </div>
+
+    <button class="scenario-sel" aria-label="Scenario selector" id="scenarioSel">
+      <div>
+        <div class="lbl" id="scLbl">Acute Chest Pain</div>
+        <div class="sub" id="scSub">58 M · evolving ACS / NSTEMI · Medium</div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>
+    </button>
+
+    <div class="spacer"></div>
+
+    <div class="clock" id="clock">
+      <div class="ct">
+        <div class="cl">Scenario time</div>
+        <div class="cv" id="clockVal">00:14:32</div>
+      </div>
+      <button class="btn-pause" id="pauseBtn" aria-label="Pause scenario">
+        <svg id="pauseIcon" width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="2.5" width="3.2" height="11" rx="1"/><rect x="9.3" y="2.5" width="3.2" height="11" rx="1"/></svg>
+        <span id="pauseTxt">Pause</span>
+      </button>
+    </div>
+
+    <button class="toggle" id="monitorTog" aria-pressed="false">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8h3l1.5-4 2.5 8 2-4 1 2h4"/></svg>
+      Patient Monitor
+    </button>
+    <button class="toggle on" id="audioTog" aria-pressed="true">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5C5.5 2.5 4 4 4 6.5V9c0 .6-.3 1-1 1.5-.4.4-.5 1 .1 1.3.9.4 2.4.7 4.9.7s4-.3 4.9-.7c.6-.3.5-.9.1-1.3-.7-.5-1-.9-1-1.5V6.5C12 4 10.5 2.5 8 2.5Z"/></svg>
+      Audio <span class="live-dot"></span>
+    </button>
+
+    <div class="account" id="account">
+      <div class="ava">AM</div>
+      <div class="who">
+        <div class="nm">Dr. Alex Morgan</div>
+        <div class="rl">Attending Physician</div>
+      </div>
+      <div class="sync" id="sync"><span class="sd"></span><span id="syncTxt">Synced</span></div>
+    </div>
+  </header>
+
+  <!-- ============================ BODY ============================ -->
+  <div class="body-grid">
+
+    <!-- ---------- LEFT RAIL ---------- -->
+    <div class="col rail">
+      <div class="rail-head">
+        <div class="eyebrow">Participants</div>
+        <div class="cnt"><b id="presentCount">5</b> present</div>
+      </div>
+      <div class="participants scroll" id="participants"></div>
+
+      <div class="rail-head" style="margin-top:4px;">
+        <div class="eyebrow">Room controls</div>
+      </div>
+      <div class="roomctl">
+        <button class="rc-btn" id="rcAdd">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.5"/><path d="M2 13c0-2.2 1.8-3.5 4-3.5M11 5v4M13 7h-4"/></svg>
+          Add Participant
+        </button>
+        <button class="rc-btn" id="rcConsult">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.2c0 5 4.8 9.8 9.8 9.8l.8-2.6-3-1-1.2 1.4c-1.7-.8-3-2.1-3.8-3.8l1.4-1.2-1-3z"/></svg>
+          Call Consultant
+        </button>
+        <button class="rc-btn" id="rcNurse">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v1.5M4 13c0-3 1.5-5.5 4-5.5S12 10 12 13M2.5 13h11"/></svg>
+          Nurse Call <span class="rc-dot"></span>
+        </button>
+        <button class="rc-btn" id="rcEvents">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5 2 4.5v3.5c0 3.5 2.4 6 6 6.5 3.6-.5 6-3 6-6.5V4.5L8 1.5Z"/><path d="M8 5v3.5M8 10.5v.01"/></svg>
+          Room Events <span class="rc-badge">3</span>
+        </button>
+      </div>
+
+      <div class="case-actions">
+        <button class="btn-start" id="startCaseBtn">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 3.3v9.4c0 .5.55.8.98.53l7-4.7a.62.62 0 0 0 0-1.06l-7-4.7a.62.62 0 0 0-.98.53z"/></svg>
+          <span id="startCaseLbl">Start case</span>
+        </button>
+        <button class="btn-end" id="endBtn">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="9" height="9" rx="1.6"/></svg>
+          End case
+        </button>
+      </div>
+    </div>
+
+    <!-- ---------- CENTER ---------- -->
+    <div class="col center">
+      <div class="stage card" id="stage">
+        <div class="circle-stage" id="circleStage">
+          <div class="cs-ring"></div>
+          <div class="beam" id="beam"></div>
+          <div class="hub">
+            <canvas id="hubOrb"></canvas>
+            <div class="hub-label">
+              <div class="hl-eyebrow">AI · in the room</div>
+              <div class="hl-state" id="hubState">Listening</div>
+            </div>
+          </div>
+        </div>
+        <div class="stage-overlay">
+          <div class="ov-tl">
+            <span class="ov-rec"><span class="d"></span>LIVE · REC</span>
+            <span class="ov-loc">RESUS BAY 4 · ED</span>
+          </div>
+          <div class="ov-tr">
+            <div class="aisrc">Simulation engine</div>
+            <div class="aist" id="aiState">Listening</div>
+          </div>
+          <div class="ov-caption">
+            <span class="cid" id="ovCid">JW · 58 M</span>
+            <span class="cc" id="ovQuote">"It feels like someone is sitting on my chest."</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="vrow vitals-hidden" id="vrow">
+        <div class="vitals-card card">
+          <div class="eyebrow">Vital signs</div>
+          <div class="vitals-grid">
+            <div class="vital a"><div class="vl">HR</div><div class="vv" id="vHr">102</div><div class="vu">bpm</div><div class="band" style="--pct:64%"><i></i></div></div>
+            <div class="vital r"><div class="vl">BP</div><div class="vv" id="vBp">148/92</div><div class="vu">mmHg</div><div class="band" style="--pct:78%"><i></i></div></div>
+            <div class="vital a"><div class="vl">RR</div><div class="vv" id="vRr">22</div><div class="vu">/min</div><div class="band" style="--pct:60%"><i></i></div></div>
+            <div class="vital a"><div class="vl">SpO<sub>2</sub></div><div class="vv" id="vSpo2">93</div><div class="vu">%</div><div class="band" style="--pct:55%"><i></i></div></div>
+            <div class="vital g"><div class="vl">Temp</div><div class="vv" id="vTemp">37.2</div><div class="vu">°C</div><div class="band" style="--pct:50%"><i></i></div></div>
+            <div class="vital a"><div class="vl">Pain</div><div class="vv" id="vPain">6<span style="font-size:14px;color:var(--ink-500)">/10</span></div><div class="vu">NRS</div><div class="band" style="--pct:60%"><i></i></div></div>
+          </div>
+        </div>
+        <div class="status-card card">
+          <div class="eyebrow">Patient status</div>
+          <div class="st-title" id="stTitle">Alert, anxious</div>
+          <div class="st-line" id="stLine">Central chest pain radiating to the left arm, diaphoretic. Onset ~1 h on exertion.</div>
+          <div class="st-tag">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 4v5M8 11.5v.01"/><circle cx="8" cy="8" r="6.5"/></svg>
+            Time-critical
+          </div>
+        </div>
+      </div>
+
+      <div class="conv card">
+        <div class="tabs" role="tablist">
+          <button class="tab active" role="tab" data-pane="conv" aria-selected="true">Conversation</button>
+          <button class="tab" role="tab" data-pane="exam">Exam findings</button>
+          <button class="tab" role="tab" data-pane="notes">Notes</button>
+        </div>
+
+        <div class="tabpane active scroll" id="pane-conv">
+          <div class="transcript-list" id="transcript"></div>
+          <div class="typing" id="typing"><span class="dots"><i></i><i></i><i></i></span> the room is responding…</div>
+        </div>
+
+        <div class="tabpane scroll" id="pane-exam">
+          <div class="exam-list">
+            <div class="exam-item"><div class="ex-sys">Cardiovascular</div><div class="ex-find">Regular tachycardia, no murmurs. JVP not elevated. Peripheries cool.</div></div>
+            <div class="exam-item"><div class="ex-sys">Respiratory</div><div class="ex-find">Bibasal fine crackles. Mild tachypnoea, no wheeze.</div></div>
+            <div class="exam-item"><div class="ex-sys">General</div><div class="ex-find">Diaphoretic, clutching chest. Grey, clammy appearance.</div></div>
+            <div class="exam-item"><div class="ex-sys">Abdomen</div><div class="ex-find">Soft, non-tender. No organomegaly.</div></div>
+          </div>
+        </div>
+
+        <div class="tabpane" id="pane-notes">
+          <div class="notes-pane">
+            <textarea class="notes-ta" id="notes" placeholder="Working impression, differentials, plan…">Working Dx: NSTEMI / evolving ACS.
+Plan: MONA — aspirin 300 mg given, GTN, morphine titrated. Serial troponin + ECG. Cardiology referral for early angio.</textarea>
+          </div>
+        </div>
+
+        <div class="micbar">
+          <button class="mic-orb" id="micOrb" aria-label="Toggle voice input" aria-pressed="false">
+            <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="1.5" width="4" height="8.5" rx="2"/><path d="M3.5 7c0 2.6 2 4.5 4.5 4.5S12.5 9.6 12.5 7M8 11.5v3M5.5 14.5h5"/></svg>
+          </button>
+          <input class="mic-input" id="micInput" placeholder="Speak your response or command…" aria-label="Response input" />
+          <button class="kb-btn" aria-label="Keyboard">
+            <svg width="17" height="17" viewBox="0 0 20 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="1.5" y="2.5" width="17" height="11" rx="2"/><path d="M4.5 6h.01M7 6h.01M9.5 6h.01M12 6h.01M14.5 6h.01M6 9h8"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- RIGHT RAIL ---------- -->
+    <div class="col rail">
+      <div class="inv-head">
+        <div class="eyebrow">Investigations</div>
+      </div>
+      <!-- Continuous lead-II bedside monitor — pinned at the top of Investigations,
+           wakes and runs continuously once an ECG is recorded -->
+      <div class="ecg-mon card" id="ecgMon" hidden>
+        <canvas id="ecgCanvas"></canvas>
+        <span class="ecg-mon-lbl" id="ecgRhythm">lead II</span>
+      </div>
+      <div class="filters" role="tablist" id="filters">
+        <button class="filter active" data-cat="all">All</button>
+        <button class="filter" data-cat="labs">Labs</button>
+        <button class="filter" data-cat="imaging">Imaging</button>
+        <button class="filter" data-cat="cardiac">Cardiac</button>
+        <button class="filter" data-cat="other">Other</button>
+      </div>
+
+      <div class="inv-list scroll" id="invList">
+        <div class="card inv-card" data-cat="cardiac">
+          <div class="inv-top"><span class="it">ECG (12-Lead)</span><span class="itime">00:13:42</span><span class="ist done">Completed</span></div>
+          <div class="inv-body inv-detail">
+            <div class="ecg-strip" id="ecgStrip"></div>
+            <div class="inv-note">Sinus tachycardia, rate 102 bpm.<br><b>ST depression</b> in leads II, III, aVF, V4–V6.</div>
+          </div>
+        </div>
+
+        <div class="card inv-card" data-cat="imaging">
+          <div class="inv-top"><span class="it">Chest X-Ray (Portable)</span><span class="itime">00:13:58</span><span class="ist done">Completed</span></div>
+          <div class="inv-body inv-detail">
+            <div class="xray"><span id="xraySvg"></span><span class="xtag">AP · PORTABLE</span></div>
+            <div class="inv-note">No acute cardiopulmonary abnormality. Heart size upper-normal.</div>
+          </div>
+        </div>
+
+        <div class="card inv-card" data-cat="cardiac labs">
+          <div class="inv-top"><span class="it">High-Sensitivity Troponin I</span><span class="itime">00:14:10</span><span class="ist done">Completed</span></div>
+          <div class="inv-body inv-detail">
+            <div class="trop">
+              <div><div><span class="tv">0.15</span> <span class="tunit">ng/mL</span></div><div class="tflag">Elevated ▲</div></div>
+              <div class="tref"><div class="rl">Reference</div><div class="rv">&lt; 0.04 ng/mL</div></div>
+            </div>
+            <div class="inv-note">Serial sample due at 00:15:10. Trend suggests myocardial injury.</div>
+          </div>
+        </div>
+
+        <div class="card inv-card" data-cat="labs">
+          <div class="inv-top"><span class="it">Complete Blood Count</span><span class="itime">00:14:05</span><span class="ist done">Completed</span></div>
+          <div class="inv-body inv-detail">
+            <table class="cbc">
+              <tr class="hi"><td class="k">WBC</td><td class="v">11.2</td><td class="u">10³/µL</td><td class="rng">4.0–11.0</td></tr>
+              <tr><td class="k">RBC</td><td class="v">4.8</td><td class="u">10⁶/µL</td><td class="rng">4.2–5.9</td></tr>
+              <tr><td class="k">Hgb</td><td class="v">14.2</td><td class="u">g/dL</td><td class="rng">13.5–17.5</td></tr>
+              <tr><td class="k">Hct</td><td class="v">42.1</td><td class="u">%</td><td class="rng">41–53</td></tr>
+            </table>
+            <button class="cbc-viewall">View all 14 analytes</button>
+          </div>
+        </div>
+
+        <div class="card inv-card" data-cat="labs other">
+          <div class="inv-top"><span class="it">Basic Metabolic Panel</span><span class="itime">00:14:05</span><span class="ist pending">Pending</span></div>
+          <div class="inv-body inv-detail"><div class="inv-note">Sample received in lab — result expected in ~4 min.</div></div>
+        </div>
+      </div>
+
+      <button class="btn-addinv" id="addInv">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+        Add Investigation
+      </button>
+    </div>
+  </div>
+
+  <!-- ============================ FOOTER — TIMELINE ============================ -->
+  <footer class="footer">
+    <div class="tl-label">Scenario Timeline</div>
+    <div class="timeline" id="timeline">
+      <div class="tl-track"></div>
+      <div class="tl-fill" id="tlFill" style="width:0%"></div>
+      <div class="tl-head" id="tlHead" style="left:0%"></div>
+    </div>
+    <div class="foot-actions">
+      <button class="foot-btn" id="briefBtn"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="10" height="12" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></svg> Scenario Brief</button>
+      <button class="foot-btn" id="helpBtn"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M6.3 6.2c.3-1 1.2-1.5 2-1.4.9.1 1.6.8 1.6 1.7 0 1.2-1.4 1.4-1.9 2.1M8 11.5v.01"/></svg> Help</button>
+      <button class="foot-btn" id="settingsBtn"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M12.5 3.5l-1.4 1.4M4.9 11.1l-1.4 1.4"/></svg> Settings</button>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+/* CasesBasis — AI hub orb engine (extracted, reusable). Exposes window.Orb, window.ORB_STATES. */
+(function () {
+  const STATES = {
+    idle: { name:'Idle', speed:0.16, amp:0.16, bright:0.5, swirl:0.06, breathe:0.05, ripple:0.15, bloom:1.0, cap:'#8aa0c0', hues:[186,190,196,200,184,192,198], sat:58, light:50 },
+    listening: { name:'Listening', speed:0.5, amp:0.95, bright:1.0, swirl:0.12, breathe:0.02, ripple:1.0, bloom:1.15, cap:'#5fd8e6', hues:[188,184,194,200,182,190,196], sat:80, light:60 },
+    thinking: { name:'Thinking', speed:0.8, amp:0.5, bright:0.82, swirl:1.0, breathe:0.0, ripple:0.42, bloom:1.05, cap:'#93a8f2', hues:[205,222,242,255,212,230,248], sat:66, light:58 },
+    responding: { name:'Responding', speed:0.46, amp:0.62, bright:0.95, swirl:0.18, breathe:0.03, ripple:0.6, bloom:1.1, cap:'#7fe0d0', hues:[188,40,194,44,184,42,196], sat:78, light:60, pulse:1 },
+  };
+  const ORBIT = [0.00, 0.30, 0.36, 0.42, 0.31, 0.38, 0.22];
+  const SIZE  = [0.66, 0.50, 0.45, 0.40, 0.48, 0.40, 0.56];
+  const ANG0  = [0, 0.9, 2.0, 3.1, 4.0, 5.0, 5.8];
+  const DIR   = [1, 1, -1, 1, -1, 1, -1];
+  const ASPD  = [0.0, 0.55, 0.8, 0.45, 0.7, 0.5, 0.9];
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const lerpHue = (a,b,t) => { let d=((b-a+540)%360)-180; return (a+d*t+360)%360; };
+  class Orb {
+    constructor(canvas, stateKey, opts={}) {
+      this.canvas = canvas; this.ctx = canvas.getContext('2d');
+      this.off = document.createElement('canvas'); this.octx = this.off.getContext('2d');
+      this.thumb = !!opts.thumb;
+      this.dpr = Math.min(window.devicePixelRatio || 1, this.thumb ? 1.5 : 2);
+      const s = STATES[stateKey];
+      this.p = { speed:s.speed, amp:s.amp, bright:s.bright, swirl:s.swirl, breathe:s.breathe, ripple:s.ripple, bloom:s.bloom, sat:s.sat, light:s.light, pulse: s.pulse||0 };
+      this.hues = s.hues.slice(); this.targetKey = stateKey;
+      this.t = Math.random()*40; this.swirlT = 0; this.env = 0.5; this.rnd = 0;
+      this.last = performance.now(); this.lastDraw = 0; this.ripples = []; this.rtimer = 0;
+      this.resize();
+    }
+    resize() {
+      const r = this.canvas.getBoundingClientRect();
+      this.w = Math.max(1, r.width); this.h = Math.max(1, r.height);
+      this.canvas.width = Math.round(this.w*this.dpr); this.canvas.height = Math.round(this.h*this.dpr);
+      this.ctx.setTransform(this.dpr,0,0,this.dpr,0,0);
+      this.off.width = this.canvas.width; this.off.height = this.canvas.height;
+      this.octx.setTransform(this.dpr,0,0,this.dpr,0,0);
+    }
+    setState(key) { this.targetKey = key; }
+    step(now) {
+      let dt = (now - this.last)/1000; this.last = now;
+      if (dt > 0.05) dt = 0.05;
+      if (this.thumb) { if (now - this.lastDraw < 40) return; this.lastDraw = now; }
+      const T = STATES[this.targetKey];
+      const k = Math.min(1, dt * 2.6);
+      this.p.speed=lerp(this.p.speed,T.speed,k); this.p.amp=lerp(this.p.amp,T.amp,k);
+      this.p.bright=lerp(this.p.bright,T.bright,k); this.p.swirl=lerp(this.p.swirl,T.swirl,k);
+      this.p.breathe=lerp(this.p.breathe,T.breathe,k); this.p.ripple=lerp(this.p.ripple,T.ripple,k);
+      this.p.bloom=lerp(this.p.bloom,T.bloom,k); this.p.sat=lerp(this.p.sat,T.sat,k);
+      this.p.light=lerp(this.p.light,T.light,k); this.p.pulse=lerp(this.p.pulse,T.pulse||0,k);
+      for (let i=0;i<7;i++) this.hues[i] = lerpHue(this.hues[i], T.hues[i], k);
+      this.t += dt * this.p.speed; this.swirlT += dt * this.p.swirl;
+      let v = Math.abs(Math.sin(this.t*1.7))*0.55 + Math.abs(Math.sin(this.t*4.1+1.3))*0.32 + 0.13;
+      this.rnd += (Math.random()-0.5)*dt*5; this.rnd = Math.max(-0.5, Math.min(0.5, this.rnd*0.96));
+      v = v*0.78 + (0.5+this.rnd)*0.22; this.env = lerp(this.env, v, 0.18);
+      const amp = this.p.amp * this.env; this.rtimer -= dt;
+      const rate = lerp(1.4, 0.34, this.p.ripple);
+      if (this.rtimer <= 0 && this.p.ripple > 0.1) { this.rtimer = rate * (0.7 + Math.random()*0.6); this.ripples.push({ p:0, strength: 0.5 + amp }); }
+      for (const rp of this.ripples) rp.p += dt * lerp(0.35, 0.7, this.p.ripple);
+      this.ripples = this.ripples.filter(r => r.p < 1);
+      this.draw(amp);
+    }
+    draw(amp) {
+      const ctx = this.ctx, oc = this.octx;
+      const w = this.w, h = this.h; const cx = w/2, cy = h*0.5;
+      const R = Math.min(w,h) * 0.42;
+      const pulse = this.p.pulse ? (0.5 + 0.5*Math.sin(this.t*3.4)) * 0.12 : 0;
+      const scale = 1 + this.p.breathe*Math.sin(this.t*0.8) + amp*0.05 + pulse;
+      oc.clearRect(0,0,w,h); oc.globalCompositeOperation = 'lighter';
+      for (let i=0;i<7;i++) {
+        const ang = ANG0[i] + this.t*ASPD[i]*DIR[i]*0.6 + this.swirlT*1.4*DIR[i];
+        const orbit = R * ORBIT[i] * (1 + amp*0.32*Math.sin(this.t*1.3 + i)) * scale;
+        const px = cx + Math.cos(ang)*orbit; const py = cy + Math.sin(ang)*orbit;
+        let br = R * SIZE[i] * scale * (1 + amp*0.12*Math.sin(this.t*2 + i*1.7));
+        const hue = this.hues[i]; const isGold = (hue < 80);
+        const sat = isGold ? 90 : this.p.sat;
+        const light = (isGold ? 54 : this.p.light) * (0.8 + this.p.bright*0.28);
+        const a = (isGold ? 0.4 : 0.46) * (0.62 + this.p.bright*0.46);
+        const g = oc.createRadialGradient(px,py,0, px,py,br);
+        g.addColorStop(0, `hsla(${hue},${sat}%,${Math.min(68,light+8)}%,${a})`);
+        g.addColorStop(0.45, `hsla(${hue},${sat}%,${light}%,${a*0.6})`);
+        g.addColorStop(1, `hsla(${hue},${sat}%,${light}%,0)`);
+        oc.fillStyle = g; oc.beginPath(); oc.arc(px,py,br,0,Math.PI*2); oc.fill();
+      }
+      const coreR = R*0.3*scale;
+      const cg = oc.createRadialGradient(cx,cy,0, cx,cy,coreR); const ch = this.hues[0];
+      cg.addColorStop(0, `hsla(${ch},78%,${Math.min(70, 56+this.p.bright*14)}%,${0.42+this.p.bright*0.22})`);
+      cg.addColorStop(0.5, `hsla(${ch},84%,${52+this.p.bright*8}%,0.24)`);
+      cg.addColorStop(1, `hsla(${ch},84%,50%,0)`);
+      oc.fillStyle = cg; oc.beginPath(); oc.arc(cx,cy,coreR,0,Math.PI*2); oc.fill();
+      if (!this.thumb && R > 90 && this.ripples.length) {
+        oc.lineWidth = Math.max(1, R*0.012);
+        for (const rp of this.ripples) {
+          const rad = R*(0.32 + rp.p*0.78) * scale;
+          const alpha = (1-rp.p) * 0.5 * this.p.ripple * rp.strength;
+          if (alpha < 0.01) continue;
+          oc.strokeStyle = `hsla(${this.hues[1]}, ${this.p.sat}%, ${62+this.p.bright*12}%, ${alpha})`;
+          oc.beginPath(); const segs = 70;
+          for (let s=0;s<=segs;s++) {
+            const aa = s/segs*Math.PI*2;
+            const wob = 1 + Math.sin(aa*4 + this.t*3 + rp.p*6)*0.05*rp.strength + Math.sin(aa*7 - this.t*2)*0.03*rp.strength;
+            const rr = rad*wob; const x = cx+Math.cos(aa)*rr, y = cy+Math.sin(aa)*rr;
+            if (s===0) oc.moveTo(x,y); else oc.lineTo(x,y);
+          }
+          oc.stroke();
+        }
+      }
+      oc.globalCompositeOperation = 'destination-in';
+      const edge = this.thumb ? 1.02 : 1.06;
+      const mg = oc.createRadialGradient(cx,cy,R*0.05, cx,cy,R*edge);
+      mg.addColorStop(0, 'rgba(0,0,0,1)'); mg.addColorStop(0.62, 'rgba(0,0,0,1)'); mg.addColorStop(1, 'rgba(0,0,0,0)');
+      oc.fillStyle = mg; oc.fillRect(0,0,w,h); oc.globalCompositeOperation = 'lighter';
+      ctx.clearRect(0,0,w,h);
+      const bl = Math.max(1.5, R*0.075) * this.p.bloom; ctx.globalCompositeOperation = 'lighter';
+      if (ctx.filter !== undefined) {
+        ctx.filter = `blur(${bl}px)`; ctx.globalAlpha = 0.55; ctx.drawImage(this.off, 0,0, w, h);
+        ctx.filter = `blur(${bl*0.45}px)`; ctx.globalAlpha = 0.7; ctx.drawImage(this.off, 0,0, w, h);
+        ctx.filter = 'none';
+      }
+      ctx.globalAlpha = 1; ctx.drawImage(this.off, 0,0, w, h); ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+  window.Orb = Orb; window.ORB_STATES = STATES;
+})();
+</script>
+
+<script>
+/* ============================================================
+   CasesBasis — Live Simulation Room (Functional cockpit) · engine
+   Wired to the live runtime: POST /api/voice/session|turn|stt|tts,
+   WS /ws/voice/{id}. Ports the proven voice/session logic from the
+   round-table room onto the cockpit DOM. The launch choice (case id +
+   speech mode) arrives via ?case=/?session=/?speech= from voice_launch.html.
+   ============================================================ */
+(function () {
+  'use strict';
+  const $ = (s, r=document) => r.querySelector(s);
+  const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const escapeHtml = (s) => (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  // ── launch config from the chooser popup ──
+  const _qs = new URLSearchParams(location.search);
+  window.SIM_CONFIG = { caseId: _qs.get('case'), sessionId: (_qs.get('session') || _qs.get('resume')), speech: _qs.get('speech') || 'native' };
+  // A legacy ?speech=extreme link (the retired frontier tier) is 'models': every
+  // ElevenLabs line now uses the one expressive model.
+  const VOICE_TIER = (window.SIM_CONFIG.speech === 'extreme') ? 'models' : window.SIM_CONFIG.speech;   // 'native' | 'models'
+  const VOICE_BACKEND = (VOICE_TIER === 'models') ? 'models' : 'native';
+
+  // X-ray silhouette (inlined so the page is self-contained)
+  const SILHOUETTE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600" width="400" height="600"><g fill="#e2e8f0" stroke="#94a3b8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"><ellipse cx="200" cy="68" rx="36" ry="42"/><path d="M 182 102 C 182 118, 178 128, 176 138 L 224 138 C 222 128, 218 118, 218 102 Z"/><path d="M 176 138 C 158 142, 138 148, 122 158 C 110 165, 102 176, 96 192 C 90 212, 86 236, 82 264 C 78 292, 74 318, 70 346 C 68 358, 70 366, 78 370 C 86 372, 92 368, 94 358 C 98 336, 104 310, 110 286 C 112 278, 116 274, 120 274 C 122 290, 122 308, 122 326 L 122 360 C 122 392, 124 424, 128 458 C 130 484, 134 510, 138 538 C 140 558, 144 572, 152 578 C 162 584, 174 580, 176 568 C 176 548, 174 524, 174 500 C 174 472, 176 444, 180 416 C 184 396, 190 380, 196 372 C 200 368, 200 368, 204 372 C 210 380, 216 396, 220 416 C 224 444, 226 472, 226 500 C 226 524, 224 548, 224 568 C 226 580, 238 584, 248 578 C 256 572, 260 558, 262 538 C 266 510, 270 484, 272 458 C 276 424, 278 392, 278 360 L 278 326 C 278 308, 278 290, 280 274 C 284 274, 288 278, 290 286 C 296 310, 302 336, 306 358 C 308 368, 314 372, 322 370 C 330 366, 332 358, 330 346 C 326 318, 322 292, 318 264 C 314 236, 310 212, 304 192 C 298 176, 290 165, 278 158 C 262 148, 242 142, 224 138 Z"/></g></svg>';
+  const XRAY_URI = 'data:image/svg+xml;utf8,' + encodeURIComponent(SILHOUETTE_SVG);
+
+  /* ---------------- SPEAKER METADATA (per class) ---------------- */
+  // Accent gradients match the round-table room so an avatar and its transcript
+  // tag read as the same person.
+  const SPEAKER_META = {
+    patient: { ac:'#e0a85f', ac2:'#b9772f', label:'Patient' },
+    nurse:   { ac:'#5fd8e6', ac2:'#0e8a9e', label:'Nurse' },
+    ems:     { ac:'#8ab4f0', ac2:'#4d6fb0', label:'EMS' },
+    rt:      { ac:'#6fd3c2', ac2:'#2f8d7e', label:'RT' },
+    family:  { ac:'#e7b35a', ac2:'#b9772f', label:'Family' },
+    consult: { ac:'#c08cf0', ac2:'#7e4fb0', label:'Consult' },
+    head:    { ac:'#d8c48a', ac2:'#8a7233', label:'Head Physician' },
+  };
+  const GREY = { ac:'#5b6b85', ac2:'#3b4a63', label:'' };
+  const metaFor = (cls) => SPEAKER_META[cls] || GREY;
+  const phoneSVG = '<svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.2c0 5 4.8 9.8 9.8 9.8l.8-2.6-3-1-1.2 1.4c-1.7-.8-3-2.1-3.8-3.8l1.4-1.2-1-3z"/></svg>';
+
+  function monogram(role){
+    role = role || '';
+    const paren = role.match(/\(([^)]+)\)/);
+    if (paren){ const m = paren[1].match(/[A-Za-z]+/g) || []; if (m.length>=2) return (m[0][0]+m[1][0]).toUpperCase(); return (paren[1].replace(/[^A-Za-z]/g,'').slice(0,2)||'··').toUpperCase(); }
+    const w = role.replace(/[^A-Za-z ]/g,'').split(/\s+/).filter(Boolean);
+    if (w.length>=2) return (w[0][0]+w[1][0]).toUpperCase();
+    return (role.replace(/[^A-Za-z]/g,'').slice(0,2)||'··').toUpperCase();
+  }
+  // Short seat caption: consultants show their specialty word, family the relation.
+  function shortLabel(m){
+    const fixed = { patient:'Patient', nurse:'Nurse', ems:'EMS', rt:'RT', head:'Head Physician' };
+    if (fixed[m.cls]) return fixed[m.cls];
+    if (m.cls === 'consult') return (m.role||'Consult').split(/\s+/)[0];
+    return m.role || metaFor(m.cls).label;   // family → "Husband"
+  }
+  // Name inside a parenthetical, e.g. "Patient (EK)" → "EK".
+  function nameFromRole(role){ const pm=(role||'').match(/\(([^)]+)\)/); return pm ? pm[1].trim() : ''; }
+
+  /* ---------------- ORBS ---------------- */
+  const brandOrb = new window.Orb($('#brandOrb'), 'idle', { thumb:true });
+  const hubOrb = new window.Orb($('#hubOrb'), 'listening');
+  const S = window.ORB_STATES;
+  function loop(now){ brandOrb.step(now); hubOrb.step(now); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
+  const hubStateEl = $('#hubState'), aiStateEl = $('#aiState');
+  function setState(key){
+    hubOrb.setState(key);
+    if (hubStateEl){ hubStateEl.textContent = S[key].name; hubStateEl.style.color = S[key].cap; }
+    if (aiStateEl){ aiStateEl.textContent = S[key].name; aiStateEl.style.color = S[key].cap; }
+    $('.app').setAttribute('data-screen-label', 'Live Simulation Room — ' + S[key].name);
+  }
+
+  /* ---------------- CAST (built from the live roster) ---------------- */
+  const stage = $('#stage'), circleStage = $('#circleStage'), beamEl = $('#beam');
+  const railEl = $('#participants');
+  let CAST = [];               // [{id, cls, role, name, mono, ac, ac2, present, phone, deg}]
+  const byId = {};             // roster id → cast member
+  const railCard = {}, circleCard = {};
+  // resolve a class (turn speaker) → the best cast member (present preferred)
+  function castByClass(cls){
+    let cand = CAST.filter(a => a.cls === cls);
+    if (!cand.length) return null;
+    return cand.find(a => a.present) || cand[0];
+  }
+
+  function buildCast(roster){
+    CAST = []; for (const k in byId) delete byId[k];
+    const list = (roster || []).filter(r => r && metaFor(r.speaker).label !== undefined);
+    const n = Math.max(list.length, 1);
+    list.forEach((r, i) => {
+      const cls = r.speaker; const meta = metaFor(cls);
+      const role = r.role || meta.label || cls;
+      const secs = r.available_after_seconds;
+      const m = {
+        id: r.id || cls, cls, role,
+        name: r.name || nameFromRole(role),
+        mono: monogram(role) || (meta.label||cls).slice(0,2).toUpperCase(),
+        ac: meta.ac, ac2: meta.ac2,
+        present: (secs == null || secs <= 0),
+        phone: cls === 'consult' || !!r.phone,
+        // seat evenly around the ring, starting at the top-left
+        deg: -120 + i * (360 / n),
+      };
+      CAST.push(m); byId[m.id] = m;
+    });
+    if (!CAST.length){
+      ['patient','nurse'].forEach((cls,i) => { const meta=metaFor(cls); const m={ id:cls, cls, role:meta.label, name:'', mono:meta.label.slice(0,2).toUpperCase(), ac:meta.ac, ac2:meta.ac2, present:true, phone:false, deg:-90+i*180 }; CAST.push(m); byId[m.id]=m; });
+    }
+    buildParticipants(); buildCircle(); layoutCircle(); refreshCount();
+  }
+
+  function buildParticipants(){
+    railEl.innerHTML = ''; for (const k in railCard) delete railCard[k];
+    CAST.forEach(a => {
+      const el = document.createElement('div');
+      el.className = 'pcard ' + (a.present ? '' : 'enroute');
+      el.style.setProperty('--ac', a.ac); el.style.setProperty('--ac2', a.ac2);
+      el.innerHTML =
+        '<div class="pv">'+a.mono+'<div class="ring"></div>'+(a.phone?'<div class="ph">'+phoneSVG+'</div>':'')+'</div>'+
+        '<div class="pinfo"><div class="role">'+escapeHtml(shortLabel(a))+'</div>'+
+          '<div class="who">'+escapeHtml(a.name || a.role)+'</div>'+
+          '<div class="st">'+(a.present?'Listening':'En route')+'</div></div>'+
+        '<div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i></div>';
+      railEl.appendChild(el); railCard[a.id] = el;
+    });
+  }
+
+  function buildCircle(){
+    $$('.ca', circleStage).forEach(n => n.remove());
+    for (const k in circleCard) delete circleCard[k];
+    CAST.forEach(a => {
+      const el = document.createElement('div');
+      el.className = 'ca' + (a.present ? '' : ' enroute');
+      el.style.setProperty('--ac', a.ac); el.style.setProperty('--ac2', a.ac2);
+      el.innerHTML =
+        '<div class="ca-ava">'+a.mono+(a.phone?'<span class="ca-badge">'+phoneSVG+'</span>':'')+'</div>'+
+        '<div class="nm">'+escapeHtml(shortLabel(a))+'</div>'+
+        '<div class="ca-bubble"><div class="who">'+escapeHtml(a.role)+'</div><div class="say"></div></div>';
+      circleStage.appendChild(el); circleCard[a.id] = el;
+      a._last = a.present ? '' : 'On call — not yet in the room';
+      el.querySelector('.say').textContent = a._last;
+    });
+  }
+
+  function layoutCircle(){
+    const w = stage.clientWidth, h = stage.clientHeight;
+    if (!w || !h) return;
+    const R = Math.max(120, Math.min((h-140)/2, w/2 - 250, 190));
+    circleStage.style.width = (R*2) + 'px'; circleStage.style.height = (R*2) + 'px';
+    beamEl.style.height = R + 'px';
+    CAST.forEach(a => {
+      const ang = a.deg * Math.PI/180; a._ang = ang;
+      const el = circleCard[a.id]; if (!el) return;
+      el.style.left = (R + Math.cos(ang)*R) + 'px';
+      el.style.top  = (R + Math.sin(ang)*R) + 'px';
+      const right = Math.cos(ang) >= -0.02;
+      el.classList.toggle('side-r', right); el.classList.toggle('side-l', !right);
+    });
+  }
+  let rz; window.addEventListener('resize', () => {
+    cancelAnimationFrame(rz);
+    rz = requestAnimationFrame(() => { brandOrb.resize(); hubOrb.resize(); layoutCircle(); });
+  });
+  function refreshCount(){ $('#presentCount').textContent = CAST.filter(a => a.present).length; }
+
+  // Someone en-route arrives → light up their seat. Accepts a class or id.
+  function markPresent(clsOrId){
+    const a = byId[clsOrId] || castByClass(clsOrId); if (!a || a.present) return;
+    a.present = true;
+    const cEl = circleCard[a.id], rEl = railCard[a.id];
+    if (cEl){ cEl.classList.remove('enroute'); cEl.classList.add('arriving'); setTimeout(()=>cEl.classList.remove('arriving'),1200); }
+    if (rEl){ rEl.classList.remove('enroute'); rEl.querySelector('.st').textContent = 'Listening'; }
+    refreshCount();
+    logEvent('arrival', (a.name || a.role) + ' is now in the room');
+  }
+
+  /* ---------------- SPEAKING HIGHLIGHT + SINGLE BUBBLE ----------------
+     Invariant: at most one dialogue bubble is visible at any time — the
+     "bubble owner". Whoever last spoke (or is speaking) owns the bubble; it
+     stays put until the next speaker takes over, so the ring never shows a
+     wall of overlapping bubbles. Works for any cast (roster-driven, not
+     hard-coded): ownership simply transfers to whichever actor becomes active. */
+  let activeId = null;      // who is mid-utterance (drives the speaking animation + beam)
+  let bubbleOwner = null;   // who currently shows the one visible bubble
+  function typewrite(el, text){
+    if (reduce){ el.textContent = text; return; }
+    let n = 0; el.textContent = '';
+    (function tp(){ n++; el.textContent = text.slice(0, n); if (n < text.length) setTimeout(tp, 16 + Math.random()*16); })();
+  }
+  // Move the single bubble to `id`, hiding the previous owner's. opts: {text, type} | {html}
+  function showBubble(id, opts){
+    opts = opts || {};
+    if (bubbleOwner && bubbleOwner !== id){ const prev = circleCard[bubbleOwner]; if (prev) prev.classList.remove('show-bubble'); }
+    const el = circleCard[id]; if (!el) return;
+    el.classList.add('show-bubble'); bubbleOwner = id;
+    const sayEl = el.querySelector('.say'); if (!sayEl) return;
+    if (opts.html != null) sayEl.innerHTML = opts.html;
+    else if (opts.text != null){ if (opts.type) typewrite(sayEl, opts.text); else sayEl.textContent = opts.text; }
+  }
+  function clearSpeaking(){
+    // stop the speaking animation, but leave the bubble with its owner
+    if (activeId){
+      const el = circleCard[activeId]; if (el) el.classList.remove('speaking');
+      if (railCard[activeId]){ railCard[activeId].classList.remove('speaking'); railCard[activeId].querySelector('.st').textContent = 'Listening'; }
+    }
+    circleStage.classList.remove('talking');
+    activeId = null;
+  }
+  function setSpeaking(cls, text){
+    const a = castByClass(cls); if (!a) return;
+    markPresent(a.id);
+    if (activeId && activeId !== a.id){
+      const prev = circleCard[activeId]; if (prev) prev.classList.remove('speaking');
+      if (railCard[activeId]){ railCard[activeId].classList.remove('speaking'); railCard[activeId].querySelector('.st').textContent = 'Listening'; }
+    }
+    activeId = a.id;
+    const cEl = circleCard[a.id];
+    if (cEl){ cEl.classList.remove('working'); cEl.classList.add('speaking'); }
+    if (railCard[a.id]){ railCard[a.id].classList.add('speaking'); railCard[a.id].querySelector('.st').textContent = 'Speaking…'; }
+    circleStage.style.setProperty('--ac', a.ac);
+    if (a._ang != null) beamEl.style.transform = 'translate(-50%,-100%) rotate(' + (a._ang*180/Math.PI + 90) + 'deg)';
+    circleStage.classList.add('talking');
+    if (text != null){ a._last = text; showBubble(a.id, { text, type:true }); }
+    else showBubble(a.id, {});
+  }
+  // Working seat (an order in flight). Uses the same single bubble, but never
+  // steals it from an actor who is actively speaking.
+  function setWorking(cls, label){
+    if (activeId) return;
+    const a = castByClass(cls); const cEl = a && circleCard[a.id]; if (!cEl) return;
+    cEl.classList.add('working');
+    showBubble(a.id, { html: '<span class="spin"></span>' + escapeHtml(label || 'working…') });
+  }
+  function clearWorking(cls){
+    const a = castByClass(cls); const cEl = a && circleCard[a.id]; if (!cEl) return;
+    cEl.classList.remove('working');
+    if (bubbleOwner === a.id && !cEl.classList.contains('speaking')){ cEl.querySelector('.say').textContent = a._last || ''; }
+  }
+  function applyPending(list){
+    CAST.forEach(a => { const cEl = circleCard[a.id]; if (cEl) cEl.classList.remove('working'); });
+    const items = list || [];
+    if (!activeId && items.length){ const last = items[items.length-1]; setWorking(last.speaker || 'nurse', last.label || last.text || 'working…'); }
+  }
+
+  /* ---------------- ROOM STATUS / TRANSCRIPT ---------------- */
+  const typingEl = $('#typing');
+  function roomBusy(on, text){ if (!typingEl) return; typingEl.style.opacity = on ? '1' : ''; if (text) typingEl.innerHTML = '<span class="dots"><i></i><i></i><i></i></span> ' + escapeHtml(text); }
+  function roomHint(text){ if (!typingEl) return; typingEl.innerHTML = escapeHtml(text); typingEl.style.opacity = '1'; setTimeout(()=>{ typingEl.style.opacity=''; }, 2600); }
+
+  const transcript = $('#transcript'), convPane = $('#pane-conv');
+  function turnHTML(o){
+    if (o.you) return '<div class="turn you"><div class="tav">DR</div><div class="tbody"><div class="thead"><span class="tname">You</span><span class="ttime">'+o.t+'</span></div><div class="tline">'+escapeHtml(o.line)+'</div></div></div>';
+    const a = castByClass(o.who) || { ac:GREY.ac, ac2:GREY.ac2, mono:(o.who||'?').slice(0,2).toUpperCase(), role:o.who, name:'', cls:o.who };
+    const label = shortLabel(a);
+    const who = a.name ? (label + ' (' + a.name + ')') : label;
+    return '<div class="turn" style="--ac:'+a.ac+';--ac2:'+a.ac2+'"><div class="tav">'+a.mono+'</div><div class="tbody"><div class="thead"><span class="tname">'+escapeHtml(who)+'</span><span class="ttime">'+o.t+'</span></div><div class="tline">'+escapeHtml(o.line)+'</div></div></div>';
+  }
+  function addTurn(o){
+    transcript.insertAdjacentHTML('beforeend', turnHTML(o));
+    const turns = $$('.turn', transcript);
+    if (turns.length > 60) turns[0].remove();
+    convPane.scrollTop = convPane.scrollHeight;
+  }
+
+  /* ---------------- VITALS + STATUS ---------------- */
+  const vHr=$('#vHr'), vBp=$('#vBp'), vRr=$('#vRr'), vSpo2=$('#vSpo2'), vTemp=$('#vTemp'), vPain=$('#vPain');
+  const cellHr=vHr.closest('.vital'), cellBp=vBp.closest('.vital'), cellRr=vRr.closest('.vital'), cellSpo2=vSpo2.closest('.vital');
+  let baseHR=null, baseRR=null, baseSys=null, baseDia=null, spo2=null, arrest=false, vitalsReady=false;
+  function setColor(cell, kind){ cell.classList.remove('a','g','r'); if (kind) cell.classList.add(kind); }
+  function renderVitals(){
+    if (!vitalsReady) return;
+    if (arrest){ vHr.textContent='—'; vRr.textContent='—'; vBp.textContent='—'; }
+    else {
+      if (baseHR!=null) vHr.textContent = Math.round(baseHR + (Math.random()-0.5)*4);
+      if (baseRR!=null) vRr.textContent = Math.round(baseRR + (Math.random()-0.5)*2);
+      if (baseSys!=null && baseDia!=null) vBp.textContent = Math.round(baseSys+(Math.random()-0.5)*4)+'/'+Math.round(baseDia+(Math.random()-0.5)*3);
+    }
+    if (spo2!=null) vSpo2.textContent = Math.max(0, Math.min(100, spo2 + (Math.random()<0.4 ? (Math.random()<0.5?-1:1):0)));
+    setColor(cellHr, arrest||baseHR>150||baseHR<40 ? 'r' : (baseHR>120||baseHR<50 ? 'a' : ''));
+    setColor(cellRr, arrest||baseRR>20||baseRR<8 ? 'a' : '');
+    setColor(cellBp, arrest||baseSys<90||baseSys>180 ? 'a' : '');
+    setColor(cellSpo2, arrest||spo2<88 ? 'r' : (spo2<94 ? 'a' : 'g'));
+  }
+  setInterval(renderVitals, 2400);
+  function applyVitals(v){
+    if (!v) return; vitalsReady = true;
+    const rhythm = (v.rhythm||'').toLowerCase();
+    arrest = /pea|asystole|arrest|pulseless|ventricular fib|vfib|v-fib/.test(rhythm) || (!v.heart_rate && v.blood_pressure==null && /pea|asystole/.test(rhythm));
+    if (v.heart_rate){ baseHR = v.heart_rate; }
+    if (v.respiratory_rate) baseRR = v.respiratory_rate;
+    if (typeof v.oxygen_saturation === 'number') spo2 = v.oxygen_saturation;
+    if (typeof v.blood_pressure === 'string' && v.blood_pressure.includes('/')){ const [s,d]=v.blood_pressure.split('/').map(x=>parseInt(x,10)); if (s) baseSys=s; if (d) baseDia=d; }
+    const temp = (v.temperature_c != null ? v.temperature_c : v.temperature);
+    if (temp != null) vTemp.textContent = temp;
+    if (v.pain != null) vPain.innerHTML = v.pain + '<span style="font-size:14px;color:var(--ink-500)">/10</span>';
+    renderVitals();
+  }
+  function setStatus(title, line){ if (title) $('#stTitle').textContent = title; if (line != null) $('#stLine').textContent = line; }
+  function setWorkingDx(text){ if (text) $('#scSub').textContent = 'Working dx: ' + text; }
+
+  // The monitor stays dark until the resident asks. Each vital reveals INDIVIDUALLY
+  // — asking for the sat shows only the sat; "vitals"/"obs"/"monitor" shows the lot.
+  // Values are tracked internally every turn so they're current when revealed.
+  const vrowEl = $('#vrow'), monitorTog = $('#monitorTog');
+  const cellTemp = vTemp.closest('.vital'), cellPain = vPain.closest('.vital');
+  const vitalCell = { hr:cellHr, bp:cellBp, rr:cellRr, spo2:cellSpo2, temp:cellTemp, pain:cellPain };
+  // start with every vital cell hidden
+  Object.values(vitalCell).forEach(c => c && c.classList.add('vhidden'));
+  function anyVitalShown(){ return Object.values(vitalCell).some(c => c && !c.classList.contains('vhidden')); }
+  function revealVitals(which){   // which: 'all' | array of names | single name
+    vrowEl.classList.remove('vitals-hidden');
+    monitorTog.classList.add('on'); monitorTog.setAttribute('aria-pressed','true');
+    const names = which === 'all' ? Object.keys(vitalCell) : (Array.isArray(which) ? which : [which]);
+    names.forEach(n => vitalCell[n] && vitalCell[n].classList.remove('vhidden'));
+    renderVitals();
+  }
+  function hideVitals(){
+    vrowEl.classList.add('vitals-hidden');
+    monitorTog.classList.remove('on'); monitorTog.setAttribute('aria-pressed','false');
+    Object.values(vitalCell).forEach(c => c && c.classList.add('vhidden'));
+  }
+  // "vitals / obs / monitor" → the whole panel; otherwise map to the specific vitals named.
+  const VITALS_ALL_RE = /\b(vitals?|vital signs?|obs|observations?|monitor|full set)\b/i;
+  const VITAL_WORDS = [
+    [/\b(spo2|sp02|o2 ?sats?|oxygen|saturations?|sats?)\b/i, 'spo2'],
+    [/\b(blood pressure|bp)\b/i, 'bp'],
+    [/\b(heart rate|hr|pulse)\b/i, 'hr'],
+    [/\b(respiratory rate|resp rate|breathing rate|rr)\b/i, 'rr'],
+    [/\b(temperature|temp|fever)\b/i, 'temp'],
+    [/\bpain\b/i, 'pain'],
+  ];
+  // Reveal whatever vitals this utterance asked for; returns true if it was a vitals ask.
+  // Specifically named vitals win over the generic "vitals/obs/monitor" words: "get me
+  // her obs, BP and HR" reveals only BP+HR — a resident naming individual vitals does
+  // not want the whole panel. Only a bare generic ask ("what are her vitals?") opens
+  // the full set.
+  function revealVitalsFor(said){
+    const hits = VITAL_WORDS.filter(([re]) => re.test(said)).map(([, n]) => n);
+    if (hits.length){ revealVitals(hits); return true; }
+    if (VITALS_ALL_RE.test(said)){ revealVitals('all'); return true; }
+    return false;
+  }
+
+  /* ---------------- INVESTIGATIONS (right rail) ---------------- */
+  const invList = $('#invList');
+  // Cards carry both a `category` (lab/imaging/ecg/bedside…) and a `kind`
+  // (report/ecg/order…). The filter rail buckets are all/labs/imaging/cardiac/other.
+  const CAT_MAP = { ecg:'cardiac', cardiac:'cardiac', lab:'labs', labs:'labs', imaging:'imaging', xray:'imaging', cxr:'imaging', bedside:'other', order:'other', med:'other' };
+  const CAT_TAG = { cardiac:'ECG', labs:'Lab', imaging:'Imaging', other:'Result' };
+  function catFor(card){ return CAT_MAP[card.category] || CAT_MAP[card.kind] || 'other'; }
+  function typeFor(card){
+    const vp = card.visual_payload || {};
+    const c = card.category || card.kind;
+    if (c==='ecg' || vp.type==='svg') return 'ecg';
+    if (c==='imaging' || c==='cxr' || vp.type==='image' || vp.image || vp.data) return 'imaging';
+    return 'generic';
+  }
+  // Build an <img> src from a visual_payload image (base64 `data`+`format`, or a ready url/data-uri).
+  function imgSrc(vp){
+    if (vp.image) return vp.image;
+    // NB: base64 JPEG data starts with "/9j/…"; only treat it as a ready URL when
+    // it's an explicit data:/http URI — a leading slash is base64, not a path.
+    if (vp.data){ return /^(data:|https?:)/.test(vp.data) ? vp.data : ('data:image/' + (vp.format || 'jpeg') + ';base64,' + vp.data); }
+    return null;
+  }
+  let curFilter = 'all';
+  function cardBody(card){
+    const vp = card.visual_payload || {};
+    const type = typeFor(card);
+    const note = card.summary||card.note||card.text||card.interpretation||card.body;
+    if (type === 'ecg'){
+      // Prefer the real 12-lead SVG from the engine; fall back to a synthetic strip.
+      if (vp.type === 'svg' && vp.svg){
+        return '<div class="ecg12 card-visual">'+vp.svg+'</div>' + (note ? '<div class="inv-note">'+escapeHtml(note)+'</div>' : '');
+      }
+      const id = 'ecg_' + Math.random().toString(36).slice(2,8);
+      setTimeout(() => buildEcgStrip(id, vp.lead_ii_morphology), 0);
+      return '<div class="ecg-strip" id="'+id+'"></div>' + (note ? '<div class="inv-note">'+escapeHtml(note)+'</div>' : '');
+    }
+    if (type === 'imaging'){
+      const src = imgSrc(vp);
+      const img = src ? '<img src="'+src+'" alt="" style="width:100%;display:block;border-radius:8px;background:#0a0f17;">'
+                      : '<span><img src="'+XRAY_URI+'" alt="" style="height:200px;margin-top:26px;filter:invert(0.92) brightness(0.75) contrast(1.15) blur(0.3px);opacity:0.45"></span>';
+      const tag = vp.view || (vp.finding && vp.finding !== 'No Finding' ? vp.finding : 'AP · PORTABLE');
+      const box = src ? '<div class="card-visual" style="border-radius:8px;overflow:hidden;border:1px solid var(--line);position:relative;cursor:zoom-in;">'+img+'<span class="xtag">'+escapeHtml(tag)+'</span></div>'
+                      : '<div class="xray card-visual">'+img+'<span class="xtag">'+escapeHtml(tag)+'</span></div>';
+      return box + (note ? '<div class="inv-note">'+escapeHtml(note)+'</div>' : '');
+    }
+    let html = '';
+    const rows = card.rows || card.values;
+    const hasTable = Array.isArray(rows) && rows.length;
+    if (hasTable){
+      const isAbn = r => r.abnormal === true || ['low','high','critical','abnormal'].includes(String(r.flag||'').toLowerCase());
+      html += '<table class="cbc">' + rows.map(r => '<tr'+(isAbn(r)?' class="hi"':'')+'><td class="k">'+escapeHtml(r.label||r.name||r.k||'')+'</td><td class="v">'+escapeHtml(String(r.value!=null?r.value:(r.v!=null?r.v:'')))+'</td><td class="u">'+escapeHtml(r.unit||r.u||'')+'</td><td class="rng">'+escapeHtml(r.range||r.reference||r.rng||'')+'</td></tr>').join('') + '</table>';
+    }
+    // A lab shows its values, not an "all normal" sentence — only fall back to the
+    // prose result when there's no value table (e.g. a plain text report).
+    if (note && !hasTable) html += '<div class="inv-note">'+escapeHtml(note)+'</div>';
+    return html || '<div class="inv-note">Result recorded.</div>';
+  }
+  function addCard(card){
+    if (!card) return;
+    const cat = catFor(card);
+    // Upsert by id: fill a pre-seeded (or prior) section IN PLACE so each test /
+    // exam stays a single accordion row — the manual-sim layout. No id → new card.
+    const existing = card.id ? invList.querySelector('.inv-card[data-card-id="'+CSS.escape(card.id)+'"]') : null;
+    const el = existing || document.createElement('div');
+    el.className = 'card inv-card'; el.dataset.cat = cat; if (card.id) el.dataset.cardId = card.id;
+    el.innerHTML =
+      '<div class="inv-top"><span class="it">'+escapeHtml(card.title||'Result')+'</span>'+
+      '<span class="itime">'+clockStr()+'</span>'+
+      '<span class="ist done">'+escapeHtml(CAT_TAG[cat]||'Result')+'</span></div>'+
+      '<div class="inv-body inv-detail">'+cardBody(card)+'</div>';
+    const top = el.querySelector('.inv-top');
+    const chev = document.createElement('span'); chev.className='inv-chev';
+    chev.innerHTML='<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>';
+    top.appendChild(chev); top.style.cursor='pointer';
+    top.addEventListener('click', () => el.classList.toggle('collapsed'));
+    // an ECG wakes the continuous lead-II bedside monitor
+    if (typeFor(card) === 'ecg') startEcgMonitor((card.visual_payload || {}).lead_ii_morphology);
+    // click the tracing / film to read it full-size
+    const vis = el.querySelector('.card-visual');
+    if (vis) vis.addEventListener('click', ev => { ev.stopPropagation(); openLightbox(card); });
+    $$('.inv-card', invList).forEach(c => c.classList.add('collapsed'));
+    el.classList.remove('collapsed', 'pending', 'working');   // the updated result row opens
+    if (!existing) invList.insertBefore(el, invList.firstChild);   // new cards on top; seeded rows keep menu order
+    if (curFilter !== 'all' && cat !== curFilter) el.style.display='none';
+  }
+
+  // Pre-seed one collapsible section per exam system + investigation (manual-sim
+  // layout). Tapping a pending section runs it through the engine; the result then
+  // fills that same section (addCard upsert). A spoken order lands there too.
+  function actionLabelF(op, id){
+    if (op === 'perform_exam') return 'Examine the ' + id + ' system.';
+    if (op === 'order_investigation'){ const i = (MENU.investigations||[]).find(x => x.id === id); return 'Order ' + (i ? i.name : id) + '.'; }
+    return id;
+  }
+  function onInvRowTap(el){
+    if (el.classList.contains('working')) return;
+    if (el.classList.contains('pending')){
+      el.classList.add('working');
+      const t = el.querySelector('.ist'); if (t) t.textContent = '…';
+      runAction(el.dataset.op, el.dataset.cardId, actionLabelF(el.dataset.op, el.dataset.cardId));
+    } else { el.classList.toggle('collapsed'); }
+  }
+  // Request-driven panel: when false, nothing is pre-listed at launch — each exam
+  // / investigation appears only once the resident asks for it (by voice, or via
+  // the Add Investigation picker). Flip to true to restore the full pre-seeded menu.
+  const PRESEED_MENU = false;
+  function seedInvRow(o){
+    if (!PRESEED_MENU) return;
+    if (!o.id || invList.querySelector('.inv-card[data-card-id="'+CSS.escape(o.id)+'"]')) return;
+    const el = document.createElement('div');
+    el.className = 'card inv-card pending collapsed'; el.dataset.cat = o.cat; el.dataset.cardId = o.id; el.dataset.op = o.op;
+    el.innerHTML =
+      '<div class="inv-top"><span class="it">'+escapeHtml(o.title)+'</span>'+
+      '<span class="ist act">'+escapeHtml(o.tag)+'</span></div>'+
+      '<div class="inv-body inv-detail"><div class="inv-note hint">Tap to run — the result appears here.</div></div>';
+    const top = el.querySelector('.inv-top'); top.style.cursor='pointer';
+    const chev = document.createElement('span'); chev.className='inv-chev';
+    chev.innerHTML='<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>';
+    top.appendChild(chev);
+    top.addEventListener('click', () => onInvRowTap(el));
+    invList.appendChild(el);
+    if (curFilter !== 'all' && o.cat !== curFilter) el.style.display='none';
+  }
+  function seedInvSections(){
+    (MENU.exam_systems||[]).forEach(s => seedInvRow({ id: s, title: s + ' exam', tag: 'Examine', cat: 'other', op: 'perform_exam' }));
+    (MENU.investigations||[]).forEach(i => seedInvRow({ id: i.id, title: i.name, tag: 'Order', cat: catFor(i), op: 'order_investigation' }));
+  }
+  function buildEcgStrip(id, morph){
+    const strip = document.getElementById(id); if (!strip) return;
+    const W = 300, H = 82, base = H*0.60, beatW = 46;
+    const tpl = [ [0,0],[0.08,0],[0.13,-4],[0.18,0],[0.30,0],[0.33,3],[0.36,-27],[0.40,11],[0.44,1],[0.52,5],[0.62,5],[0.72,-8],[0.80,0],[1,0] ];
+    let d = 'M 0 ' + base; const beats = Math.ceil(W/beatW)+1;
+    for (let b=0;b<beats;b++){ for (const [fx,dy] of tpl){ d += ' L '+((b+fx)*beatW).toFixed(1)+' '+(base+dy).toFixed(1); } }
+    const grid = 'repeating-linear-gradient(0deg,rgba(229,96,74,0.14) 0 1px,transparent 1px 8px),repeating-linear-gradient(90deg,rgba(229,96,74,0.14) 0 1px,transparent 1px 8px),repeating-linear-gradient(0deg,rgba(229,96,74,0.28) 0 1px,transparent 1px 40px),repeating-linear-gradient(90deg,rgba(229,96,74,0.28) 0 1px,transparent 1px 40px)';
+    strip.style.background = grid + ',#1a0d0e';
+    strip.innerHTML = '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none"><path d="'+d+'" fill="none" stroke="#ff6b57" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" style="filter:drop-shadow(0 0 3px rgba(255,107,87,0.7))"/></svg>';
+    const path = strip.querySelector('path');
+    if (!reduce && path.getTotalLength){ const len=path.getTotalLength(); path.style.strokeDasharray=len; path.animate([{strokeDashoffset:len},{strokeDashoffset:0}],{duration:2600,iterations:Infinity,easing:'linear'}); }
+  }
+
+  /* ---------------- CONTINUOUS LEAD-II MONITOR (wakes on ECG) ---------------- */
+  const ecgMon = $('#ecgMon'), ecgCanvas = $('#ecgCanvas'), ecgRhythmEl = $('#ecgRhythm');
+  let ecgMorph = null, ecgCtx = null, ecgRAF = 0, ecgLastTs = 0;
+  let ecgW = 230, ecgH = 54, ecgBase = 34, ecgGain = 16, ecgX = 0, ecgPrevX = 0, ecgPrevY = 0, ecgPhase = 0, ecgRR = 0.6;
+  function ecgResize(){
+    if (!ecgCanvas) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = ecgCanvas.getBoundingClientRect();
+    ecgW = r.width || 230; ecgH = r.height || 54;
+    ecgCanvas.width = Math.round(ecgW*dpr); ecgCanvas.height = Math.round(ecgH*dpr);
+    ecgCtx = ecgCanvas.getContext('2d'); ecgCtx.setTransform(dpr,0,0,dpr,0,0);
+    ecgBase = ecgH*0.60; ecgGain = ecgH*0.34; ecgPrevX = 0; ecgPrevY = ecgBase; ecgX = 0;
+  }
+  function gauss(t, mu, s){ const d = t - mu; return Math.exp(-(d*d)/(2*s*s)); }
+  function ecgSample(t, m){
+    m = m || {}; const amp = m.amp_scale || 1;
+    const wide = m.qrs === 'wide' || m.qrs === 'lbbb' || m.qrs === 'rbbb' || (m.qrs_ms && m.qrs_ms > 120);
+    let y = 0;
+    if (!m.p_absent) y += 0.12*gauss(t,0.16,0.022);
+    y -= 0.06*gauss(t,0.28,0.010);
+    y += 1.00*gauss(t,0.31, wide?0.022:0.011);
+    y -= 0.20*gauss(t,0.35, wide?0.024:0.013);
+    if (m.st_mv) y += m.st_mv*(t>0.37 && t<0.48 ? 1 : 0);
+    y += (m.t_inv ? -1 : 1)*0.24*gauss(t,0.58,0.045);
+    return y*amp;
+  }
+  function ecgLoop(ts){
+    if (!ecgMorph || ecgMon.hidden){ ecgRAF = 0; return; }
+    if (!ecgCtx){ ecgRAF = requestAnimationFrame(ecgLoop); return; }
+    if (!ecgLastTs) ecgLastTs = ts;
+    let dt = (ts - ecgLastTs)/1000; ecgLastTs = ts; if (dt > 0.1) dt = 0.1;
+    const hr = Math.max(20, Math.min(250, baseHR || 80));
+    const sweep = ecgW/2.6;
+    ecgPhase += dt/ecgRR;
+    while (ecgPhase >= 1){
+      ecgPhase -= 1;
+      const irregular = ecgMorph.rhythm_label && /FIB|FLUTTER/.test(ecgMorph.rhythm_label);
+      ecgRR = irregular ? (60/hr)*(0.6 + Math.random()*0.8) : (60/hr);
+    }
+    let nx = ecgX + sweep*dt; const ctx = ecgCtx;
+    ctx.shadowColor = '#39e98f'; ctx.shadowBlur = 4; ctx.strokeStyle = '#39e98f'; ctx.lineWidth = 1.4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (nx >= ecgW){ nx -= ecgW; ecgPrevX = nx; ecgPrevY = ecgBase - ecgSample(ecgPhase, ecgMorph)*ecgGain; }
+    ctx.clearRect(nx, 0, 16, ecgH);
+    const y = ecgBase - ecgSample(ecgPhase, ecgMorph)*ecgGain;
+    ctx.beginPath(); ctx.moveTo(ecgPrevX, ecgPrevY); ctx.lineTo(nx, y); ctx.stroke();
+    ecgPrevX = nx; ecgPrevY = y; ecgX = nx;
+    ecgRAF = requestAnimationFrame(ecgLoop);
+  }
+  function startEcgMonitor(morph){
+    ecgMorph = morph || ecgMorph || {};
+    if (ecgRhythmEl) ecgRhythmEl.textContent = 'lead II';
+    if (ecgMon.hidden){ ecgMon.hidden = false; ecgResize(); }
+    ecgRR = 60/Math.max(20, Math.min(250, baseHR || 80));
+    if (!ecgRAF){ ecgLastTs = 0; ecgRAF = requestAnimationFrame(ecgLoop); }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden){ if (ecgRAF){ cancelAnimationFrame(ecgRAF); ecgRAF = 0; } }
+    else if (ecgMorph && !ecgMon.hidden && !ecgRAF){ ecgLastTs = 0; ecgRAF = requestAnimationFrame(ecgLoop); }
+  });
+  window.addEventListener('resize', () => { if (!ecgMon.hidden) ecgResize(); });
+
+  /* ---------------- LIGHTBOX (enlarge ECG / imaging) ---------------- */
+  const lightbox = document.createElement('div');
+  lightbox.className = 'lightbox';
+  lightbox.innerHTML = '<div class="lb-inner"><button class="lb-close" aria-label="Close">×</button><div class="lb-title" id="lbTitle"></div><div class="lb-stage" id="lbStage"></div><div class="lb-cap" id="lbCap"></div></div>';
+  document.body.appendChild(lightbox);
+  const lbStage = lightbox.querySelector('#lbStage'), lbTitle = lightbox.querySelector('#lbTitle'), lbCap = lightbox.querySelector('#lbCap');
+  function openLightbox(card){
+    const vp = card.visual_payload || {}; const type = typeFor(card);
+    if (type === 'ecg' && vp.type === 'svg' && vp.svg){ lbStage.innerHTML = vp.svg; lbStage.classList.add('ecg'); }
+    else if (type === 'imaging'){ const src = imgSrc(vp); if (!src) return; lbStage.innerHTML = '<img alt="" src="'+src+'">'; lbStage.classList.remove('ecg'); }
+    else return;
+    lbTitle.textContent = card.title || '';
+    lbCap.textContent = card.summary || card.note || card.text || '';
+    lightbox.classList.add('open');
+  }
+  function closeLightbox(){ lightbox.classList.remove('open'); lbStage.innerHTML = ''; }
+  lightbox.querySelector('.lb-close').addEventListener('click', closeLightbox);
+  lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && lightbox.classList.contains('open')) closeLightbox(); });
+
+  /* ---------------- TURN ENGINE ---------------- */
+  let SESSION_ID = null, pendingEnd = false, ended = false;
+
+  /* ---------------- CLIENT LOG (page errors + audio outcomes → server) ---------------- */
+  // The 2026-09-05 prod runs showed replies on screen with no audio and nothing on
+  // the server to say why. Every decision the speech path makes (skipped, watchdog,
+  // rejected play, stuck AudioContext) and every UI error is batched to
+  // /api/voice/client-log; the server bounds the size, so this never has to.
+  const clientBuf = []; let clientFlushT = 0;
+  function clientLog(kind, detail){
+    try {
+      const d = (detail && typeof detail === 'object') ? JSON.stringify(detail) : String(detail == null ? '' : detail);
+      clientBuf.push({ kind, detail: d.slice(0, 1000), t: (typeof clockStr === 'function') ? clockStr() : '' });
+      if (clientBuf.length > 200) clientBuf.splice(0, clientBuf.length - 200);
+      if (clientBuf.length >= 20) clientFlush(); else if (!clientFlushT) clientFlushT = setTimeout(clientFlush, 2000);
+    } catch(e){}
+  }
+  function clientFlush(useBeacon){
+    clearTimeout(clientFlushT); clientFlushT = 0;
+    if (!SESSION_ID || !clientBuf.length) return;
+    const payload = JSON.stringify({ session_id: SESSION_ID, events: clientBuf.splice(0, 50) });
+    try {
+      if (useBeacon && navigator.sendBeacon) navigator.sendBeacon('/api/voice/client-log', new Blob([payload], { type: 'application/json' }));
+      else fetch('/api/voice/client-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(() => {});
+    } catch(e){}
+    if (clientBuf.length) clientFlushT = setTimeout(clientFlush, 2000);
+  }
+  window.addEventListener('error', e => clientLog('js.error', ((e && e.message) || 'error') + ' @' + ((e && e.filename) || '') + ':' + ((e && e.lineno) || '')));
+  window.addEventListener('unhandledrejection', e => { const r = e && e.reason; clientLog('js.rejection', (r && (r.stack || r.message)) || String(r)); });
+  window.addEventListener('pagehide', () => clientFlush(true));
+  // A UI update that throws must never take the audio with it: run it in isolation.
+  function safeUI(what, fn){ try { fn(); } catch(e){ clientLog('ui.error', what + ': ' + ((e && (e.stack || e.message)) || e)); } }
+  let processing = false;
+  let forcedAddressee = null, pendingTranscript = null;
+  let MENU = { exam_systems: [], investigations: [], consultants: [] };   // the case's orderable menu
+  const orderedInv = new Set();   // investigation ids already ordered this run
+  let CASE_INFO = {};             // patient/presentation/meta captured at boot (for the brief)
+
+  async function postJSON(url, body){
+    const res = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json().catch(()=>({}));
+    if (!res.ok) throw new Error(data.detail || 'request failed');
+    return data;
+  }
+
+  function applyEngine(d){
+    if (!d) return;
+    if (d.state) setClinicalState(d.state);   // advance the scenario-timeline phase
+    if (d.summon) markPresent(d.summon);   // summoned actor is in the room now — reflect it immediately
+    if ('pending' in d) applyPending(d.pending);
+    if (d.vitals) applyVitals(d.vitals);
+    if (d.working_dx) setWorkingDx(d.working_dx);
+    if (d.diagnostic) addCard(d.diagnostic);
+    if (d.critical){ const msg=(d.clock_events&&d.clock_events[0])||'Patient deteriorating'; setStatus('⚠ ' + msg, null); roomHint(msg); logEvent('critical', msg); }
+    else if (d.transitioned && d.clock_events && d.clock_events.length){ roomHint(d.clock_events[0]); logEvent('state', d.clock_events[0]); }
+    if (d.ended) pendingEnd = true;
+  }
+  async function deliverCues(d){
+    for (const c of ((d&&d.cues)||[])){ const sp=c.speaker||'nurse'; safeUI('cue', () => { addTurn({who:sp,t:clockStr(),line:c.text}); logEvent('cue', c.text); }); if (c.text){ try { await playTTS(c.text, sp); } catch(e){} } }
+  }
+  async function deliverDeferred(d){
+    for (const it of ((d&&d.deferred)||[])){ const sp=it.speaker||'nurse'; safeUI('result', () => { clearWorking(sp); if (it.card) addCard(it.card); if (it.text){ addTurn({who:sp,t:clockStr(),line:it.text}); logEvent('result', it.text); } }); if (it.text){ try { await playTTS(it.text, sp); } catch(e){} } }
+  }
+
+  // A grounded panel-click order (deterministic — no interpret LLM). Mirrors
+  // handleSaid's result handling but hits /api/voice/action; the room reacts the
+  // same way a spoken "order the chest x-ray" would.
+  async function runAction(op, target, label){
+    if (!SESSION_ID) return;
+    if (paused){ roomHint('paused — resume to continue'); return; }  // frozen: no actions
+    if (processing){ roomHint('one moment — the room is mid-response'); return; }
+    processing = true;
+    let data;
+    try {
+      if (label) safeUI('transcript', () => addTurn({ you:true, t:clockStr(), line:label }));
+      roomBusy(true, 'the room is responding…'); setState('thinking');
+      data = await postJSON('/api/voice/action', { session_id: SESSION_ID, op, target });
+    } catch(e){
+      roomBusy(false); roomHint((e&&e.message)||'could not complete that order');
+      clientLog('action.error', (e&&e.message)||e);
+      setState(listening ? 'listening' : 'idle'); processing = false; return;
+    }
+    await deliverTurn(data, label || '');
+  }
+
+  async function handleSaid(said, forced){
+    if (!said || !SESSION_ID) return;
+    if (paused){ roomHint('paused — resume to continue'); return; }  // frozen: no turns
+    const effAddr = forced || forcedAddressee || null;
+    forcedAddressee = null; clearAddrChips();
+    let data;
+    try {
+      safeUI('transcript', () => addTurn({ you:true, t:clockStr(), line:said }));
+      safeUI('vitals-reveal', () => revealVitalsFor(said));   // reveal only the vital(s) the resident asked for
+      roomBusy(true, 'the room is responding…'); setState('thinking');
+      const body = { session_id: SESSION_ID, text: said };
+      if (effAddr) body.forced_addressee = effAddr;
+      data = await postJSON('/api/voice/turn', body);
+    } catch(e){
+      roomBusy(false); roomHint((e&&e.message)||'something went wrong');
+      clientLog('turn.error', (e&&e.message)||e);
+      setState(listening ? 'listening' : 'idle'); processing = false; return;
+    }
+    await deliverTurn(data, said);
+  }
+  // Everything that happens once a turn's reply is in hand. The transcript, the
+  // engine update and the addressee chips each run in isolation from the speech
+  // path — on 2026-09-05 a UI error here left replies on screen that were never
+  // heard. `processing` clears before playback so the resident can barge in.
+  async function deliverTurn(data, said){
+    const reply = (data.reply||'').trim();
+    const speaker = data.speaker || 'nurse';
+    const stability = data.affect_stability ?? null;
+    roomBusy(false);
+    if (reply) safeUI('reply', () => addTurn({ who:speaker, t:clockStr(), line:reply }));
+    safeUI('engine', () => applyEngine(data));
+    if (data.needs_addressee) safeUI('chips', () => { pendingTranscript = said; showAddrChips(); });
+    processing = false;
+    if (reply){ try { await playTTS(reply, speaker, stability, data.affect ?? null); } catch(e){} }
+    safeUI('state', () => setState(listening ? 'listening' : 'idle'));
+    await deliverCues(data); await deliverDeferred(data);
+    if (pendingEnd){ pendingEnd = false; concludeCase(); }
+  }
+
+  /* ---------------- ADDRESSEE CHIPS (needs_addressee) ---------------- */
+  let addrBar = null;
+  function ensureAddrBar(){
+    if (addrBar) return addrBar;
+    addrBar = document.createElement('div');
+    addrBar.id = 'addrChips';
+    addrBar.style.cssText = 'display:none;gap:7px;flex-wrap:wrap;align-items:center;padding:10px 14px 0;';
+    addrBar.innerHTML = '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-500);">Who did you mean?</span>';
+    const micbar = $('.micbar'); micbar.parentNode.insertBefore(addrBar, micbar);
+    return addrBar;
+  }
+  function showAddrChips(){
+    const bar = ensureAddrBar();
+    $$('.addr-chip', bar).forEach(c => c.remove());
+    CAST.filter(a => a.present).forEach(a => {
+      const chip = document.createElement('button');
+      chip.className = 'addr-chip'; chip.type = 'button';
+      chip.style.cssText = 'cursor:pointer;font-size:11.5px;font-weight:600;color:var(--ink-200);background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:5px 12px;';
+      chip.textContent = shortLabel(a);
+      chip.addEventListener('click', () => { const t = pendingTranscript; pendingTranscript = null; clearAddrChips(); if (t) handleSaid(t, a.id); });
+      bar.appendChild(chip);
+    });
+    bar.style.display = 'flex';
+  }
+  function clearAddrChips(){ if (addrBar) addrBar.style.display = 'none'; }
+
+  /* ---------------- VOICE I/O (STT / TTS / VAD) ---------------- */
+  let stream=null, recorder=null, chunks=[], audioCtx=null, analyser=null, micSource=null;
+  let listening=false, capturing=false;
+  // Realtime STT (Scribe v2) — stream mic PCM to /ws/stt while the resident talks,
+  // so the transcript is ready ~when they stop. MediaRecorder still runs in parallel
+  // as an automatic fallback if the socket is down or returns nothing.
+  let sttWs=null, sttPcmNode=null, sttStreaming=false, sttActive=false;
+  let sttFinalText='', sttFinalResolve=null;
+  let curAudio=null, playResolve=null, curAbortCtrl=null, curPCMGain=null;
+  let audioMuted=false;   // Audio toggle: when true, TTS is silenced (transcript still updates)
+  // Push-to-talk: the resident holds Space (or the orb) while speaking and releases
+  // to send. There is no VAD end-pointing any more — the 450 ms silence gate cut
+  // thinking pauses mid-sentence ("Let's give him 0.5 IM…") and every wrongly split
+  // order cost a whole clarification round. Release is the commit point, so the
+  // utterance boundary is exactly what the resident meant, and the silence wait
+  // drops out of the latency budget altogether.
+  let ptt=false, pttAt=0, pttDrop=false;
+  const PTT_MIN_MS=200;   // shorter than this is a tap, not an utterance
+  let _voices=[]; function loadVoices(){ try { _voices = window.speechSynthesis ? speechSynthesis.getVoices() : []; } catch(e){ _voices=[]; } }
+  if (window.speechSynthesis){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+  function pickVoice(speaker){
+    if (!_voices.length) loadVoices();
+    const en=_voices.filter(v=>/^en[-_]/i.test(v.lang)); const pool=en.length?en:_voices; if (!pool.length) return null;
+    const female=pool.filter(v=>/female|woman|samantha|victoria|karen|moira|fiona|tessa|zira|aria/i.test(v.name)); const base=female.length?female:pool;
+    if (speaker==='patient') return base[base.length-1];
+    if (speaker==='consult'){ const male=pool.filter(v=>/male|man|daniel|alex|fred|tom|rishi|oliver/i.test(v.name)&&!/female|woman/i.test(v.name)); return male[0]||pool[Math.min(1,pool.length-1)]; }
+    return base[0];
+  }
+
+  // ---- Realtime STT over WebSocket (Scribe v2) ----
+  function sttConnect(){
+    if (VOICE_BACKEND !== 'models') return;
+    if (sttWs && (sttWs.readyState === 0 || sttWs.readyState === 1)) return;
+    try {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const q = SESSION_ID ? `?session_id=${encodeURIComponent(SESSION_ID)}` : '';
+      const ws = new WebSocket(`${proto}://${location.host}/ws/stt${q}`);
+      ws.binaryType = 'arraybuffer';
+      ws.onclose = () => { if (sttWs === ws){ sttWs = null; sttStreaming = false; if (listening && !ended) setTimeout(sttConnect, 500); } };
+      ws.onerror = () => {};
+      ws.onmessage = (ev) => {
+        let m; try { m = JSON.parse(ev.data); } catch(e){ return; }
+        if (m.partial){ if (sttStreaming && m.text) micInput.placeholder = m.text.slice(-60); }
+        else if (m.final){
+          sttFinalText = (sttFinalText ? sttFinalText + ' ' : '') + (m.text || '');
+          if (sttFinalResolve){ const r = sttFinalResolve; sttFinalResolve = null; r(sttFinalText.trim()); }
+        }
+      };
+      sttWs = ws;
+    } catch(e){ sttWs = null; }
+  }
+  function floatTo16kPCM(f32, inRate){
+    // Downsample (linear) to 16 kHz mono int16 — Scribe realtime input format.
+    const clamp = s => s < 0 ? Math.max(-1, s) * 0x8000 : Math.min(1, s) * 0x7FFF;
+    if (inRate === 16000){ const out = new Int16Array(f32.length); for (let i=0;i<f32.length;i++) out[i]=clamp(f32[i]); return out; }
+    const ratio = inRate / 16000, outLen = Math.floor(f32.length / ratio), out = new Int16Array(outLen);
+    for (let i=0;i<outLen;i++){ const idx=i*ratio, i0=Math.floor(idx), i1=Math.min(i0+1,f32.length-1), frac=idx-i0; out[i]=clamp(f32[i0]*(1-frac)+f32[i1]*frac); }
+    return out;
+  }
+  function sttBegin(){
+    // Returns true if this utterance will be transcribed via realtime; false → fall back to blob.
+    if (VOICE_BACKEND !== 'models'){ return false; }
+    if (!sttWs || sttWs.readyState !== 1){ sttConnect(); return false; }
+    sttFinalText=''; sttFinalResolve=null; sttStreaming=true; return true;
+  }
+  function sttCommit(){ if (sttStreaming){ sttStreaming=false; try { sttWs.send(JSON.stringify({t:'commit'})); } catch(e){} } }
+  function sttAwaitFinal(timeoutMs){
+    return new Promise(resolve => {
+      if (sttFinalText){ resolve(sttFinalText.trim()); return; }
+      let done=false;
+      sttFinalResolve = (txt)=>{ if (done) return; done=true; resolve((txt||'').trim()); };
+      setTimeout(()=>{ if (done) return; done=true; sttFinalResolve=null; resolve((sttFinalText||'').trim()); }, timeoutMs);
+    });
+  }
+
+  async function stt(blob){
+    const url = SESSION_ID ? `/api/voice/stt?session_id=${encodeURIComponent(SESSION_ID)}` : '/api/voice/stt';
+    const res = await fetch(url, { method:'POST', headers:{ 'Content-Type': blob.type }, body: blob });
+    const data = await res.json().catch(()=>({}));
+    if (!res.ok){ throw new Error(data.detail || 'transcription failed'); }
+    return (data.text||'').trim();
+  }
+
+  // Kill whatever is playing right now (fetch, PCM sources, <audio>, native) and
+  // release its await. Leaves the queue alone — the watchdog uses it to unwedge one
+  // line without dropping the lines behind it.
+  function killCurrent(){
+    if (curAudio){ try { curAudio.pause(); } catch(e){} curAudio=null; }
+    if (curAbortCtrl){ curAbortCtrl.abort(); curAbortCtrl=null; }
+    if (curPCMGain && audioCtx){ try { curPCMGain.gain.setValueAtTime(0, audioCtx.currentTime); } catch(e){} curPCMGain=null; }
+    if (window.speechSynthesis){ try { speechSynthesis.cancel(); } catch(e){} }
+    if (playResolve){ const r=playResolve; playResolve=null; r(); }
+  }
+  // Barge-in / stop: kill the current line AND drop everything queued behind it.
+  function stopAudio(){ speakGen++; killCurrent(); }
+  let speakChain = Promise.resolve(), speakGen = 0;
+  // How long one line may take end-to-end (synthesis + playback) before the queue
+  // is freed. On 2026-09-05 one stalled line silently swallowed every reply queued
+  // behind it. Speech runs ~15 chars/s; v3 synthesis alone can take several seconds.
+  const TTS_WATCHDOG = Object.assign({ base: 6000, perChar: 90, max: 60000 }, window.__ttsWatchdog || {});
+  function ttsBudget(text){ return Math.min(TTS_WATCHDOG.max, TTS_WATCHDOG.base + TTS_WATCHDOG.perChar * ((text||'').length)); }
+  function playTTS(text, speaker, stability, affect){
+    const gen = speakGen;
+    const brief = speaker + ': ' + (text||'').slice(0, 80);
+    const run = async () => {
+      if (gen !== speakGen){ clientLog('tts.skipped', brief); return; }
+      const t0 = performance.now(); let timer = 0;
+      const guard = new Promise(resolve => { timer = setTimeout(() => { clientLog('tts.watchdog', Math.round(performance.now()-t0) + 'ms ' + brief); killCurrent(); resolve('watchdog'); }, ttsBudget(text)); });
+      const attempt = async () => {
+        try { await _playTTSNow(text, speaker, stability, affect); return 'ok'; }
+        catch(e){
+          if (e && e.name==='AbortError') return 'aborted';
+          clientLog('tts.error', ((e && e.message) || e) + ' ' + brief);
+          try { await _playTTSNow(text, speaker, stability, affect); return 'ok'; }
+          catch(e2){ if (e2 && e2.name==='AbortError') return 'aborted'; clientLog('tts.failed', ((e2 && e2.message) || e2) + ' ' + brief); roomHint('audio unavailable for that line'); return 'failed'; }
+        }
+      };
+      try { setSpeaking(speaker, text); } catch(e){}
+      try { await Promise.race([attempt(), guard]); }
+      finally { clearTimeout(timer); try { clearSpeaking(); } catch(e){} }
+    };
+    speakChain = speakChain.then(run, run); return speakChain;
+  }
+  async function _playTTSNow(text, speaker, stability, affect){
+    setState('responding');
+    // Muted: no audio, but hold the "speaking" beat so the bubble/transcript stay
+    // readable (roughly speech-paced), then let the caller clear it.
+    if (audioMuted){ await new Promise(r => setTimeout(r, Math.min(3500, 350 + (text||'').length * 38))); return; }
+    if (VOICE_BACKEND === 'native') return speakNative(text, speaker);
+    const body = { text, speaker }; if (stability != null) body.stability = stability;
+    if (affect) body.affect = affect;     // EmotionalState descriptor → v4 audio tag
+    // A stuck AudioContext (suspended/interrupted, resume never lands) cannot
+    // schedule PCM; ask for a whole MP3 and play it through <audio> instead.
+    if (!(await audioContextReady())) body.format = 'mp3';
+    const abortCtrl = new AbortController(); curAbortCtrl = abortCtrl;
+    try {
+      const res = await fetch('/api/voice/tts', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), signal: abortCtrl.signal });
+      if (!res.ok) throw new Error('synthesis failed (' + res.status + ')');
+      const ct = res.headers.get('content-type')||'';
+      if (ct.includes('audio/pcm')) await _playPCMStream(res);
+      else await _playBlob(res, speaker);
+    } catch(e){ if (e.name!=='AbortError') throw e; }
+    finally { if (curAbortCtrl===abortCtrl) curAbortCtrl=null; }
+  }
+  // Whole-file playback through <audio> (the MP3 fallback above). An element that
+  // cannot decode or start rejects, so playTTS retries and reports the line instead
+  // of counting silence as played; killCurrent (barge-in/watchdog) still resolves.
+  async function _playBlob(res, speaker){
+    const url = URL.createObjectURL(await res.blob()); const audio = new Audio(url); curAudio=audio;
+    await new Promise((resolve, reject) => {
+      playResolve=resolve;
+      const done=(err)=>{ URL.revokeObjectURL(url); if (curAudio===audio) curAudio=null; if (playResolve){ playResolve=null; err ? reject(err) : resolve(); } };
+      audio.onended=()=>done();
+      audio.onerror=()=>{ const code=(audio.error && audio.error.code) || '?'; clientLog('tts.audio_error', speaker + ' code=' + code); done(new Error('audio element error code=' + code)); };
+      let p; try { p = audio.play(); } catch(e){ clientLog('tts.play_threw', speaker + ' ' + ((e && e.name) || e)); done(e); return; }
+      if (p && p.catch) p.catch(e => { clientLog('tts.play_rejected', speaker + ' ' + ((e && e.name) || e)); done(e); });
+    });
+  }
+  // The shared AudioContext must be running to schedule PCM. Resume it with a
+  // bounded wait and report — rather than hang — when it will not run.
+  async function audioContextReady(){
+    try {
+      const ctx = audioCtx || new (window.AudioContext||window.webkitAudioContext)(); audioCtx = ctx;
+      if (ctx.state === 'running') return true;
+      await Promise.race([Promise.resolve(ctx.resume()).catch(()=>{}), new Promise(r => setTimeout(r, 1500))]);
+      if (ctx.state === 'running') return true;
+      clientLog('audio.ctx', String(ctx.state));
+      return false;
+    } catch(e){ clientLog('audio.ctx', 'error ' + ((e && e.message) || e)); return false; }
+  }
+  async function _playPCMStream(res){
+    const SAMPLE_RATE=16000; const ctx = audioCtx || new (window.AudioContext||window.webkitAudioContext)(); audioCtx=ctx;
+    const masterGain = ctx.createGain(); masterGain.connect(ctx.destination); curPCMGain=masterGain;
+    const reader = res.body.getReader(); let nextTime = ctx.currentTime + 0.06; let leftover = new Uint8Array(0); let lastSrc=null; let fetchAborted=false;
+    await new Promise(async (resolve, reject) => {
+      playResolve = resolve;
+      try {
+        while (true){ const { done, value } = await reader.read(); if (done) break; if (!value||!value.length) continue;
+          const full = new Uint8Array(leftover.length+value.length); full.set(leftover); full.set(value, leftover.length);
+          const numSamples = Math.floor(full.length/2); const evenLen = numSamples*2; leftover = full.slice(evenLen); if (numSamples===0) continue;
+          const view = new DataView(full.buffer, full.byteOffset, evenLen); const f32 = new Float32Array(numSamples);
+          for (let i=0;i<numSamples;i++) f32[i] = view.getInt16(i*2,true)/32768.0;
+          const buf = ctx.createBuffer(1,numSamples,SAMPLE_RATE); buf.getChannelData(0).set(f32);
+          const src = ctx.createBufferSource(); src.buffer=buf; src.connect(masterGain);
+          if (nextTime < ctx.currentTime + 0.01) nextTime = ctx.currentTime + 0.01;
+          src.start(nextTime); nextTime += buf.duration; lastSrc = src;
+        }
+      } catch(e){ if (e.name==='AbortError') fetchAborted=true; }
+      if (lastSrc){ const safetyMs = Math.max(0,(nextTime-ctx.currentTime))*1000+500; const tOut=setTimeout(()=>{ if (playResolve){ playResolve=null; resolve(); } }, safetyMs); lastSrc.onended=()=>{ clearTimeout(tOut); if (playResolve){ playResolve=null; resolve(); } }; }
+      else { if (playResolve){ playResolve=null; } if (fetchAborted) resolve(); else reject(new Error('voice service unavailable')); }
+    });
+    curPCMGain = null;
+  }
+  function speakNative(text, speaker){
+    return new Promise(resolve => {
+      if (!window.speechSynthesis){ resolve(); return; }
+      playResolve = resolve; const fin = () => { if (playResolve){ playResolve=null; resolve(); } };
+      try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); const v = pickVoice(speaker); if (v) u.voice=v; u.lang=(v&&v.lang)||'en-US'; u.rate=1.0; u.pitch = speaker==='patient'?1.12:speaker==='consult'?0.82:0.96; u.onend=fin; u.onerror=fin; speechSynthesis.speak(u); }
+      catch(e){ fin(); }
+    });
+  }
+
+  // ---- Push-to-talk ----
+  function pttDown(){
+    if (!listening || ptt || paused) return;
+    ptt=true; pttAt=performance.now();
+    stopAudio();                                   // barge-in: the resident is talking over the room
+    if (VOICE_BACKEND==='native'){ if (!processing){ try { recognition.start(); } catch(e){} setMic('rec'); setState('listening'); } return; }
+    if (processing) return;                        // the last turn is still working; capture starts when it clears
+    if (!sttWs || sttWs.readyState!==1) sttConnect();
+    if (!capturing){ sttActive = sttBegin(); startCapture(); }
+  }
+  function pttUp(){
+    if (!ptt) return;
+    ptt=false;
+    const held = performance.now()-pttAt;
+    if (VOICE_BACKEND==='native'){ try { recognition.stop(); } catch(e){} return; }
+    if (!capturing) return;
+    capturing=false;
+    pttDrop = held < PTT_MIN_MS;                   // a tap, not an utterance: the blob is discarded in onstop
+    if (pttDrop){ sttStreaming=false; sttActive=false; }
+    try { recorder.stop(); } catch(e){}
+    if (pttDrop){ roomHint('hold Space or the orb while you talk'); return; }
+    sttCommit();  // realtime: finalise the transcript; stays sttActive so processUtterance awaits it
+  }
+  function pttResume(){   // a press held through the previous turn starts capturing once it clears
+    if (ptt && listening && !processing && !capturing && VOICE_BACKEND!=='native'){ pttAt=performance.now(); sttActive = sttBegin(); startCapture(); }
+  }
+  function startCapture(){
+    chunks=[];
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+    recorder = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined);
+    recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop = () => { const parts=chunks; chunks=[]; if (parts.length && !pttDrop) processUtterance(new Blob(parts, { type: parts[0].type || 'audio/webm' })); };
+    pttDrop=false; recorder.start(); capturing=true; setMic('rec'); setState('listening');
+  }
+  async function processUtterance(blob){
+    const wantRealtime = sttActive; sttActive=false;
+    if (blob.size < 1500 && !wantRealtime){ if (listening) setMic('listen'); return; }
+    processing=true; setMic('busy'); setState('thinking');
+    let said='';
+    // Prefer the realtime committed transcript (ready ~when the resident stopped talking);
+    // fall back to the blocking blob upload if the socket returned nothing.
+    if (wantRealtime){ said = await sttAwaitFinal(1600); }
+    if (!said){
+      if (blob.size < 1500){ processing=false; if (listening) setMic('listen'); setState(listening?'listening':'idle'); return; }
+      try { said = await stt(blob); } catch(e){ roomHint((e&&e.message)||'transcription failed'); processing=false; if (!capturing) setMic(listening?'listen':'off'); setState(listening?'listening':'idle'); return; }
+    }
+    if (!said){ processing=false; if (listening) setMic('listen'); setState(listening?'listening':'idle'); return; }
+    await handleSaid(said);
+    if (!capturing) setMic(listening?'listen':'off');
+    pttResume();
+  }
+
+  /* ---------------- MIC BUTTON (orb) + text input ---------------- */
+  const micOrb = $('#micOrb'), micInput = $('#micInput');
+  function setMic(mode){ // off | listen | rec | busy
+    micOrb.classList.toggle('rec', mode==='rec' || mode==='listen');
+    micInput.placeholder = mode==='rec' ? 'Listening — release to send' : mode==='busy' ? 'Working…' : mode==='listen' ? 'Hold Space or the orb to talk, or type a command…' : 'Tap the orb to begin, or type a command…';
+  }
+  let INTRO_TEXT='', introPlayed=false;
+  async function playHandoff(){
+    if (INTRO_TEXT && !introPlayed){
+      setMic('busy');
+      // One automatic retry — the handoff is a one-time briefing, so a transient
+      // TTS hiccup shouldn't silently swallow it. introPlayed stays false on
+      // failure so a tap can still replay it.
+      let spoke=false;
+      for (let a=0; a<2 && !spoke; a++){
+        try { await playTTS(INTRO_TEXT, 'nurse'); spoke=true; }
+        catch(e){ if (a===0) await new Promise(r=>setTimeout(r,400)); }
+      }
+      if (!spoke){ roomHint('voice unavailable — tap again for the handoff'); clearSpeaking(); return true; }
+      introPlayed=true; clearSpeaking(); if (!listening) return false; setMic('listen');
+    }
+    return true;
+  }
+  async function startServer(){
+    try { if (!stream) stream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } }); }
+    catch(e){ roomHint('microphone permission needed'); return; }
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)(); if (audioCtx.state==='suspended') await audioCtx.resume();
+    if (!analyser){
+      analyser=audioCtx.createAnalyser(); analyser.fftSize=512; micSource=audioCtx.createMediaStreamSource(stream);
+      const hp=audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=250; hp.Q.value=0.7; micSource.connect(hp); hp.connect(analyser);
+      if (VOICE_BACKEND==='models' && audioCtx.createScriptProcessor){
+        // Tap post-highpass PCM and stream it to /ws/stt while an utterance is live.
+        try {
+          sttPcmNode = audioCtx.createScriptProcessor(4096, 1, 1);
+          const sink = audioCtx.createGain(); sink.gain.value = 0;  // silent — no echo, keeps node running
+          hp.connect(sttPcmNode); sttPcmNode.connect(sink); sink.connect(audioCtx.destination);
+          sttPcmNode.onaudioprocess = (e) => {
+            if (!sttStreaming || !sttWs || sttWs.readyState !== 1) return;
+            const pcm = floatTo16kPCM(e.inputBuffer.getChannelData(0), audioCtx.sampleRate);
+            try { sttWs.send(pcm.buffer); } catch(err){}
+          };
+        } catch(err){ sttPcmNode=null; }
+      }
+    }
+    if (VOICE_BACKEND==='models') sttConnect();
+    listening=true; setMic('listen'); setState('listening');
+    await playHandoff();
+  }
+  let recognition=null, recoSuspend=false;
+  function nativeSupported(){ return 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window; }
+  async function startNative(){
+    if (!nativeSupported()){ roomHint('this browser has no dictation — refresh and pick Speech models'); return; }
+    const SR = window.SpeechRecognition||window.webkitSpeechRecognition; recognition=new SR();
+    recognition.continuous=true; recognition.interimResults=true; recognition.lang='en-US';
+    // Push-to-talk: recognition runs only while the key/orb is held; release stops it
+    // and the final result (if any) reaches handleSaid. No auto-restart on end.
+    recognition.onresult=onNativeResult; recognition.onerror=()=>{}; recognition.onend=()=>{ if (listening && !processing && !capturing) setMic('listen'); };
+    listening=true; setMic('listen'); setState('listening');
+    await playHandoff();
+  }
+  function onNativeResult(event){
+    let finalText='', interim='';
+    for (let i=event.resultIndex;i<event.results.length;i++){ const r=event.results[i]; if (r.isFinal) finalText+=r[0].transcript; else interim+=r[0].transcript; }
+    if (interim && ptt) micInput.placeholder = interim.trim().slice(-60);
+    const said=finalText.trim(); if (!said) return;
+    recoSuspend=true; try { recognition.stop(); } catch(e){}
+    processing=true; setMic('busy'); setState('thinking');
+    handleSaid(said).finally(()=>{ recoSuspend=false; if (listening) setMic('listen'); });
+  }
+  async function startListening(){ if (VOICE_BACKEND==='native') return startNative(); return startServer(); }
+  function stopListening(){ listening=false; ptt=false; recoSuspend=false; sttStreaming=false; sttActive=false; if (recognition){ try { recognition.stop(); } catch(e){} } if (capturing){ capturing=false; try { recorder.stop(); } catch(e){} chunks=[]; } stopAudio(); clearSpeaking(); setMic('off'); setState('idle'); }
+
+  // The case begins explicitly via the green "Start case" button (or the first
+  // mic tap). Once started, the button goes inactive and the mic toggles talking.
+  let started=false;
+  const startCaseBtn=$('#startCaseBtn'), startCaseLbl=$('#startCaseLbl');
+  function markStarted(){
+    if (started) return;
+    started=true;
+    startCaseBtn.disabled=true; startCaseBtn.classList.add('done');
+    if (startCaseLbl) startCaseLbl.textContent='Case started';
+  }
+  function beginCase(){ if (started || ended) return; markStarted(); startListening(); }
+  startCaseBtn.addEventListener('click', beginCase);
+
+  // The orb: first tap begins the case + handoff; once live, press and hold to talk.
+  // Space does the same from the keyboard (ignored while typing in a field). A
+  // focused button is blurred first so Space can't re-fire it (Pause, End…).
+  micOrb.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (!started){ beginCase(); return; }
+    if (!listening){ startListening(); return; }
+    try { micOrb.setPointerCapture(e.pointerId); } catch(err){}
+    pttDown();
+  });
+  ['pointerup','pointercancel'].forEach(ev => micOrb.addEventListener(ev, pttUp));
+  function typingTarget(e){ const t=e.target; return !!(t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable)); }
+  document.addEventListener('keydown', e => {
+    if (e.code!=='Space' || e.repeat || typingTarget(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!started || !listening) return;
+    e.preventDefault();
+    if (document.activeElement && document.activeElement.tagName==='BUTTON') document.activeElement.blur();
+    pttDown();
+  });
+  document.addEventListener('keyup', e => { if (e.code!=='Space' || typingTarget(e)) return; if (ptt){ e.preventDefault(); pttUp(); } });
+  window.addEventListener('blur', pttUp);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pttUp(); });
+  micInput.addEventListener('keydown', e => {
+    if (e.key==='Enter' && micInput.value.trim()){ const t=micInput.value.trim(); micInput.value=''; markStarted(); if (!processing) handleSaid(t); }
+  });
+
+  /* ---------------- CLOCK / PAUSE ---------------- */
+  let secs = 0, paused = false, _wasListening = false;
+  const clockValEl = $('#clockVal'), clockBox = $('#clock');
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function clockStr(){ const h=Math.floor(secs/3600), m=Math.floor((secs%3600)/60), s=secs%60; return pad(h)+':'+pad(m)+':'+pad(s); }
+  setInterval(() => { if (paused||ended) return; secs++; clockValEl.textContent = clockStr(); updateTimeline(); }, 1000);
+  // Authoritative sync to the engine's scenario clock (session seed + live event `t`),
+  // so timed arrivals/results stamp at their true time, not a cosmetic client counter.
+  function syncClock(t){ if (typeof t === 'number' && t >= 0){ secs = Math.max(secs, Math.round(t)); clockValEl.textContent = clockStr(); updateTimeline(); } }
+
+  /* ---------------- SCENARIO TIMELINE ----------------
+     Non-spoiler progress bar. The fill grows with elapsed scenario time on an
+     asymptotic curve (always advancing, never falsely showing "complete"); a tick
+     is dropped each time the case moves into a new clinical phase, and the label
+     names the current phase. */
+  let clinicalState = null;
+  const TL_T = 540;   // time constant (s): the bar approaches — but never reaches — full
+  function tlPct(){ return ended ? 100 : Math.min(98, (1 - Math.exp(-secs / TL_T)) * 100); }
+  function updateTimeline(){
+    const pct = tlPct();
+    const f = $('#tlFill'); if (f) f.style.width = pct.toFixed(1) + '%';
+    const h = $('#tlHead'); if (h) h.style.left = pct.toFixed(1) + '%';
+  }
+  function markTimelinePhase(name){
+    const tl = $('#timeline'); if (!tl) return;
+    const tick = document.createElement('div'); tick.className = 'tl-tick';
+    tick.style.left = tlPct().toFixed(1) + '%'; if (name) tick.title = name;
+    tl.appendChild(tick);
+  }
+  function setClinicalState(st){
+    if (!st || !st.id || st.id === clinicalState) return;
+    const first = clinicalState === null;
+    clinicalState = st.id;
+    const lbl = $('.tl-label'); if (lbl && st.name) lbl.textContent = 'Phase · ' + st.name;
+    if (!first) markTimelinePhase(st.name);
+  }
+  $('#pauseBtn').addEventListener('click', async () => {
+    paused = !paused; clockBox.classList.toggle('paused', paused);
+    $('#pauseTxt').textContent = paused ? 'Resume' : 'Pause';
+    $('#pauseIcon').outerHTML = paused
+      ? '<svg id="pauseIcon" width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5l9 5.5-9 5.5z"/></svg>'
+      : '<svg id="pauseIcon" width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="2.5" width="3.2" height="11" rx="1"/><rect x="9.3" y="2.5" width="3.2" height="11" rx="1"/></svg>';
+    // Freeze the room, not just the clock: close the mic so nothing is captured
+    // (and cut any in-flight reply) while paused; restore listening on resume.
+    if (paused){
+      _wasListening = listening;
+      stopAudio();
+      if (listening) stopListening();
+    }
+    if (SESSION_ID){ try { await postJSON(paused ? '/api/voice/pause' : '/api/voice/unpause', { session_id: SESSION_ID }); } catch(e){} }
+    if (!paused && _wasListening){ _wasListening = false; startListening(); }
+    setState(paused ? 'idle' : (listening ? 'listening' : 'idle'));
+  });
+
+  /* ---------------- TABS / FILTERS / TOGGLES ---------------- */
+  $$('.tab').forEach(t => t.addEventListener('click', () => {
+    $$('.tab').forEach(x => { x.classList.remove('active'); x.setAttribute('aria-selected','false'); });
+    $$('.tabpane').forEach(p => p.classList.remove('active'));
+    t.classList.add('active'); t.setAttribute('aria-selected','true'); $('#pane-'+t.dataset.pane).classList.add('active');
+  }));
+  $$('.filter').forEach(f => f.addEventListener('click', () => {
+    $$('.filter').forEach(x => x.classList.remove('active')); f.classList.add('active');
+    curFilter = f.dataset.cat;
+    $$('.inv-card').forEach(c => { const cats=(c.dataset.cat||'').split(' '); c.style.display = (curFilter==='all'||cats.includes(curFilter)) ? '' : 'none'; });
+  }));
+  monitorTog.addEventListener('click', () => { if (monitorTog.classList.contains('on')) hideVitals(); else revealVitals('all'); });
+  // Single source of truth for audio state — used by the top-bar pill and Settings.
+  function setAudioMuted(muted){
+    audioMuted = muted;
+    const tog = $('#audioTog');
+    tog.classList.toggle('on', !muted);
+    tog.setAttribute('aria-pressed', String(!muted));
+    const sw = $('#stAudioSw'); if (sw) sw.classList.toggle('on', !muted);   // keep Settings in sync
+    if (muted) stopAudio();
+  }
+  $('#audioTog').addEventListener('click', function(){
+    setAudioMuted(!audioMuted);
+    roomHint(audioMuted ? 'Audio muted — replies show as text' : 'Audio on');
+  });
+  $('#rcConsult').addEventListener('click', () => { if (!processing) handleSaid('Can we get the consultant on the phone?'); });
+  $('#rcNurse').addEventListener('click', () => {
+    const dot = $('#rcNurse .rc-dot'); if (dot) dot.remove();   // clear the attention flag
+    if (processing){ roomHint('one moment — the room is mid-response'); return; }
+    handleSaid('Nurse, are you there?', 'nurse');               // real turn → she acknowledges
+  });
+  // Uses the in-app modal (openEndConfirm), not the native confirm() — the latter
+  // gets swallowed by some browser extensions / hosted contexts, leaving the OK
+  // button unresponsive.
+  $('#endBtn').addEventListener('click', () => openEndConfirm());
+
+  /* ---------------- CASE-NAME DROPDOWN ---------------- */
+  // Popover anchored under the scenario button. Built in JS + appended to <body>
+  // and positioned via getBoundingClientRect, so DOM order can't break it. The
+  // "Scenario brief" entry is added alongside these when that modal is built.
+  (function(){
+    const sel = $('#scenarioSel');
+    sel.setAttribute('aria-haspopup', 'menu');
+    sel.setAttribute('aria-expanded', 'false');
+    const menu = document.createElement('div');
+    menu.className = 'sc-menu';
+    menu.setAttribute('role', 'menu');
+    menu.innerHTML =
+      '<button class="sc-item" role="menuitem" data-act="brief">' +
+        '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="10" height="12" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></svg>' +
+        '<span class="txt"><b>Scenario brief</b><i>Case framing (no spoilers)</i></span></button>' +
+      '<button class="sc-item" role="menuitem" data-act="switch">' +
+        '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h9l-2-2M14 11H5l2 2"/></svg>' +
+        '<span class="txt"><b>Switch case</b><i>Back to the case picker</i></span></button>' +
+      '<button class="sc-item" role="menuitem" data-act="exit">' +
+        '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14H3V2h3M10 11l3-3-3-3M13 8H6"/></svg>' +
+        '<span class="txt"><b>Pause &amp; exit</b><i>Save this run and go home</i></span></button>';
+    document.body.appendChild(menu);
+    function place(){ const r = sel.getBoundingClientRect(); menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + 8) + 'px'; menu.style.minWidth = r.width + 'px'; }
+    function openMenu(){ place(); menu.classList.add('open'); sel.setAttribute('aria-expanded', 'true'); }
+    function closeMenu(){ menu.classList.remove('open'); sel.setAttribute('aria-expanded', 'false'); }
+    sel.addEventListener('click', e => { e.stopPropagation(); menu.classList.contains('open') ? closeMenu() : openMenu(); });
+    document.addEventListener('click', e => { if (!menu.contains(e.target) && e.target !== sel) closeMenu(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+    window.addEventListener('resize', () => { if (menu.classList.contains('open')) place(); });
+    menu.addEventListener('click', async e => {
+      const btn = e.target.closest('.sc-item'); if (!btn) return;
+      closeMenu();
+      if (btn.dataset.act === 'brief'){ openScenarioBrief(); }
+      else if (btn.dataset.act === 'switch'){ location.href = '/home?new=1'; }
+      else if (btn.dataset.act === 'exit'){
+        if (SESSION_ID){ try { await postJSON('/api/voice/pause', { session_id: SESSION_ID }); } catch(e){} }
+        location.href = '/home';
+      }
+    });
+  })();
+
+  /* ---------------- ADD PARTICIPANT ---------------- */
+  // Lists the case's roster actors who aren't in the room yet and summons the
+  // chosen one through the real engine (a "call … in" utterance → routing.py
+  // _summon_target), so their arrival is grounded, not faked client-side. Only
+  // authored roster actors can be summoned — there are no ad-hoc participants.
+  (function(){
+    const btn = $('#rcAdd');
+    const menu = document.createElement('div');
+    menu.className = 'sc-menu';
+    menu.setAttribute('role', 'menu');
+    document.body.appendChild(menu);
+    const personSVG = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="2.6"/><path d="M3 13c0-2.5 2.2-4 5-4s5 1.5 5 4"/></svg>';
+    const phoneSVGi = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.2c0 5 4.8 9.8 9.8 9.8l.8-2.6-3-1-1.2 1.4c-1.7-.8-3-2.1-3.8-3.8l1.4-1.2-1-3z"/></svg>';
+    function render(){
+      const absent = CAST.filter(a => !a.present);
+      if (!absent.length){ menu.innerHTML = '<div class="sc-empty">Everyone in this case is already in the room.</div>'; return; }
+      menu.innerHTML = absent.map(a =>
+        '<button class="sc-item" role="menuitem" data-id="' + escapeHtml(a.id) + '">' +
+          (a.phone ? phoneSVGi : personSVG) +
+          '<span class="txt"><b>' + escapeHtml(a.name || a.role) + '</b><i>' + (a.phone ? 'Call for a consult' : 'Bring into the room') + '</i></span></button>'
+      ).join('');
+    }
+    function place(){ const r = btn.getBoundingClientRect(); menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + 8) + 'px'; menu.style.minWidth = r.width + 'px'; }
+    function openMenu(){ render(); place(); menu.classList.add('open'); }
+    function closeMenu(){ menu.classList.remove('open'); }
+    btn.addEventListener('click', e => { e.stopPropagation(); menu.classList.contains('open') ? closeMenu() : openMenu(); });
+    document.addEventListener('click', e => { if (!menu.contains(e.target) && !btn.contains(e.target)) closeMenu(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+    window.addEventListener('resize', () => { if (menu.classList.contains('open')) place(); });
+    menu.addEventListener('click', e => {
+      const it = e.target.closest('.sc-item'); if (!it) return;
+      closeMenu();
+      const a = byId[it.dataset.id]; if (!a) return;
+      if (processing){ roomHint('one moment — the room is mid-response'); return; }
+      handleSaid(a.phone ? ('Call ' + a.role + ' for a consult') : ('Call ' + (a.name || a.role) + ' into the room'));
+    });
+  })();
+
+  /* ---------------- ROOM EVENTS ---------------- */
+  // A running log of autonomous room activity — cues/prompts, actor arrivals,
+  // status changes and results — surfaced in a slide-over. The rail badge counts
+  // events that landed while the panel was closed; opening it clears the count.
+  const roomEvents = [];
+  let evUnread = 0, evOpen = false;
+  const EV_META = {
+    cue:      { label:'Prompt',   c:'var(--teal-glow)', g:'◆' },
+    arrival:  { label:'Arrival',  c:'var(--green)',     g:'▲' },
+    state:    { label:'Update',   c:'var(--amber)',     g:'◆' },
+    critical: { label:'Critical', c:'var(--red)',       g:'⚠' },
+    result:   { label:'Result',   c:'var(--ink-300)',   g:'●' },
+  };
+  const evDrawer = document.createElement('div');
+  evDrawer.className = 'ev-drawer';
+  evDrawer.innerHTML = '<div class="ev-head"><span class="t">Room events</span><span class="n" id="evCount"></span><button class="x" aria-label="Close">×</button></div><div class="ev-body" id="evBody"></div>';
+  document.body.appendChild(evDrawer);
+  function evBadge(){
+    const b = $('#rcEvents .rc-badge'); if (!b) return;
+    if (evUnread > 0 && !evOpen){ b.textContent = evUnread; b.style.display = ''; }
+    else { b.style.display = 'none'; }
+  }
+  function renderEvents(){
+    const body = $('#evBody'); const cnt = $('#evCount');
+    if (cnt) cnt.textContent = roomEvents.length ? (roomEvents.length + '') : '';
+    if (!roomEvents.length){ body.innerHTML = '<div class="ev-empty">No room events yet.<br>Arrivals, prompts and status changes will appear here as the case unfolds.</div>'; return; }
+    body.innerHTML = roomEvents.slice().reverse().map(e => {
+      const m = EV_META[e.type] || EV_META.result;
+      return '<div class="ev-item"><div class="ic" style="background:color-mix(in srgb,' + m.c + ' 15%, transparent);color:' + m.c + '">' + m.g + '</div>' +
+        '<div class="b"><div class="ttl" style="color:' + m.c + '">' + m.label + '</div>' +
+        '<div class="msg">' + escapeHtml(e.text) + '</div><div class="tm">' + e.t + '</div></div></div>';
+    }).join('');
+  }
+  function logEvent(type, text){
+    if (!text) return;
+    roomEvents.push({ t: clockStr(), type, text: String(text) });
+    if (!evOpen) evUnread++;
+    evBadge();
+    if (evOpen) renderEvents();
+  }
+  function openEvents(){ evOpen = true; evUnread = 0; evBadge(); renderEvents(); evDrawer.classList.add('open'); }
+  function closeEvents(){ evOpen = false; evDrawer.classList.remove('open'); }
+  $('#rcEvents').addEventListener('click', () => evOpen ? closeEvents() : openEvents());
+  evDrawer.querySelector('.x').addEventListener('click', closeEvents);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && evOpen) closeEvents(); });
+  evBadge();   // hide the static "3" placeholder until real events arrive
+
+  /* ---------------- ADD INVESTIGATION (orderable-tests picker) ---------------- */
+  // Opens the case's own investigation menu; a click orders it through the same
+  // grounded engine path as saying "order the chest x-ray" (deterministic action).
+  (function(){
+    const btn = $('#addInv');
+    const menu = document.createElement('div');
+    menu.className = 'sc-menu';
+    menu.setAttribute('role', 'menu');
+    document.body.appendChild(menu);
+    const CAT = { lab:'Lab', labs:'Lab', imaging:'Imaging', ecg:'ECG', cardiac:'ECG', bedside:'Bedside' };
+    function render(){
+      const invs = (MENU.investigations || []);
+      if (!invs.length){ menu.innerHTML = '<div class="sc-empty">This case has no orderable investigations.</div>'; return; }
+      menu.innerHTML = invs.map(i => {
+        const done = orderedInv.has(i.id);
+        const tag = done ? '<span class="done-mark">✓</span>' : '<span class="tag">' + escapeHtml(CAT[i.category] || i.category || 'Test') + '</span>';
+        return '<button class="sc-item' + (done ? ' done' : '') + '" role="menuitem" data-id="' + escapeHtml(i.id) + '" data-name="' + escapeHtml(i.name) + '">' +
+          '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h8v12H4zM6 5h4M6 8h4M6 11h2"/></svg>' +
+          '<span class="txt"><b>' + escapeHtml(i.name) + '</b></span>' + tag + '</button>';
+      }).join('');
+    }
+    // Opens upward — the button sits at the bottom of the investigations column.
+    function place(){ const r = btn.getBoundingClientRect(); menu.style.left = r.left + 'px'; menu.style.top = 'auto'; menu.style.bottom = (window.innerHeight - r.top + 8) + 'px'; menu.style.minWidth = r.width + 'px'; }
+    function openMenu(){ render(); place(); menu.classList.add('open'); }
+    function closeMenu(){ menu.classList.remove('open'); }
+    btn.addEventListener('click', e => { e.stopPropagation(); menu.classList.contains('open') ? closeMenu() : openMenu(); });
+    document.addEventListener('click', e => { if (!menu.contains(e.target) && !btn.contains(e.target)) closeMenu(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+    window.addEventListener('resize', () => { if (menu.classList.contains('open')) place(); });
+    menu.addEventListener('click', e => {
+      const it = e.target.closest('.sc-item'); if (!it) return;
+      closeMenu();
+      if (processing){ roomHint('one moment — the room is mid-response'); return; }
+      orderedInv.add(it.dataset.id);
+      runAction('order_investigation', it.dataset.id, 'Order ' + it.dataset.name + '.');
+    });
+  })();
+
+  /* ---------------- SHARED MODAL (brief / help / settings) ---------------- */
+  const fmodal = document.createElement('div');
+  fmodal.className = 'fmodal-backdrop';
+  fmodal.innerHTML = '<div class="fmodal"><div class="fmodal-head"><div class="tt"><div class="fmodal-kick" id="fmKick"></div><div class="fmodal-title" id="fmTitle"></div></div><button class="fmodal-x" aria-label="Close">×</button></div><div class="fmodal-body" id="fmBody"></div></div>';
+  document.body.appendChild(fmodal);
+  function openModal(kick, title, html){
+    document.getElementById('fmKick').textContent = kick || '';
+    document.getElementById('fmTitle').textContent = title || '';
+    document.getElementById('fmBody').innerHTML = html || '';
+    fmodal.classList.add('open');
+  }
+  function closeModal(){ fmodal.classList.remove('open'); }
+  fmodal.querySelector('.fmodal-x').addEventListener('click', closeModal);
+  fmodal.addEventListener('click', e => { if (e.target === fmodal) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && fmodal.classList.contains('open')) closeModal(); });
+
+  /* ---------------- END-SCENARIO CONFIRM ---------------- */
+  // In-app confirmation for ending the case — replaces native confirm().
+  function openEndConfirm(){
+    if (ended) return;
+    openModal('End case', 'End this scenario?',
+      '<div class="bf-note">This stops the clock and generates your debrief. You won\'t be able to return to the case afterward.</div>' +
+      '<div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">' +
+        '<button type="button" id="endCancelBtn" style="padding:11px 18px; border-radius:11px; cursor:pointer; font:inherit; font-weight:600; font-size:13px; background:transparent; border:1px solid var(--line); color:var(--ink-200);">Keep going</button>' +
+        '<button type="button" id="endConfirmBtn" style="padding:11px 20px; border-radius:11px; cursor:pointer; font:inherit; font-weight:700; font-size:13px; background:linear-gradient(180deg,#b3392b,#8f2b20); border:1px solid #c74537; color:#ffe9e5;">End &amp; debrief</button>' +
+      '</div>');
+    const cancel = document.getElementById('endCancelBtn'), ok = document.getElementById('endConfirmBtn');
+    if (cancel) cancel.addEventListener('click', closeModal);
+    if (ok) ok.addEventListener('click', () => { closeModal(); try { stopListening(); } catch(e){} concludeCase(true); });
+  }
+
+  /* ---------------- SCENARIO BRIEF ---------------- */
+  // Framing only — specialty/setting/patient + the presenting complaint. Never the
+  // diagnosis, findings, or history the resident is meant to elicit (non-spoiler).
+  function openScenarioBrief(){
+    const m = CASE_INFO.meta || {}, p = CASE_INFO.patient || {}, pres = CASE_INFO.presentation || {};
+    const g = (p.gender || ''); const age = p.age ? (p.age + (g ? (' ' + g[0].toUpperCase()) : '')) : '';
+    const chips = [];
+    if (m.specialty) chips.push('<span class="bf-chip">Specialty <b>' + escapeHtml(m.specialty) + '</b></span>');
+    if (m.difficulty) chips.push('<span class="bf-chip">Difficulty <b>' + escapeHtml(titleCase(m.difficulty)) + '</b></span>');
+    if (CASE_INFO.setting) chips.push('<span class="bf-chip">Setting <b>' + escapeHtml(CASE_INFO.setting) + '</b></span>');
+    if (age || p.name) chips.push('<span class="bf-chip">Patient <b>' + escapeHtml(((p.name ? p.name + ', ' : '') + age).trim()) + '</b></span>');
+    let html = chips.length ? '<div class="bf-row">' + chips.join('') + '</div>' : '';
+    if (pres.chief_complaint) html += '<div><div class="bf-sec-h">Presenting complaint</div><div class="bf-quote">"' + escapeHtml(pres.chief_complaint) + '"</div></div>';
+    html += '<div class="bf-note">Your task: assess the patient, order the investigations you need, examine, involve the team — then commit a working diagnosis when you\'re ready. Everything else you discover by asking the room.</div>';
+    openModal('Scenario brief', m.title || CASE_INFO.case_id || 'Live case', html);
+  }
+  $('#briefBtn').addEventListener('click', openScenarioBrief);
+
+  /* ---------------- HELP ---------------- */
+  function openHelp(){
+    const rows = [
+      ['Talk or type', 'Hold Space (or press and hold the orb) while you speak and release to send. Or type into the command bar. The room replies out loud.'],
+      ['Address someone', 'Name who you mean — “Nurse, …”, “Husband, …”, “Paramedic, …” — to direct a question. Unaddressed bedside talk goes to the patient.'],
+      ['Order & examine', 'Say “order a chest X-ray”, “examine her chest”, “give 5 of…”, or use Add Investigation / Call Consultant / Add Participant.'],
+      ['Vitals', 'Ask for what you need (“what’s her sat?”) — only that value shows. Patient Monitor reveals the full set.'],
+      ['Diagnose', 'State your working diagnosis whenever you like (“I think this is …”); it’s recorded for the debrief.'],
+      ['Controls', 'Pause freezes the clock. Audio mutes the voices (transcript stays). End Scenario finishes and opens your debrief.'],
+      ['Esc', 'Closes any open panel or dialog.'],
+    ];
+    openModal('Help', 'Running the room', rows.map(r =>
+      '<div class="hl-item"><span class="k">' + escapeHtml(r[0]) + '</span><span class="d">' + escapeHtml(r[1]) + '</span></div>'
+    ).join(''));
+  }
+  $('#helpBtn').addEventListener('click', openHelp);
+
+  /* ---------------- SETTINGS ---------------- */
+  function openSettings(){
+    const html =
+      '<div class="st-row"><div class="lab"><b>Speech input</b><i>Switching reloads the room and resumes this case.</i></div>' +
+        '<div class="st-seg" id="stSpeech"><button data-v="native" class="' + (VOICE_TIER==='native' ? 'on' : '') + '">Browser</button><button data-v="models" class="' + (VOICE_TIER==='models' ? 'on' : '') + '">Voice models</button></div></div>' +
+      '<div class="st-row"><div class="lab"><b>Room audio</b><i>Play the room’s voices aloud.</i></div>' +
+        '<div class="st-switch ' + (audioMuted ? '' : 'on') + '" id="stAudioSw" role="switch" aria-checked="' + (!audioMuted) + '"></div></div>' +
+      '<div class="st-row"><div class="lab"><b>Talking</b><i>Hold Space or the orb while you speak; release to send.</i></div></div>';
+    openModal('Settings', 'Session settings', html);
+
+    document.getElementById('stAudioSw').addEventListener('click', function(){ setAudioMuted(!audioMuted); this.setAttribute('aria-checked', String(!audioMuted)); });
+    document.getElementById('stSpeech').addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      const v = b.dataset.v; if (v === VOICE_TIER) return;
+      const q = new URLSearchParams(location.search);
+      q.set('speech', v); if (SESSION_ID) q.set('session', SESSION_ID);
+      location.search = q.toString();   // reload in the new mode, resuming this session
+    });
+  }
+  $('#settingsBtn').addEventListener('click', openSettings);
+
+  const notes=$('#notes'), sync=$('#sync'), syncTxt=$('#syncTxt'); let saveT;
+  notes && notes.addEventListener('input', () => { sync.classList.add('saving'); syncTxt.textContent='Saving…'; clearTimeout(saveT); saveT=setTimeout(()=>{ sync.classList.remove('saving'); syncTxt.textContent='Synced'; }, 900); });
+
+  /* ---------------- LIVE EVENT CHANNEL (autonomous clock) ---------------- */
+  let liveWS=null, liveLastSeq=0, liveRetry=0;
+  function connectLiveEvents(){
+    if (!SESSION_ID || liveWS) return;
+    const proto = location.protocol==='https:' ? 'wss' : 'ws';
+    const since = liveLastSeq ? `?since=${liveLastSeq}` : '';
+    let ws; try { ws = new WebSocket(`${proto}://${location.host}/ws/voice/${SESSION_ID}${since}`); } catch(e){ return; }
+    liveWS = ws;
+    ws.onopen = () => { liveRetry=0; };
+    ws.onmessage = (ev) => { let m; try { m=JSON.parse(ev.data); } catch(e){ return; } if (!m||typeof m.seq!=='number'||m.seq<=liveLastSeq) return; liveLastSeq=m.seq; handleLiveEvent(m); };
+    ws.onerror = () => { try { ws.close(); } catch(e){} };
+    ws.onclose = () => { liveWS=null; if (ended||pendingEnd) return; liveRetry=Math.min(liveRetry+1,6); setTimeout(connectLiveEvents, 500*Math.pow(2,liveRetry-1)); };
+  }
+  async function handleLiveEvent(m){
+    const d = m.data || {};
+    syncClock(m.t);   // stamp this event at the engine's real scenario time
+    // A cue/result that lands while a turn is in flight used to be shown but never
+    // voiced. The speak queue serialises it with the reply, so it is always heard.
+    if (m.kind==='cue'){ const sp=m.speaker||'nurse'; safeUI('live-cue', () => { addTurn({who:sp,t:clockStr(),line:m.text}); logEvent('cue', m.text); }); if (m.text){ try { await playTTS(m.text, sp); } catch(e){} } return; }
+    if (m.kind==='result'){ const sp=m.speaker||'nurse'; safeUI('live-result', () => { clearWorking(sp); if (d.card) addCard(d.card); if (m.text){ addTurn({who:sp,t:clockStr(),line:m.text}); logEvent('result', m.text); } }); if (m.text){ try { await playTTS(m.text, sp); } catch(e){} } return; }
+    if (m.kind==='state_change' || m.kind==='condition'){ if (d.vitals) applyVitals(d.vitals); if (d.state) setClinicalState(d.state); if (m.text){ roomHint(m.text); logEvent(d.critical ? 'critical' : 'state', m.text); if (d.critical) setStatus('⚠ ' + m.text, null); } return; }
+    if (m.kind==='presence'){ if (m.speaker) markPresent(m.speaker); if (m.data && m.data.id) markPresent(m.data.id); return; }
+    if (m.kind==='case_ended'){ if (!ended) concludeCase(); return; }
+  }
+
+  /* ---------------- END / DEBRIEF ---------------- */
+  // NB: the #debrief markup lives at the end of <body>, *after* this script, so we
+  // must resolve it lazily (getElementById here would return null and abort boot).
+  let _coachNote = '';
+
+  function _renderTimeline(path){
+    if (!path || !path.length) return '';
+    const SHOW = 5;
+    const items = path.map((name, i) =>
+      '<div class="db-tl-item"><div class="db-tl-spine"><div class="db-tl-dot"></div><div class="db-tl-line"></div></div>'+
+      '<div class="db-tl-label"><b>Step '+(i+1)+'</b>'+escapeHtml(name)+'</div></div>');
+    const hidden = items.length > SHOW;
+    const visibleHtml = items.slice(0, hidden ? SHOW : undefined).join('');
+    const hiddenHtml = hidden
+      ? '<div class="db-tl-hidden" style="display:none">'+items.slice(SHOW).join('')+'</div>'+
+        '<div class="db-tl-more" onclick="this.previousElementSibling.style.display=\'\'; this.remove()">+ '+(items.length - SHOW)+' more states</div>'
+      : '';
+    return '<div class="db-timeline">'+visibleHtml+hiddenHtml+'</div>';
+  }
+
+  function showDebrief(d){
+    const s = d.summary || {}, t = d.teaching || {};
+    document.getElementById('dbTitle').textContent = d.case_title || 'Case complete';
+    const dbOutcome = document.getElementById('dbOutcome');
+    dbOutcome.textContent = s.ended ? s.outcome : ('Ended early — ' + (s.outcome || ''));
+    dbOutcome.className = 'db-outcome' + (!s.ended ? ' early' : ((s.critical_errors || []).length ? ' bad' : ''));
+
+    const dbDonut = document.getElementById('dbDonut');
+    const score = typeof d.overall_score === 'number' ? d.overall_score : null;
+    if (score !== null){
+      const circ = 188.5;
+      const arc = document.getElementById('dbDonutArc');
+      arc.setAttribute('stroke-dashoffset', String(circ * (1 - score / 100)));
+      arc.setAttribute('stroke', score >= 70 ? 'var(--teal-glow)' : score >= 40 ? 'var(--amber)' : '#e06c5f');
+      document.getElementById('dbScoreNum').textContent = score;
+      dbDonut.classList.add('visible');
+    } else { dbDonut.classList.remove('visible'); }
+
+    _coachNote = d.coaching_note || '';
+    const sec = (h, inner, extraHead) => inner ? '<div><div class="db-sec-h">'+escapeHtml(h)+(extraHead||'')+'</div>'+inner+'</div>' : '';
+    const chips = arr => (arr && arr.length) ? arr.map(x => '<span class="db-chip">'+escapeHtml(x)+'</span>').join('') : '<span class="db-chip none">none</span>';
+    const list = (arr, cls) => (arr && arr.length) ? '<ul class="db-list '+(cls||'')+'">'+arr.map(x => '<li>'+escapeHtml(x)+'</li>').join('')+'</ul>' : '';
+
+    let html = '';
+    const assess = d.assessment || [];
+    if (assess.length){
+      const rows = assess.map(c =>
+        '<div class="db-crit '+(c.met ? 'met' : 'miss')+'"><span class="db-crit-mark">'+(c.met ? '✓' : '✕')+'</span>'+
+        '<span class="db-crit-label">'+escapeHtml(c.label)+'</span>'+
+        '<span class="db-crit-detail">'+escapeHtml(c.detail || '')+'</span></div>').join('');
+      html += sec('Assessment', '<div class="db-crits">'+rows+'</div>');
+    }
+    if (_coachNote){
+      const playBtn = '<button class="db-coach-play" id="dbCoachPlay" title="Read aloud"><svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg></button>';
+      html += sec('Coaching', '<div class="db-coach-wrap"><div class="db-coach">'+escapeHtml(_coachNote)+'</div></div>', playBtn);
+    }
+    html += sec('Your run',
+      '<div class="db-stats"><span class="db-stat">Time <b>'+escapeHtml(s.elapsed_label || '—')+'</b></span>'+
+      '<span class="db-stat">Path <b>'+((s.states_path || []).length)+' states</b></span>'+
+      (score !== null ? '<span class="db-stat">Score <b>'+score+'/100</b></span>' : '')+'</div>');
+    const path = s.states_path || [];
+    if (path.length) html += sec('Timeline', _renderTimeline(path));
+    html += sec('Examined', '<div class="db-chips">'+chips(s.exams)+'</div>');
+    html += sec('Investigations', '<div class="db-chips">'+chips(s.investigations)+'</div>');
+    html += sec('Consults', '<div class="db-chips">'+chips(s.consults)+'</div>');
+    if ((s.critical_errors || []).length) html += sec('Critical errors', '<div class="db-chips">'+s.critical_errors.map(x => '<span class="db-chip err">'+escapeHtml(x)+'</span>').join('')+'</div>');
+    html += sec('Teaching points', list(t.teaching_points));
+    html += sec('Common errors', list(t.common_errors, 'errs'));
+    if ((t.references || []).length) html += sec('References', '<div class="db-refs">'+t.references.map(escapeHtml).join('<br>')+'</div>');
+    document.getElementById('dbBody').innerHTML = html;
+    document.getElementById('debrief').classList.add('open');
+
+    const playBtn = document.getElementById('dbCoachPlay');
+    if (playBtn){
+      const playIco = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg>';
+      const stopIco = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1"/><rect x="9" y="2" width="4" height="12" rx="1"/></svg>';
+      playBtn.addEventListener('click', async () => {
+        if (playBtn.classList.contains('playing')){ stopAudio(); playBtn.classList.remove('playing'); playBtn.innerHTML = playIco; return; }
+        playBtn.classList.add('playing'); playBtn.innerHTML = stopIco;
+        try { await playTTS(_coachNote, 'nurse'); } catch(e){}
+        playBtn.classList.remove('playing'); playBtn.innerHTML = playIco;
+      });
+    }
+  }
+
+  async function concludeCase(userEnded){
+    if (ended) return; ended = true;
+    updateTimeline();   // fill the scenario timeline to 100% now the case is over
+    try { stopListening(); } catch(e){}
+    stopAudio();
+    clientFlush();
+    setStatus('Scenario complete', 'Generating debrief…');
+    try {
+      const d = await postJSON('/api/voice/debrief', { session_id: SESSION_ID });
+      showDebrief(d);
+    } catch(e){
+      // If the debrief can't be built, don't strand the resident — send them home.
+      setStatus('Scenario complete', (e && e.message) || 'Could not load the debrief.');
+      setTimeout(() => { location.href = '/home'; }, 1600);
+    }
+  }
+  // The debrief is the terminal screen — closing or starting a new case leaves the
+  // finished room (home / the case picker), never back into it. Wired on DOM-ready
+  // because the #debrief markup is parsed after this script runs.
+  function _wireDebriefButtons(){
+    const close = document.getElementById('dbClose'), neu = document.getElementById('dbNew'), print = document.getElementById('dbPrint');
+    if (close) close.addEventListener('click', () => { location.href = '/home'; });
+    if (neu) neu.addEventListener('click', () => { location.href = '/home?new=1'; });
+    if (print) print.addEventListener('click', () => window.print());
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _wireDebriefButtons);
+  else _wireDebriefButtons();
+
+  /* ---------------- SESSION BOOT ---------------- */
+  function titleCase(s){ return s ? s[0].toUpperCase()+s.slice(1) : s; }
+  // Ask for microphone access as soon as the case loads (voice is the primary
+  // input). If already granted we don't reopen the device; if blocked we surface a
+  // persistent, actionable message instead of failing silently on the first tap.
+  let micDenied=false;
+  async function ensureMic(){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      micDenied=true; setStatus('🎤 Microphone unavailable', 'This browser blocks mic access — voice input won’t work.'); return false;
+    }
+    try {
+      if (navigator.permissions && navigator.permissions.query){
+        try { const st = await navigator.permissions.query({ name:'microphone' }); if (st.state==='granted') return true; } catch(e){}
+      }
+      const s = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
+      // Native dictation manages its own capture — release the device now; the
+      // server backend reuses this stream for VAD/recording.
+      if (VOICE_BACKEND==='native'){ s.getTracks().forEach(t=>t.stop()); } else { stream = s; }
+      return true;
+    } catch(e){
+      micDenied=true;
+      setStatus('🎤 Microphone blocked', 'Allow mic access in your browser, then reload to use voice.');
+      roomHint('microphone access is needed — allow it and reload');
+      return false;
+    }
+  }
+
+  async function startSession(){
+    const cfg = window.SIM_CONFIG;
+    // No case and nothing to resume → back to the launcher, which lists the cases.
+    if (!cfg.caseId && !cfg.sessionId){ location.href = '/simulator/voice-room'; return; }
+    let data;
+    try {
+      const res = cfg.sessionId
+        ? await fetch('/api/voice/resume', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ session_id: cfg.sessionId }) })
+        : await fetch('/api/voice/session', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ case_id: cfg.caseId }) });
+      if (res.status === 401){ location.href='/'; return; }
+      if (!res.ok){ if (cfg.sessionId) { location.href='/home'; return; } roomHint('could not start the case'); return; }
+      data = await res.json();
+    } catch(e){ roomHint('could not reach the server'); return; }
+    if (!data) return;
+    SESSION_ID = data.session_id;
+    syncClock(data.elapsed_seconds || 0);   // seed the scenario clock from the engine
+    setClinicalState(data.state);           // seed the timeline phase (no tick for the opening phase)
+    const p = data.patient||{}, pres = data.presentation||{}, meta = data.meta||{};
+    CASE_INFO = { patient:p, presentation:pres, meta, case_id:data.case_id, setting:(data.setting||meta.setting) };
+    const g = (p.gender||'').charAt(0).toUpperCase();
+    const ageStr = p.age ? (p.age + (g||'')) : '';
+    $('#scLbl').textContent = meta.title || (data.case_id||'Live case');
+    $('#scSub').textContent = [ageStr, meta.specialty, titleCase(meta.difficulty||'')].filter(Boolean).join(' · ');
+    document.title = `CasesBasis — Live Sim · ${meta.title||''}`;
+    if (p.name || ageStr) $('#ovCid').textContent = [p.name, ageStr].filter(Boolean).join(' · ');
+    if (pres.chief_complaint) $('#ovQuote').textContent = '"' + pres.chief_complaint + '"';
+    // Neutral at boot — don't dump the complaint/vignette; the resident discovers it.
+    setStatus('New patient', 'Just arrived — begin your assessment.');
+    applyVitals(data.vitals);
+    if (!(data.vitals && data.vitals.pain != null)) vPain.textContent = '—';   // no pain score in this case
+    buildCast(data.roster);
+    MENU = data.menu || MENU;   // the case's orderable tests / exams / consultants
+    invList.innerHTML = '';   // drop the static mock cards — only real results from here
+    seedInvSections();          // pre-seed one tappable section per exam/investigation
+    if (data.live_runtime) connectLiveEvents();
+    if (data.resumed){
+      (data.history||[]).forEach(t => { const you = (t.role==='resident'); addTurn({ who: you?undefined:(t.speaker||'nurse'), you, t:'', line:t.text }); });
+      (data.patient_history||[]).forEach(t => { const you = (t.role==='resident'); addTurn({ who: you?undefined:'patient', you, t:'', line:t.text }); });
+      (data.cards||[]).forEach(c => addCard(c));
+      if ('pending' in data) applyPending(data.pending);
+      markStarted();   // a resumed case is already underway
+      roomHint('resumed — tap the orb, then hold Space to talk');
+    } else {
+      INTRO_TEXT = (data.intro||'').trim();
+      if (INTRO_TEXT){
+        addTurn({ who:'nurse', t:clockStr(), line:INTRO_TEXT });
+        // seed the single bubble with the nurse's handoff (the one bubble on screen at start)
+        const nurse = castByClass('nurse');
+        if (nurse) showBubble(nurse.id, { text: INTRO_TEXT });
+        roomHint('click “Start case” to hear the handoff and begin');
+      }
+    }
+    setState('listening');
+  }
+
+  // kick off
+  setMic('off'); setState('listening');
+  startSession().then(ensureMic);
+})();
+</script>
+
+<!-- End-of-case debrief (same report the cool room shows) -->
+<div class="debrief" id="debrief">
+  <div class="db-card">
+    <div class="db-head-row">
+      <div class="db-head-text">
+        <div class="db-kicker">Case debrief</div>
+        <div class="db-title" id="dbTitle"></div>
+        <div class="db-outcome" id="dbOutcome"></div>
+      </div>
+      <div class="db-donut" id="dbDonut">
+        <svg viewBox="0 0 76 76" fill="none">
+          <circle cx="38" cy="38" r="30" stroke="rgba(255,255,255,0.07)" stroke-width="7"/>
+          <circle id="dbDonutArc" cx="38" cy="38" r="30" stroke="var(--teal-glow)" stroke-width="7"
+            stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5"
+            transform="rotate(-90 38 38)"
+            style="transition: stroke-dashoffset 1.1s cubic-bezier(.4,0,.2,1), stroke .6s ease"/>
+        </svg>
+        <div class="db-donut-num"><span id="dbScoreNum">0</span><span>score</span></div>
+      </div>
+    </div>
+    <div class="db-body" id="dbBody"></div>
+    <div class="db-foot">
+      <button class="db-print" id="dbPrint">Print report</button>
+      <button class="db-new" id="dbNew">Start new case</button>
+      <button class="db-close" id="dbClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- arrival: continue the launch-page dive as an emerge-from-orb reveal (intro=1) -->
+<style>
+  /* First frame matches the launch dive's last frame exactly (a teal orb-core
+     over the same dark radial field), so the page swap is seamless; then it
+     fades to reveal the room. */
+  #cbEnterFx {
+    position:fixed; inset:0; z-index:99999; pointer-events:none;
+    background:
+      radial-gradient(closest-side at 50% 47%, rgba(127,233,242,0.24), rgba(42,166,189,0.10) 42%, transparent 66%),
+      radial-gradient(130% 120% at 50% 46%, #0e1622 0%, #080c14 55%, #04070c 100%);
+    will-change:opacity, transform;
+  }
+  #cbEnterFx.go { animation:cbEnterReveal .58s cubic-bezier(.33,0,.2,1) forwards; }
+  @keyframes cbEnterReveal {
+    0%   { opacity:1; transform:scale(1.04); }
+    100% { opacity:0; transform:scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) { #cbEnterFx { display:none; } }
+</style>
+<div id="cbEnterFx" aria-hidden="true"></div>
+<script>
+(function(){
+  var q = new URLSearchParams(location.search);
+  var fx = document.getElementById('cbEnterFx');
+  if (!fx) return;
+  if (q.get('intro') !== '1') { fx.remove(); return; }
+  requestAnimationFrame(function(){ fx.classList.add('go'); });
+  fx.addEventListener('animationend', function(){ fx.remove(); });
+  q.delete('intro');   // don't replay the arrival on refresh
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString() : '') + location.hash);
+})();
+</script>
+
+</body>
+</html>

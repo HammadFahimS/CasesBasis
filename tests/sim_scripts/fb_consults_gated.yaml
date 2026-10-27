@@ -1,0 +1,36 @@
+# CONSULTS (foreign body) — every phone consult answers in character from the
+# case's state-scoped content: ICU and ENT paged early give their fallbacks
+# ("diagnose and treat first" / "scope him and call me back"), anaesthesia is
+# never useful, ENT after the view offers extraction-or-intubation, and ICU accepts
+# once he is tubed. Grounding is asserted by the consult unit test; this script
+# pins the routing: every page reaches the consultant and none touches the engine.
+case: foreign_body_airway
+name: fb_consults_gated
+setup:
+  - goto: checkpoint2
+turns:
+  - say: "Call ICU — I need a hand here."
+    intent: { op: request_consult, target: icu }
+    expect: { speaker: consult, op: request_consult, state: checkpoint2, transitioned: false }
+
+  - say: "Page ENT."
+    intent: { op: request_consult, target: ent }
+    expect: { speaker: consult, op: request_consult, state: checkpoint2, transitioned: false }
+
+  - say: "Get anaesthesia down here."
+    intent: { op: request_consult, target: anaesthesia }
+    expect: { speaker: consult, op: request_consult, state: checkpoint2, transitioned: false }
+
+  - goto: fb_visualized
+  - say: "ENT, I've got a view — what do you want me to do?"
+    intent: { op: request_consult, target: ent }
+    expect: { speaker: consult, op: request_consult, state: fb_visualized, transitioned: false }
+
+  - goto: intubated_displaced
+  - say: "ICU, he's intubated. Will you take him?"
+    intent: { op: request_consult, target: icu }
+    expect: { speaker: consult, op: request_consult, state: intubated_displaced, transitioned: false }
+
+final:
+  reached_state: intubated_displaced
+  critical_error: false

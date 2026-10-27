@@ -72,7 +72,7 @@ class SessionEvent:
 
 def to_events(
     clock: list[StepResult], cues: list[dict], elapsed: int,
-    vitals: dict | None = None,
+    vitals: dict | None = None, deferred: list[dict] | None = None,
 ) -> list[SessionEvent]:
     """Pure mapping: engine outputs for one tick → ordered room events.
 
@@ -102,6 +102,14 @@ def to_events(
         events.append(SessionEvent(
             kind="cue", t=elapsed,
             speaker=cue.get("speaker", "nurse"), text=cue.get("text", ""),
+        ))
+    for d in deferred or []:
+        # A scheduled result reporting back: spoken by its holder and carrying the
+        # diagnostics card so the panel updates live (the "room talks back" loop).
+        events.append(SessionEvent(
+            kind="result", t=elapsed,
+            speaker=d.get("speaker", "nurse"), text=d.get("text", ""),
+            data={"card": d.get("card")},
         ))
     return events
 
@@ -208,6 +216,7 @@ class SessionRuntime:
     def _tick_session(session: Any) -> list[SessionEvent]:
         """Sync, lock-guarded: advance one session's clock and collect its events.
         Returns ``[]`` for paused/ended sessions or an uneventful tick."""
+        from backend.director import fire_deferred
         from backend.nurse_brain import _fire_cues
         from backend.voice_session import advance_clock, persist_session
         with session.lock:
@@ -215,10 +224,13 @@ class SessionRuntime:
                 return []
             clock = advance_clock(session)
             cues = _fire_cues(session)
-            if not clock and not cues:
+            deferred = fire_deferred(session)
+            if not clock and not cues and not deferred:
                 return []
             vitals = session.engine.current_vitals().model_dump(exclude_none=True)
-            events = to_events(clock, cues, session.engine.run.elapsed_seconds, vitals)
+            events = to_events(
+                clock, cues, session.engine.run.elapsed_seconds, vitals, deferred=deferred
+            )
             if session.engine.run.ended:
                 events.append(SessionEvent(
                     kind="case_ended", t=session.engine.run.elapsed_seconds,

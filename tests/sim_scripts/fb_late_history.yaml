@@ -1,0 +1,43 @@
+# LATE HISTORY (foreign body) — the resident lets the 2:00 gate fail him into
+# `deteriorating` (SpO2 84, GCS 11) and only then takes the history. Three
+# Phase-2 grounding guards: the nurse answers "is he deteriorating?" from the
+# monitor (chitchat, no engine reveal, but grounded — see the unit test on the
+# brief); a re-asked patient beat is free roleplay recorded on the transcript,
+# not the "I already told you" path; and decisive airway action still rescues him.
+case: foreign_body_airway
+name: fb_late_history
+turns:
+  - tick: 130
+  - say: "Nurse, is he deteriorating?"
+    intent: { op: chitchat, addressee: nurse }
+    expect: { speaker: nurse, op: chitchat, reveals: null, state: deteriorating, persisted_role: nurse }
+
+  - say: "What were you doing when this started?"
+    intent: { op: ask_history, target: onset_while_eating }
+    expect: { speaker: patient, op: ask_history, reveals: "eating", state: deteriorating }
+
+  # Re-asked: already revealed → the patient answers in his own words, free roleplay.
+  - say: "Sorry, what were you eating?"
+    intent: { op: ask_history, target: onset_while_eating }
+    expect: { speaker: patient, op: chitchat, reveals: null, persisted_role: patient }
+
+  - say: "Any allergies? Medical problems?"
+    intent: { op: ask_history, target: past_history_allergy }
+    expect: { speaker: patient, op: ask_history, reveals: "allergy", state: deteriorating }
+
+  - say: "RT, GlideScope in — let's look at the cords."
+    intent: { op: order_investigation, target: video_laryngoscopy }
+    expect: { speaker: rt, op: order_investigation, state: fb_visualized, transitioned: true }
+
+  - say: "Food bolus above the cords — foreign body airway obstruction."
+    intent: { op: diagnose, action_text: "foreign body airway obstruction" }
+    expect: { speaker: nurse, op: diagnose, state: fb_visualized }
+
+  - say: "Magill forceps — taking it out under the scope."
+    intent: { op: perform_action, action_text: "remove it with Magill forceps" }
+    expect: { speaker: nurse, op: perform_action, state: recovery, transitioned: true, ended: true }
+
+final:
+  reached_state: recovery
+  working_dx_contains: "foreign body"
+  ended: true

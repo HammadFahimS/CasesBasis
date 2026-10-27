@@ -20,6 +20,28 @@ turns:
     intent: { op: perform_exam, target: Neurological }
     expect: { endpoint: staff, speaker: nurse, op: perform_exam, state: recognition, transitioned: true }
 
+  # A gold workup: bedside respiratory-reserve numbers, a gas, and imaging for the
+  # thymoma — each is credited by the case's workup_rubric.
+  - say: "Check her respiratory status too."
+    intent: { op: perform_exam, target: Respiratory }
+    expect: { endpoint: staff, op: perform_exam }
+
+  - say: "Get a bedside vital capacity."
+    intent: { op: order_investigation, target: vital_capacity }
+    expect: { endpoint: staff, op: order_investigation }
+
+  - say: "And a negative inspiratory force."
+    intent: { op: order_investigation, target: nif }
+    expect: { endpoint: staff, op: order_investigation }
+
+  - say: "Send a venous blood gas."
+    intent: { op: order_investigation, target: vbg }
+    expect: { endpoint: staff, op: order_investigation }
+
+  - say: "And a CT of the chest to look for a thymoma."
+    intent: { op: order_investigation, target: ct_chest }
+    expect: { endpoint: staff, op: order_investigation }
+
   - say: "She's tiring — let's intubate her electively."
     intent: { op: perform_action, action_text: "intubate electively" }
     expect: { endpoint: staff, op: perform_action, state: intubation_prep, transitioned: true }
